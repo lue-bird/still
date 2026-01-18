@@ -551,7 +551,6 @@ fn initialize_state_for_project_into(
 const uninitialized_project_state: ProjectState = ProjectState {
     source: String::new(),
     syntax: StillSyntaxProject {
-        documentation: None,
         comments: vec![],
         declarations: vec![],
     },
@@ -3040,16 +3039,8 @@ fn still_syntax_node_box<Value>(
 
 #[derive(Clone, Debug, PartialEq)]
 struct StillSyntaxProject {
-    documentation:
-        Option<StillSyntaxNode<Vec<StillSyntaxNode<StillSyntaxProjectDocumentationElement>>>>,
     comments: Vec<StillSyntaxNode<StillSyntaxComment>>,
     declarations: Vec<Result<StillSyntaxDocumentedDeclaration, Box<str>>>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-enum StillSyntaxProjectDocumentationElement {
-    Markdown(Box<str>),
-    AtDocs(Vec<StillSyntaxNode<StillName>>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -5591,24 +5582,6 @@ fn still_syntax_project_format(project_state: &ProjectState) -> String {
         line: 0,
         character: 0,
     };
-    if let Some(project_documentation_node) = &still_syntax_project.documentation {
-        still_syntax_project_level_comments(
-            &mut builder,
-            still_syntax_comments_in_range(
-                &still_syntax_project.comments,
-                lsp_types::Range {
-                    start: previous_syntax_end,
-                    end: project_documentation_node.range.start,
-                },
-            ),
-        );
-        still_syntax_project_documentation_comment_into(
-            &mut builder,
-            &project_documentation_node.value,
-        );
-        builder.push_str("\n\n");
-        previous_syntax_end = project_documentation_node.range.end;
-    }
     builder.push('\n');
     for documented_declaration_or_err in &still_syntax_project.declarations {
         match documented_declaration_or_err {
@@ -5677,41 +5650,6 @@ fn still_syntax_project_level_comments(
         still_syntax_comments_then_linebreak_indented_into(so_far, 0, comments);
         so_far.push_str("\n\n");
     }
-}
-fn still_syntax_project_documentation_comment_into(
-    so_far: &mut String,
-    project_documentation_elements: &[StillSyntaxNode<StillSyntaxProjectDocumentationElement>],
-) {
-    so_far.push_str("{-|");
-    for project_documentation_element in project_documentation_elements {
-        match &project_documentation_element.value {
-            StillSyntaxProjectDocumentationElement::Markdown(markdown_node) => {
-                so_far.push_str(markdown_node);
-            }
-            StillSyntaxProjectDocumentationElement::AtDocs(expose_group_names) => {
-                so_far.push_str("@docs ");
-                if let Some((expose_name0_node, expose_name1_up)) = expose_group_names.split_first()
-                {
-                    so_far.push_str(
-                        expose_name0_node
-                            .value
-                            .strip_suffix("(..)")
-                            .unwrap_or(&expose_name0_node.value),
-                    );
-                    for expose_name_node in expose_name1_up {
-                        so_far.push_str(", ");
-                        so_far.push_str(
-                            expose_name_node
-                                .value
-                                .strip_suffix("(..)")
-                                .unwrap_or(&expose_name_node.value),
-                        );
-                    }
-                }
-            }
-        }
-    }
-    so_far.push_str("-}");
 }
 fn still_syntax_documentation_comment_then_linebreak_into(so_far: &mut String, content: &str) {
     so_far.push_str("{-|");
@@ -7781,12 +7719,6 @@ fn still_syntax_highlight_project_into(
     highlighted_so_far: &mut Vec<StillSyntaxNode<StillSyntaxHighlightKind>>,
     still_syntax_project: &StillSyntaxProject,
 ) {
-    if let Some(documentation_node) = &still_syntax_project.documentation {
-        still_syntax_highlight_project_documentation_into(
-            highlighted_so_far,
-            still_syntax_node_as_ref_map(documentation_node, Vec::as_slice),
-        );
-    }
     for documented_declaration in still_syntax_project
         .declarations
         .iter()
@@ -7821,76 +7753,6 @@ fn still_syntax_highlight_project_into(
             still_syntax_node_as_ref(comment_node),
         );
     }
-}
-fn still_syntax_highlight_project_documentation_into(
-    highlighted_so_far: &mut Vec<StillSyntaxNode<StillSyntaxHighlightKind>>,
-    still_syntax_project_documentation_node: StillSyntaxNode<
-        &[StillSyntaxNode<StillSyntaxProjectDocumentationElement>],
-    >,
-) {
-    highlighted_so_far.push(StillSyntaxNode {
-        range: lsp_types::Range {
-            start: still_syntax_project_documentation_node.range.start,
-            end: lsp_position_add_characters(
-                still_syntax_project_documentation_node.range.start,
-                3,
-            ),
-        },
-        value: StillSyntaxHighlightKind::Comment,
-    });
-    for still_syntax_project_documentation_element_node in
-        still_syntax_project_documentation_node.value
-    {
-        match &still_syntax_project_documentation_element_node.value {
-            StillSyntaxProjectDocumentationElement::Markdown(markdown) => {
-                highlighted_so_far.extend(
-                    still_syntax_highlight_multi_line(
-                        StillSyntaxNode {
-                            range: still_syntax_project_documentation_element_node.range,
-                            value: markdown,
-                        },
-                        0,
-                        0,
-                    )
-                    .map(|range| StillSyntaxNode {
-                        range: range,
-                        value: StillSyntaxHighlightKind::Comment,
-                    }),
-                );
-            }
-            StillSyntaxProjectDocumentationElement::AtDocs(member_names) => {
-                highlighted_so_far.push(StillSyntaxNode {
-                    range: lsp_types::Range {
-                        start: still_syntax_project_documentation_element_node.range.start,
-                        end: lsp_position_add_characters(
-                            still_syntax_project_documentation_element_node.range.start,
-                            5,
-                        ),
-                    },
-                    value: StillSyntaxHighlightKind::KeySymbol,
-                });
-                for member_name_node in member_names {
-                    highlighted_so_far.push(StillSyntaxNode {
-                        range: member_name_node.range,
-                        value: if member_name_node.value.starts_with(char::is_uppercase) {
-                            StillSyntaxHighlightKind::Type
-                        } else if member_name_node.value.starts_with(char::is_lowercase) {
-                            StillSyntaxHighlightKind::DeclaredVariable
-                        } else {
-                            StillSyntaxHighlightKind::Operator
-                        },
-                    });
-                }
-            }
-        }
-    }
-    highlighted_so_far.push(StillSyntaxNode {
-        range: lsp_types::Range {
-            start: still_syntax_project_documentation_node.range.end,
-            end: lsp_position_add_characters(still_syntax_project_documentation_node.range.end, 2),
-        },
-        value: StillSyntaxHighlightKind::Comment,
-    });
 }
 fn still_syntax_highlight_and_place_comment_into(
     highlighted_so_far: &mut Vec<StillSyntaxNode<StillSyntaxHighlightKind>>,
@@ -9047,25 +8909,6 @@ fn parse_same_line_while(state: &mut ParseState, char_is_valid: impl Fn(char) ->
     state.offset_utf8 += consumed_length_utf8;
     state.position.character += consumed_length_utf16 as u32;
 }
-/// given condition must not succeed on linebreak
-fn parse_same_line_while_at_least_one_as_still_name_node(
-    state: &mut ParseState,
-    char_is_valid: impl Fn(char) -> bool + Copy,
-) -> Option<StillSyntaxNode<StillName>> {
-    let start_position: lsp_types::Position = state.position;
-    let start_offset_utf8: usize = state.offset_utf8;
-    if !parse_same_line_char_if(state, char_is_valid) {
-        return None;
-    }
-    parse_same_line_while(state, char_is_valid);
-    Some(StillSyntaxNode {
-        range: lsp_types::Range {
-            start: start_position,
-            end: state.position,
-        },
-        value: StillName::from(&state.source[start_offset_utf8..state.offset_utf8]),
-    })
-}
 fn parse_before_next_linebreak(state: &mut ParseState) {
     parse_same_line_while(state, |c| c != '\r' && c != '\n');
 }
@@ -9227,94 +9070,6 @@ fn parse_still_documentation_comment_block_node(
             end: state.position,
         },
         value: Box::from(content),
-    })
-}
-fn parse_still_syntax_project_documentation_node(
-    state: &mut ParseState,
-) -> Option<StillSyntaxNode<Vec<StillSyntaxNode<StillSyntaxProjectDocumentationElement>>>> {
-    let start_position: lsp_types::Position = state.position;
-    let start_offset_utf8: usize = state.offset_utf8;
-    let _content: &str = parse_still_documentation_comment_block_str(state)?;
-    let end_position: lsp_types::Position = state.position;
-    let end_offset_utf8: usize = state.offset_utf8;
-    // reset state to the start of the content
-    state.offset_utf8 = start_offset_utf8 + 3;
-    state.position = lsp_position_add_characters(start_position, 3);
-    let mut parsed_content_elements: Vec<StillSyntaxNode<StillSyntaxProjectDocumentationElement>> =
-        Vec::new();
-    let mut previous_at_docs_end_position: lsp_types::Position = state.position;
-    let mut previous_at_docs_end_offset_utf8: usize = state.offset_utf8;
-    'parsing_content: while state.offset_utf8 < end_offset_utf8 - 2 {
-        let before_potential_at_docs_offset_utf8: usize = state.offset_utf8;
-        if let Some(at_docs_key_symbol_range) = parse_symbol_as_range(state, "@docs") {
-            parsed_content_elements.push(StillSyntaxNode {
-                range: lsp_types::Range {
-                    start: previous_at_docs_end_position,
-                    end: at_docs_key_symbol_range.start,
-                },
-                value: StillSyntaxProjectDocumentationElement::Markdown(Box::from(
-                    &state.source
-                        [previous_at_docs_end_offset_utf8..before_potential_at_docs_offset_utf8],
-                )),
-            });
-            let mut member_names: Vec<StillSyntaxNode<StillName>> = Vec::new();
-            'parsing_at_docs_member_names: loop {
-                if let Some(expose_name_node) =
-                    parse_same_line_while_at_least_one_as_still_name_node(state, |c| {
-                        c != ',' && (c.is_alphanumeric() || c.is_ascii_punctuation())
-                    })
-                {
-                    member_names.push(expose_name_node);
-                } else if (state.source[state.offset_utf8..].starts_with('\n')
-                    && !state.source[state.offset_utf8..]
-                        .chars()
-                        .skip(1)
-                        .next()
-                        .is_some_and(|c| c.is_ascii_whitespace()))
-                    || (state.source[state.offset_utf8..].starts_with("\r\n")
-                        && !state.source[state.offset_utf8..]
-                            .chars()
-                            .skip(2)
-                            .next()
-                            .is_some_and(|c| c.is_ascii_whitespace()))
-                    || (state.offset_utf8 >= end_offset_utf8 - 2)
-                    || !(parse_linebreak(state) || parse_any_guaranteed_non_linebreak_char(state))
-                {
-                    break 'parsing_at_docs_member_names;
-                }
-            }
-            parsed_content_elements.push(StillSyntaxNode {
-                range: lsp_types::Range {
-                    start: at_docs_key_symbol_range.start,
-                    end: state.position,
-                },
-                value: StillSyntaxProjectDocumentationElement::AtDocs(member_names),
-            });
-            previous_at_docs_end_position = state.position;
-            previous_at_docs_end_offset_utf8 = state.offset_utf8;
-        } else {
-            if !(parse_linebreak(state) || parse_any_guaranteed_non_linebreak_char(state)) {
-                break 'parsing_content;
-            }
-        }
-    }
-    parsed_content_elements.push(StillSyntaxNode {
-        range: lsp_types::Range {
-            start: previous_at_docs_end_position,
-            end: state.position,
-        },
-        value: StillSyntaxProjectDocumentationElement::Markdown(Box::from(
-            &state.source[previous_at_docs_end_offset_utf8..state.offset_utf8],
-        )),
-    });
-    state.position = end_position;
-    state.offset_utf8 = end_offset_utf8;
-    Some(StillSyntaxNode {
-        range: lsp_types::Range {
-            start: start_position,
-            end: state.position,
-        },
-        value: parsed_content_elements,
     })
 }
 fn parse_still_lowercase_name(state: &mut ParseState) -> Option<StillName> {
@@ -11002,10 +10757,6 @@ fn parse_still_syntax_project(project_source: &str) -> StillSyntaxProject {
         comments: vec![],
     };
     parse_still_whitespace_and_comments(&mut state);
-    let maybe_project_documentation: Option<
-        StillSyntaxNode<Vec<StillSyntaxNode<StillSyntaxProjectDocumentationElement>>>,
-    > = parse_still_syntax_project_documentation_node(&mut state);
-    parse_still_whitespace_and_comments(&mut state);
     let mut last_valid_end_offset_utf8: usize = state.offset_utf8;
     let mut last_parsed_was_valid: bool = true;
     let mut declarations: Vec<Result<StillSyntaxDocumentedDeclaration, Box<str>>> =
@@ -11037,7 +10788,6 @@ fn parse_still_syntax_project(project_source: &str) -> StillSyntaxProject {
         )));
     }
     StillSyntaxProject {
-        documentation: maybe_project_documentation,
         comments: state.comments,
         declarations: declarations,
     }
