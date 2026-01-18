@@ -2927,7 +2927,6 @@ enum StillSyntaxExpression {
         record: StillSyntaxNode<Box<StillSyntaxExpression>>,
         field: Option<StillSyntaxNode<StillName>>,
     },
-    RecordAccessFunction(Option<StillSyntaxNode<StillName>>),
     RecordUpdate {
         record_variable: Option<StillSyntaxNode<StillName>>,
         bar_key_symbol_range: lsp_types::Range,
@@ -4816,12 +4815,6 @@ fn still_syntax_expression_not_parenthesized_into(
                 so_far.push_str(&field_name_node.value);
             }
         }
-        StillSyntaxExpression::RecordAccessFunction(maybe_field_name) => {
-            so_far.push('.');
-            if let Some(field_name_node) = maybe_field_name {
-                so_far.push_str(&field_name_node.value);
-            }
-        }
         StillSyntaxExpression::RecordUpdate {
             record_variable: maybe_record_variable,
             bar_key_symbol_range: _,
@@ -5300,7 +5293,6 @@ fn still_syntax_expression_line_span(
             | StillSyntaxExpression::Record(_)
             | StillSyntaxExpression::RecordUpdate { .. }
             | StillSyntaxExpression::RecordAccess { .. }
-            | StillSyntaxExpression::RecordAccessFunction(_)
             | StillSyntaxExpression::Reference { .. }
             | StillSyntaxExpression::Call { .. } => false,
         })
@@ -5371,7 +5363,6 @@ fn still_syntax_expression_parenthesized_if_space_separated_into(
         StillSyntaxExpression::Parenthesized(_) => false,
         StillSyntaxExpression::Record(_) => false,
         StillSyntaxExpression::RecordAccess { .. } => false,
-        StillSyntaxExpression::RecordAccessFunction(_) => false,
         StillSyntaxExpression::RecordUpdate { .. } => false,
         StillSyntaxExpression::Reference { .. } => false,
         StillSyntaxExpression::String { .. } => false,
@@ -5412,7 +5403,6 @@ fn still_syntax_expression_parenthesized_if_not_call_but_space_separated_into(
         StillSyntaxExpression::Parenthesized(_) => false,
         StillSyntaxExpression::Record(_) => false,
         StillSyntaxExpression::RecordAccess { .. } => false,
-        StillSyntaxExpression::RecordAccessFunction(_) => false,
         StillSyntaxExpression::RecordUpdate { .. } => false,
         StillSyntaxExpression::Reference { .. } => false,
         StillSyntaxExpression::String { .. } => false,
@@ -5557,7 +5547,6 @@ fn still_syntax_expression_any_sub(
         StillSyntaxExpression::RecordAccess { record, field: _ } => {
             still_syntax_expression_any_sub(still_syntax_node_unbox(record), is_needle)
         }
-        StillSyntaxExpression::RecordAccessFunction(_) => false,
         StillSyntaxExpression::RecordUpdate {
             record_variable: _,
             bar_key_symbol_range: _,
@@ -6699,9 +6688,6 @@ fn still_syntax_expression_find_reference_at_position<'a>(
                 position,
             )
         }
-        StillSyntaxExpression::RecordAccessFunction(_) => {
-            std::ops::ControlFlow::Continue(local_bindings)
-        }
         StillSyntaxExpression::RecordUpdate {
             record_variable: maybe_record_variable,
             bar_key_symbol_range: _,
@@ -7378,7 +7364,6 @@ fn still_syntax_expression_uses_of_reference_into(
                 symbol_to_collect_uses_of,
             );
         }
-        StillSyntaxExpression::RecordAccessFunction(_) => {}
         StillSyntaxExpression::RecordUpdate {
             record_variable: maybe_record_variable,
             bar_key_symbol_range: _,
@@ -8552,24 +8537,6 @@ fn still_syntax_highlight_expression_into(
                     value: StillSyntaxHighlightKind::Field,
                 });
             }
-        }
-        StillSyntaxExpression::RecordAccessFunction(_) => {
-            let field_name_start_position: lsp_types::Position =
-                lsp_position_add_characters(still_syntax_expression_node.range.start, 1);
-            highlighted_so_far.push(StillSyntaxNode {
-                range: lsp_types::Range {
-                    start: still_syntax_expression_node.range.start,
-                    end: field_name_start_position,
-                },
-                value: StillSyntaxHighlightKind::KeySymbol,
-            });
-            highlighted_so_far.push(StillSyntaxNode {
-                range: lsp_types::Range {
-                    start: field_name_start_position,
-                    end: still_syntax_expression_node.range.end,
-                },
-                value: StillSyntaxHighlightKind::Field,
-            });
         }
         StillSyntaxExpression::RecordUpdate {
             record_variable: maybe_record_variable,
@@ -9879,7 +9846,6 @@ fn parse_still_syntax_expression_not_space_separated_node(
             .or_else(|| parse_still_syntax_expression_string(state))
             .or_else(|| parse_still_syntax_expression_list(state))
             .or_else(|| parse_still_syntax_expression_operator_function_or_parenthesized(state))
-            .or_else(|| parse_still_syntax_expression_record_access_function(state))
             .or_else(|| parse_still_syntax_expression_reference(state))
             .or_else(|| parse_still_syntax_expression_record_or_record_update(state))
             .or_else(|| parse_still_syntax_expression_number(state))
@@ -9907,16 +9873,6 @@ fn parse_still_syntax_expression_not_space_separated_node(
         }
     }
     Some(result_node)
-}
-fn parse_still_syntax_expression_record_access_function(
-    state: &mut ParseState,
-) -> Option<StillSyntaxExpression> {
-    if !parse_symbol(state, ".") {
-        return None;
-    }
-    Some(StillSyntaxExpression::RecordAccessFunction(
-        parse_still_lowercase_name_node(state),
-    ))
 }
 fn parse_still_syntax_expression_negation(state: &mut ParseState) -> Option<StillSyntaxExpression> {
     if state.source[state.offset_utf8..]
