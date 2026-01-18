@@ -2878,13 +2878,6 @@ enum StillSyntaxExpression {
     },
     Char(Option<char>),
     Float(Result<f64, Box<str>>),
-    IfThenElse {
-        condition: Option<StillSyntaxNode<Box<StillSyntaxExpression>>>,
-        then_keyword_range: Option<lsp_types::Range>,
-        on_true: Option<StillSyntaxNode<Box<StillSyntaxExpression>>>,
-        else_keyword_range: Option<lsp_types::Range>,
-        on_false: Option<StillSyntaxNode<Box<StillSyntaxExpression>>>,
-    },
     /// still-syntax for example uses a pratt parser
     /// to produce the actual, semantically correct tree as you would evaluate it.
     /// However, such a tree is irrelevant
@@ -4082,196 +4075,6 @@ fn still_syntax_expression_not_parenthesized_into(
                 let _ = write!(so_far, "{}", *value);
             }
         },
-        StillSyntaxExpression::IfThenElse {
-            condition: maybe_condition,
-            then_keyword_range: maybe_then_keyword_range,
-            on_true: maybe_on_true,
-            else_keyword_range: maybe_else_keyword_range,
-            on_false: maybe_on_false,
-        } => {
-            so_far.push_str("if");
-            let until_condition: lsp_types::Position = maybe_condition
-                .as_ref()
-                .map(|node| node.range.start)
-                .unwrap_or(expression_node.range.start);
-            let before_then_keyword: lsp_types::Position = maybe_then_keyword_range
-                .map(|range| range.start)
-                .or_else(|| maybe_condition.as_ref().map(|node| node.range.end))
-                .unwrap_or(expression_node.range.start);
-            let after_on_true: lsp_types::Position = maybe_on_true
-                .as_ref()
-                .map(|node| node.range.end)
-                .unwrap_or(before_then_keyword);
-            let comments_before_condition = still_syntax_comments_in_range(
-                comments,
-                lsp_types::Range {
-                    start: expression_node.range.start,
-                    end: until_condition,
-                },
-            );
-            let comments_before_then_keyword: &[StillSyntaxNode<StillSyntaxComment>] =
-                still_syntax_comments_in_range(
-                    comments,
-                    lsp_types::Range {
-                        start: expression_node.range.start,
-                        end: before_then_keyword,
-                    },
-                );
-            let before_condition_line_span: LineSpan = if comments_before_condition.is_empty()
-                && comments_before_then_keyword.is_empty()
-            {
-                match maybe_condition {
-                    None => LineSpan::Single,
-                    Some(condition_node) => still_syntax_expression_line_span(
-                        comments,
-                        still_syntax_node_unbox(condition_node),
-                    ),
-                }
-            } else {
-                LineSpan::Multiple
-            };
-            space_or_linebreak_indented_into(
-                so_far,
-                before_condition_line_span,
-                next_indent(indent),
-            );
-            still_syntax_comments_then_linebreak_indented_into(
-                so_far,
-                next_indent(indent),
-                comments_before_condition,
-            );
-            if let Some(condition_node) = maybe_condition {
-                still_syntax_expression_not_parenthesized_into(
-                    so_far,
-                    next_indent(indent),
-                    comments,
-                    still_syntax_node_unbox(condition_node),
-                );
-            }
-            space_or_linebreak_indented_into(so_far, before_condition_line_span, indent);
-            if !comments_before_then_keyword.is_empty() {
-                linebreak_indented_into(so_far, indent);
-                still_syntax_comments_then_linebreak_indented_into(
-                    so_far,
-                    indent,
-                    comments_before_then_keyword,
-                );
-            }
-            so_far.push_str("then");
-            linebreak_indented_into(so_far, next_indent(indent));
-            if let Some(on_true_node) = maybe_on_true {
-                still_syntax_comments_then_linebreak_indented_into(
-                    so_far,
-                    next_indent(indent),
-                    still_syntax_comments_in_range(
-                        comments,
-                        lsp_types::Range {
-                            start: before_then_keyword,
-                            end: on_true_node.range.start,
-                        },
-                    ),
-                );
-                still_syntax_expression_not_parenthesized_into(
-                    so_far,
-                    next_indent(indent),
-                    comments,
-                    still_syntax_node_unbox(on_true_node),
-                );
-                so_far.push('\n');
-            }
-            linebreak_indented_into(so_far, indent);
-            if maybe_on_false.is_none()
-                && let Some(else_keyword_range) = maybe_else_keyword_range
-            {
-                linebreak_indented_into(so_far, indent);
-                still_syntax_comments_then_linebreak_indented_into(
-                    so_far,
-                    indent,
-                    still_syntax_comments_in_range(
-                        comments,
-                        lsp_types::Range {
-                            start: after_on_true,
-                            end: else_keyword_range.start,
-                        },
-                    ),
-                );
-            }
-            so_far.push_str("else");
-            match maybe_on_false {
-                None => {
-                    linebreak_indented_into(so_far, next_indent(indent));
-                }
-                Some(on_false_node) => {
-                    let on_false_innermost: StillSyntaxNode<&StillSyntaxExpression> =
-                        still_syntax_expression_to_unparenthesized(still_syntax_node_unbox(
-                            on_false_node,
-                        ));
-                    let comments_after_on_false_innermost: &[StillSyntaxNode<
-                        StillSyntaxComment,
-                    >] = still_syntax_comments_in_range(
-                        comments,
-                        lsp_types::Range {
-                            start: on_false_innermost.range.end,
-                            end: on_false_node.range.end,
-                        },
-                    );
-                    if comments_after_on_false_innermost.is_empty()
-                        && let StillSyntaxExpression::IfThenElse { .. } = on_false_innermost.value
-                    {
-                        let comments_before_on_false_innermost: &[StillSyntaxNode<
-                            StillSyntaxComment,
-                        >] = still_syntax_comments_in_range(
-                            comments,
-                            lsp_types::Range {
-                                start: on_false_node.range.start,
-                                end: on_false_innermost.range.start,
-                            },
-                        );
-                        space_or_linebreak_indented_into(
-                            so_far,
-                            if comments_before_on_false_innermost.is_empty() {
-                                LineSpan::Single
-                            } else {
-                                LineSpan::Multiple
-                            },
-                            indent,
-                        );
-                        still_syntax_comments_then_linebreak_indented_into(
-                            so_far,
-                            indent,
-                            comments_before_on_false_innermost,
-                        );
-                        // still-format here _forces_ the if...then to span
-                        // multiple lines which to me seems like a bug
-                        still_syntax_expression_not_parenthesized_into(
-                            so_far,
-                            indent,
-                            comments,
-                            on_false_innermost,
-                        );
-                    } else {
-                        linebreak_indented_into(so_far, next_indent(indent));
-                        still_syntax_comments_then_linebreak_indented_into(
-                            so_far,
-                            next_indent(indent),
-                            still_syntax_comments_in_range(
-                                comments,
-                                lsp_types::Range {
-                                    start: after_on_true,
-                                    end: on_false_node.range.start,
-                                },
-                            ),
-                        );
-                        still_syntax_expression_not_parenthesized_into(
-                            so_far,
-                            next_indent(indent),
-                            comments,
-                            still_syntax_node_unbox(on_false_node),
-                        );
-                    }
-                }
-            }
-        }
         StillSyntaxExpression::InfixOperationIgnoringPrecedence {
             left: left_node,
             operator: operator_node,
@@ -5272,7 +5075,6 @@ fn still_syntax_expression_line_span(
         && expression_node.range.start.line == expression_node.range.end.line
         && !still_syntax_expression_any_sub(expression_node, |sub_node| match sub_node.value {
             StillSyntaxExpression::CaseOf { .. } => true,
-            StillSyntaxExpression::IfThenElse { .. } => true,
             StillSyntaxExpression::LetIn { .. } => true,
             StillSyntaxExpression::String {
                 content,
@@ -5348,7 +5150,6 @@ fn still_syntax_expression_parenthesized_if_space_separated_into(
     let unparenthesized: StillSyntaxNode<&StillSyntaxExpression> =
         still_syntax_expression_to_unparenthesized(expression_node);
     let is_space_separated: bool = match unparenthesized.value {
-        StillSyntaxExpression::IfThenElse { .. } => true,
         StillSyntaxExpression::Lambda { .. } => true,
         StillSyntaxExpression::LetIn { .. } => true,
         StillSyntaxExpression::InfixOperationIgnoringPrecedence { .. } => true,
@@ -5388,7 +5189,6 @@ fn still_syntax_expression_parenthesized_if_not_call_but_space_separated_into(
     let unparenthesized: StillSyntaxNode<&StillSyntaxExpression> =
         still_syntax_expression_to_unparenthesized(expression_node);
     let is_space_separated: bool = match unparenthesized.value {
-        StillSyntaxExpression::IfThenElse { .. } => true,
         StillSyntaxExpression::Lambda { .. } => true,
         StillSyntaxExpression::LetIn { .. } => true,
         StillSyntaxExpression::InfixOperationIgnoringPrecedence { .. } => true,
@@ -5461,21 +5261,6 @@ fn still_syntax_expression_any_sub(
         }
         StillSyntaxExpression::Char(_) => false,
         StillSyntaxExpression::Float(_) => false,
-        StillSyntaxExpression::IfThenElse {
-            condition: maybe_condition,
-            then_keyword_range: _,
-            on_true: maybe_on_true,
-            else_keyword_range: _,
-            on_false: maybe_on_false,
-        } => {
-            maybe_condition.as_ref().is_some_and(|condition_node| {
-                still_syntax_expression_any_sub(still_syntax_node_unbox(condition_node), is_needle)
-            }) || maybe_on_true.as_ref().is_some_and(|on_true_node| {
-                still_syntax_expression_any_sub(still_syntax_node_unbox(on_true_node), is_needle)
-            }) || maybe_on_false.as_ref().is_some_and(|on_false_node| {
-                still_syntax_expression_any_sub(still_syntax_node_unbox(on_false_node), is_needle)
-            })
-        }
         StillSyntaxExpression::InfixOperationIgnoringPrecedence {
             left,
             operator: _,
@@ -5564,6 +5349,7 @@ fn still_syntax_expression_any_sub(
         StillSyntaxExpression::String { .. } => false,
     }
 }
+
 fn still_syntax_project_format(project_state: &ProjectState) -> String {
     let still_syntax_project: &StillSyntaxProject = &project_state.syntax;
     let mut builder: String = String::with_capacity(project_state.source.len());
@@ -6505,39 +6291,6 @@ fn still_syntax_expression_find_reference_at_position<'a>(
         }
         StillSyntaxExpression::Char(_) => std::ops::ControlFlow::Continue(local_bindings),
         StillSyntaxExpression::Float(_) => std::ops::ControlFlow::Continue(local_bindings),
-        StillSyntaxExpression::IfThenElse {
-            condition: maybe_condition,
-            then_keyword_range: _,
-            on_true: maybe_on_true,
-            else_keyword_range: _,
-            on_false: maybe_on_false,
-        } => {
-            if let Some(condition_node) = maybe_condition {
-                local_bindings = still_syntax_expression_find_reference_at_position(
-                    local_bindings,
-                    scope_declaration,
-                    still_syntax_node_unbox(condition_node),
-                    position,
-                )?;
-            }
-            if let Some(on_true_node) = maybe_on_true {
-                local_bindings = still_syntax_expression_find_reference_at_position(
-                    local_bindings,
-                    scope_declaration,
-                    still_syntax_node_unbox(on_true_node),
-                    position,
-                )?;
-            }
-            match maybe_on_false {
-                Some(on_false_node) => still_syntax_expression_find_reference_at_position(
-                    local_bindings,
-                    scope_declaration,
-                    still_syntax_node_unbox(on_false_node),
-                    position,
-                ),
-                None => std::ops::ControlFlow::Continue(local_bindings),
-            }
-        }
         StillSyntaxExpression::InfixOperationIgnoringPrecedence {
             left,
             operator,
@@ -7205,38 +6958,6 @@ fn still_syntax_expression_uses_of_reference_into(
         }
         StillSyntaxExpression::Char(_) => {}
         StillSyntaxExpression::Float(_) => {}
-        StillSyntaxExpression::IfThenElse {
-            condition: maybe_condition,
-            then_keyword_range: _,
-            on_true: maybe_on_true,
-            else_keyword_range: _,
-            on_false: maybe_on_false,
-        } => {
-            if let Some(condition_node) = maybe_condition {
-                still_syntax_expression_uses_of_reference_into(
-                    uses_so_far,
-                    local_bindings,
-                    still_syntax_node_unbox(condition_node),
-                    symbol_to_collect_uses_of,
-                );
-            }
-            if let Some(on_true_node) = maybe_on_true {
-                still_syntax_expression_uses_of_reference_into(
-                    uses_so_far,
-                    local_bindings,
-                    still_syntax_node_unbox(on_true_node),
-                    symbol_to_collect_uses_of,
-                );
-            }
-            if let Some(on_false_node) = maybe_on_false {
-                still_syntax_expression_uses_of_reference_into(
-                    uses_so_far,
-                    local_bindings,
-                    still_syntax_node_unbox(on_false_node),
-                    symbol_to_collect_uses_of,
-                );
-            }
-        }
         StillSyntaxExpression::InfixOperationIgnoringPrecedence {
             left,
             operator: _,
@@ -8313,54 +8034,6 @@ fn still_syntax_highlight_expression_into(
                 range: still_syntax_expression_node.range,
                 value: StillSyntaxHighlightKind::Number,
             });
-        }
-        StillSyntaxExpression::IfThenElse {
-            condition: maybe_condition,
-            then_keyword_range: maybe_then_keyword_range,
-            on_true: maybe_on_true,
-            else_keyword_range: maybe_else_keyword_range,
-            on_false: maybe_on_false,
-        } => {
-            highlighted_so_far.push(StillSyntaxNode {
-                range: lsp_types::Range {
-                    start: still_syntax_expression_node.range.start,
-                    end: lsp_position_add_characters(still_syntax_expression_node.range.start, 2),
-                },
-                value: StillSyntaxHighlightKind::KeySymbol,
-            });
-            if let Some(condition_node) = maybe_condition {
-                still_syntax_highlight_expression_into(
-                    highlighted_so_far,
-                    local_bindings,
-                    still_syntax_node_unbox(condition_node),
-                );
-            }
-            if let &Some(then_keyword_range) = maybe_then_keyword_range {
-                highlighted_so_far.push(StillSyntaxNode {
-                    range: then_keyword_range,
-                    value: StillSyntaxHighlightKind::KeySymbol,
-                });
-            }
-            if let Some(on_true_node) = maybe_on_true {
-                still_syntax_highlight_expression_into(
-                    highlighted_so_far,
-                    local_bindings,
-                    still_syntax_node_unbox(on_true_node),
-                );
-            }
-            if let Some(else_keyword_range) = maybe_else_keyword_range {
-                highlighted_so_far.push(StillSyntaxNode {
-                    range: *else_keyword_range,
-                    value: StillSyntaxHighlightKind::KeySymbol,
-                });
-            }
-            if let Some(on_false_node) = maybe_on_false {
-                still_syntax_highlight_expression_into(
-                    highlighted_so_far,
-                    local_bindings,
-                    still_syntax_node_unbox(on_false_node),
-                );
-            }
         }
         StillSyntaxExpression::InfixOperationIgnoringPrecedence {
             left,
@@ -9761,8 +9434,7 @@ fn parse_still_syntax_expression_space_separated_node(
     if state.position.character <= u32::from(state.indent) {
         return None;
     }
-    parse_still_syntax_expression_if_then_else(state)
-        .or_else(|| parse_still_syntax_expression_case_of(state))
+    parse_still_syntax_expression_case_of(state)
         .or_else(|| parse_still_syntax_expression_let_in(state))
         .or_else(|| parse_still_syntax_expression_lambda(state))
         .or_else(|| {
@@ -9993,78 +9665,6 @@ fn parse_still_syntax_expression_field(
         equals_key_symbol_range: maybe_equals_key_symbol_range,
         value: maybe_value,
     })
-}
-fn parse_still_syntax_expression_if_then_else(
-    state: &mut ParseState,
-) -> Option<StillSyntaxNode<StillSyntaxExpression>> {
-    let if_keyword_range: lsp_types::Range = parse_still_keyword_as_range(state, "if")?;
-    parse_still_whitespace_and_comments(state);
-    let maybe_condition: Option<StillSyntaxNode<StillSyntaxExpression>> =
-        parse_still_syntax_expression_space_separated_node(state);
-    parse_still_whitespace_and_comments(state);
-    Some(
-        if let Some(then_keyword_range) = parse_symbol_as_range(state, "then") {
-            parse_still_whitespace_and_comments(state);
-            let maybe_on_true: Option<StillSyntaxNode<StillSyntaxExpression>> =
-                parse_still_syntax_expression_space_separated_node(state);
-            parse_still_whitespace_and_comments(state);
-            if let Some(else_keyword_range) = parse_symbol_as_range(state, "else") {
-                parse_still_whitespace_and_comments(state);
-                let maybe_on_false: Option<StillSyntaxNode<StillSyntaxExpression>> =
-                    parse_still_syntax_expression_space_separated_node(state);
-                StillSyntaxNode {
-                    range: lsp_types::Range {
-                        start: if_keyword_range.start,
-                        end: match &maybe_on_false {
-                            None => else_keyword_range.end,
-                            Some(on_false_node) => on_false_node.range.end,
-                        },
-                    },
-                    value: StillSyntaxExpression::IfThenElse {
-                        condition: maybe_condition.map(still_syntax_node_box),
-                        then_keyword_range: Some(then_keyword_range),
-                        on_true: maybe_on_true.map(still_syntax_node_box),
-                        else_keyword_range: Some(else_keyword_range),
-                        on_false: maybe_on_false.map(still_syntax_node_box),
-                    },
-                }
-            } else {
-                StillSyntaxNode {
-                    range: lsp_types::Range {
-                        start: if_keyword_range.start,
-                        end: match &maybe_on_true {
-                            None => then_keyword_range.end,
-                            Some(on_true_node) => on_true_node.range.end,
-                        },
-                    },
-                    value: StillSyntaxExpression::IfThenElse {
-                        condition: maybe_condition.map(still_syntax_node_box),
-                        then_keyword_range: Some(then_keyword_range),
-                        on_true: maybe_on_true.map(still_syntax_node_box),
-                        else_keyword_range: None,
-                        on_false: None,
-                    },
-                }
-            }
-        } else {
-            StillSyntaxNode {
-                range: lsp_types::Range {
-                    start: if_keyword_range.start,
-                    end: match &maybe_condition {
-                        None => if_keyword_range.end,
-                        Some(condition_node) => condition_node.range.end,
-                    },
-                },
-                value: StillSyntaxExpression::IfThenElse {
-                    condition: maybe_condition.map(still_syntax_node_box),
-                    then_keyword_range: None,
-                    on_true: None,
-                    else_keyword_range: None,
-                    on_false: None,
-                },
-            }
-        },
-    )
 }
 fn parse_still_syntax_expression_lambda(
     state: &mut ParseState,
