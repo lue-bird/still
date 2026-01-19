@@ -2895,7 +2895,7 @@ enum StillSyntaxExpression {
         operator: StillSyntaxNode<&'static str>,
         right: Option<StillSyntaxNode<Box<StillSyntaxExpression>>>,
     },
-    Integer {
+    Int {
         // TODO inline
         value: Result<i64, Box<str>>,
     },
@@ -4191,7 +4191,7 @@ fn still_syntax_expression_not_parenthesized_into(
                 }
             }
         }
-        StillSyntaxExpression::Integer {
+        StillSyntaxExpression::Int {
             value: value_or_err,
         } => {
             still_int_into(so_far, value_or_err);
@@ -5077,7 +5077,7 @@ fn still_syntax_expression_line_span(
                 *quoting_style == StillSyntaxStringQuotingStyle::TripleQuoted
                     && content.contains('\n')
             }
-            StillSyntaxExpression::Integer { .. }
+            StillSyntaxExpression::Int { .. }
             | StillSyntaxExpression::Float(_)
             | StillSyntaxExpression::Char(_)
             | StillSyntaxExpression::Negation(_)
@@ -5150,7 +5150,7 @@ fn still_syntax_expression_parenthesized_if_space_separated_into(
         StillSyntaxExpression::CaseOf { .. } => true,
         StillSyntaxExpression::Char(_) => false,
         StillSyntaxExpression::Float(_) => false,
-        StillSyntaxExpression::Integer { .. } => false,
+        StillSyntaxExpression::Int { .. } => false,
         StillSyntaxExpression::List(_) => false,
         StillSyntaxExpression::Negation(_) => false,
         StillSyntaxExpression::Parenthesized(_) => false,
@@ -5188,7 +5188,7 @@ fn still_syntax_expression_parenthesized_if_not_call_but_space_separated_into(
         StillSyntaxExpression::Call { .. } => false,
         StillSyntaxExpression::Char(_) => false,
         StillSyntaxExpression::Float(_) => false,
-        StillSyntaxExpression::Integer { .. } => false,
+        StillSyntaxExpression::Int { .. } => false,
         StillSyntaxExpression::List(_) => false,
         StillSyntaxExpression::Negation(_) => false,
         StillSyntaxExpression::Parenthesized(_) => false,
@@ -5261,7 +5261,7 @@ fn still_syntax_expression_any_sub(
                     still_syntax_expression_any_sub(still_syntax_node_unbox(right_node), is_needle)
                 })
         }
-        StillSyntaxExpression::Integer { .. } => false,
+        StillSyntaxExpression::Int { .. } => false,
         StillSyntaxExpression::Lambda {
             parameters: _,
             arrow_key_symbol_range: _,
@@ -6312,7 +6312,7 @@ fn still_syntax_expression_find_reference_at_position<'a>(
                 None => std::ops::ControlFlow::Continue(local_bindings),
             }
         }
-        StillSyntaxExpression::Integer { .. } => std::ops::ControlFlow::Continue(local_bindings),
+        StillSyntaxExpression::Int { .. } => std::ops::ControlFlow::Continue(local_bindings),
         StillSyntaxExpression::Lambda {
             arrow_key_symbol_range: _,
             parameters,
@@ -6969,7 +6969,7 @@ fn still_syntax_expression_uses_of_reference_into(
                 );
             }
         }
-        StillSyntaxExpression::Integer { .. } => {}
+        StillSyntaxExpression::Int { .. } => {}
         StillSyntaxExpression::Lambda {
             parameters,
             arrow_key_symbol_range: _,
@@ -8038,7 +8038,7 @@ fn still_syntax_highlight_expression_into(
                 );
             }
         }
-        StillSyntaxExpression::Integer { .. } => {
+        StillSyntaxExpression::Int { .. } => {
             highlighted_so_far.push(StillSyntaxNode {
                 range: still_syntax_expression_node.range,
                 value: StillSyntaxHighlightKind::Number,
@@ -9075,7 +9075,7 @@ fn parse_still_syntax_pattern_not_as_or_cons_node(
             .or_else(|| parse_still_syntax_pattern_parenthesized(state))
             .or_else(|| parse_still_syntax_pattern_list_exact(state))
             .or_else(|| parse_still_syntax_pattern_record(state))
-            .or_else(|| parse_still_syntax_pattern_integer(state))
+            .or_else(|| parse_still_syntax_pattern_int(state))
             .map(|pattern| StillSyntaxNode {
                 range: lsp_types::Range {
                     start: start_position,
@@ -9106,7 +9106,7 @@ fn parse_still_syntax_pattern_not_space_separated(
         .or_else(|| parse_still_syntax_pattern_string(state))
         .or_else(|| parse_still_syntax_pattern_list_exact(state))
         .or_else(|| parse_still_syntax_pattern_record(state))
-        .or_else(|| parse_still_syntax_pattern_integer(state))
+        .or_else(|| parse_still_syntax_pattern_int(state))
 }
 fn parse_still_syntax_pattern_list_exact(state: &mut ParseState) -> Option<StillSyntaxPattern> {
     if !parse_symbol(state, "[") {
@@ -9210,7 +9210,7 @@ fn parse_still_syntax_pattern_string(state: &mut ParseState) -> Option<StillSynt
         })
 }
 
-fn parse_still_syntax_pattern_integer(state: &mut ParseState) -> Option<StillSyntaxPattern> {
+fn parse_still_syntax_pattern_int(state: &mut ParseState) -> Option<StillSyntaxPattern> {
     parse_still_unsigned_integer_base10_as_i64(state)
         .map(|value| StillSyntaxPattern::Int { value: value })
 }
@@ -9247,31 +9247,13 @@ fn parse_still_syntax_expression_number(state: &mut ParseState) -> Option<StillS
     if has_decimal_point {
         parse_same_line_while(state, |c| c.is_ascii_digit());
     }
-    let has_exponent_plus: Option<bool> =
-        if parse_same_line_char_if(state, |c| c == 'e' || c == 'E') {
-            if parse_symbol(state, "+") {
-                let _: bool = parse_unsigned_integer_base10(state);
-                Some(true)
-            } else {
-                let _: bool = parse_symbol(state, "-");
-                let _: bool = parse_unsigned_integer_base10(state);
-                Some(false)
-            }
-        } else {
-            None
-        };
     let full_chomped_str: &str = &state.source[start_offset_utf8..state.offset_utf8];
-    Some(if has_decimal_point || has_exponent_plus.is_some() {
+    Some(if has_decimal_point {
         StillSyntaxExpression::Float(
-            if has_exponent_plus.is_some_and(|exponent_is_plus| exponent_is_plus) {
-                str::parse::<f64>(&full_chomped_str.replace("+", ""))
-                    .map_err(|_| Box::from(full_chomped_str))
-            } else {
-                str::parse::<f64>(full_chomped_str).map_err(|_| Box::from(full_chomped_str))
-            },
+            str::parse::<f64>(full_chomped_str).map_err(|_| Box::from(full_chomped_str)),
         )
     } else {
-        StillSyntaxExpression::Integer {
+        StillSyntaxExpression::Int {
             value: str::parse::<i64>(full_chomped_str).map_err(|_| Box::from(full_chomped_str)),
         }
     })
