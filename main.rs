@@ -1884,12 +1884,12 @@ fn present_variable_declaration_info_markdown(
     match maybe_documentation {
         None => description,
         Some(documentation) => {
-            description + "-----\n" + documentation_comment_to_markdown(documentation).as_str()
+            description + "##-\n" + documentation_comment_to_markdown(documentation).as_str()
         }
     }
 }
 fn present_type_alias_declaration_info_markdown(
-    comments: &[StillSyntaxNode<StillSyntaxComment>],
+    comments: &[StillSyntaxNode<Box<str>>],
     declaration_range: lsp_types::Range,
     maybe_name: Option<StillSyntaxNode<&str>>,
     maybe_documentation: Option<&str>,
@@ -1913,13 +1913,13 @@ fn present_type_alias_declaration_info_markdown(
     match maybe_documentation {
         None => description,
         Some(documentation) => {
-            description + "-----\n" + documentation_comment_to_markdown(documentation).as_str()
+            description + "##-\n" + documentation_comment_to_markdown(documentation).as_str()
         }
     }
 }
 
 fn present_choice_type_declaration_info_markdown(
-    comments: &[StillSyntaxNode<StillSyntaxComment>],
+    comments: &[StillSyntaxNode<Box<str>>],
     declaration_range: lsp_types::Range,
     maybe_name: Option<StillSyntaxNode<&str>>,
     maybe_documentation: Option<&str>,
@@ -1947,7 +1947,7 @@ fn present_choice_type_declaration_info_markdown(
     match maybe_documentation {
         None => description,
         Some(documentation) => {
-            description + "-----\n" + documentation_comment_to_markdown(documentation).as_str()
+            description + "##-\n" + documentation_comment_to_markdown(documentation).as_str()
         }
     }
 }
@@ -2411,7 +2411,7 @@ fn still_make_file_problem_to_diagnostic(
         code: None,
         code_description: None,
         source: None,
-        message: format!("--- {} ---\n{}", &problem.title, &problem.message_markdown),
+        message: format!("#- {} #-\n{}", &problem.title, &problem.message_markdown),
         related_information: None,
         tags: None,
         data: None,
@@ -2863,7 +2863,7 @@ fn still_syntax_node_box<Value>(
 
 #[derive(Clone, Debug, PartialEq)]
 struct StillSyntaxProject {
-    comments: Vec<StillSyntaxNode<StillSyntaxComment>>,
+    comments: Vec<StillSyntaxNode<Box<str>>>,
     declarations: Vec<Result<StillSyntaxDocumentedDeclaration, Box<str>>>,
 }
 
@@ -2953,7 +2953,7 @@ fn space_or_linebreak_indented_into(so_far: &mut String, line_span: LineSpan, in
 fn still_syntax_type_to_string(
     still_syntax_type: StillSyntaxNode<&StillSyntaxType>,
     indent: usize,
-    comments: &[StillSyntaxNode<StillSyntaxComment>],
+    comments: &[StillSyntaxNode<Box<str>>],
 ) -> String {
     let mut builder: String = String::new();
     still_syntax_type_not_parenthesized_into(
@@ -2966,9 +2966,9 @@ fn still_syntax_type_to_string(
 }
 
 fn still_syntax_comments_in_range(
-    comments: &[StillSyntaxNode<StillSyntaxComment>],
+    comments: &[StillSyntaxNode<Box<str>>],
     range: lsp_types::Range,
-) -> &[StillSyntaxNode<StillSyntaxComment>] {
+) -> &[StillSyntaxNode<Box<str>>] {
     if comments.is_empty() {
         return &[];
     }
@@ -2981,9 +2981,9 @@ fn still_syntax_comments_in_range(
     &comments[comments_in_range_start_index..comments_in_range_end_exclusive_index]
 }
 fn still_syntax_comments_from_position(
-    comments: &[StillSyntaxNode<StillSyntaxComment>],
+    comments: &[StillSyntaxNode<Box<str>>],
     start_position: lsp_types::Position,
-) -> &[StillSyntaxNode<StillSyntaxComment>] {
+) -> &[StillSyntaxNode<Box<str>>] {
     let comments_in_range_start_index: usize = comments
         .binary_search_by(|comment_node| comment_node.range.start.cmp(&start_position))
         .unwrap_or_else(|i| i);
@@ -2995,24 +2995,18 @@ fn still_syntax_comments_from_position(
 fn still_syntax_comments_then_linebreak_indented_into(
     so_far: &mut String,
     indent: usize,
-    comments: &[StillSyntaxNode<StillSyntaxComment>],
+    comments: &[StillSyntaxNode<Box<str>>],
 ) {
     for comment_node_in_range in comments {
         still_syntax_comment_into(so_far, &comment_node_in_range.value);
         linebreak_indented_into(so_far, indent);
     }
 }
-/// This one is not 100% the same as still-format
-/// as still-format has made some very obscure choices, like
-///   - {- ...-} can be before other syntax on the same line in some cases (e.g. before field names)
-///   - multiple consequent {- ...-} can sometimes be on a single line
-///   - {--} however will always force a linebreak
-///
 /// use in combination with `still_syntax_comments_in_range`
 fn still_syntax_comments_into(
     so_far: &mut String,
     indent: usize,
-    comments: &[StillSyntaxNode<StillSyntaxComment>],
+    comments: &[StillSyntaxNode<Box<str>>],
 ) {
     let mut comments_iterator = comments.iter();
     let Some(first_comment_node) = comments_iterator.next() else {
@@ -3024,18 +3018,9 @@ fn still_syntax_comments_into(
         still_syntax_comment_into(so_far, &comment_node_in_range.value);
     }
 }
-fn still_syntax_comment_into(so_far: &mut String, comment: &StillSyntaxComment) {
-    match comment.kind {
-        StillSyntaxCommentKind::UntilLinebreak => {
-            so_far.push_str("--");
-            so_far.push_str(&comment.content);
-        }
-        StillSyntaxCommentKind::Block => {
-            so_far.push_str("{-");
-            so_far.push_str(&comment.content);
-            so_far.push_str("-}");
-        }
-    }
+fn still_syntax_comment_into(so_far: &mut String, comment: &str) {
+    so_far.push('#');
+    so_far.push_str(comment);
 }
 
 fn still_syntax_type_to_unparenthesized(
@@ -3056,7 +3041,7 @@ fn next_indent(current_indent: usize) -> usize {
 fn still_syntax_type_not_parenthesized_into(
     so_far: &mut String,
     indent: usize,
-    comments: &[StillSyntaxNode<StillSyntaxComment>],
+    comments: &[StillSyntaxNode<Box<str>>],
     type_node: StillSyntaxNode<&StillSyntaxType>,
 ) {
     match type_node.value {
@@ -3105,7 +3090,7 @@ fn still_syntax_type_not_parenthesized_into(
         ),
         StillSyntaxType::Parenthesized(None) => {
             so_far.push('(');
-            let comments_in_parens: &[StillSyntaxNode<StillSyntaxComment>] =
+            let comments_in_parens: &[StillSyntaxNode<Box<str>>] =
                 still_syntax_comments_in_range(comments, type_node.range);
             if !comments_in_parens.is_empty() {
                 still_syntax_comments_into(so_far, indent + 1, comments_in_parens);
@@ -3116,7 +3101,7 @@ fn still_syntax_type_not_parenthesized_into(
         StillSyntaxType::Parenthesized(Some(in_parens)) => {
             let innermost: StillSyntaxNode<&StillSyntaxType> =
                 still_syntax_type_to_unparenthesized(still_syntax_node_unbox(in_parens));
-            let comments_before_innermost: &[StillSyntaxNode<StillSyntaxComment>] =
+            let comments_before_innermost: &[StillSyntaxNode<Box<str>>] =
                 still_syntax_comments_in_range(
                     comments,
                     lsp_types::Range {
@@ -3124,7 +3109,7 @@ fn still_syntax_type_not_parenthesized_into(
                         end: innermost.range.start,
                     },
                 );
-            let comments_after_innermost: &[StillSyntaxNode<StillSyntaxComment>] =
+            let comments_after_innermost: &[StillSyntaxNode<Box<str>>] =
                 still_syntax_comments_in_range(
                     comments,
                     lsp_types::Range {
@@ -3146,7 +3131,7 @@ fn still_syntax_type_not_parenthesized_into(
         }
         StillSyntaxType::Record(fields) => match fields.split_first() {
             None => {
-                let comments_in_curlies: &[StillSyntaxNode<StillSyntaxComment>] =
+                let comments_in_curlies: &[StillSyntaxNode<Box<str>>] =
                     still_syntax_comments_in_range(comments, type_node.range);
                 if comments_in_curlies.is_empty() {
                     so_far.push_str("{}");
@@ -3201,7 +3186,7 @@ fn still_syntax_type_not_parenthesized_into(
 
 fn still_syntax_type_function_into<'a>(
     so_far: &mut String,
-    comments: &[StillSyntaxNode<StillSyntaxComment>],
+    comments: &[StillSyntaxNode<Box<str>>],
     line_span: LineSpan,
     indent_for_input: usize,
     maybe_input: Option<StillSyntaxNode<&'a StillSyntaxType>>,
@@ -3264,7 +3249,7 @@ fn still_syntax_type_parenthesized_into(
     so_far: &mut String,
     indent: usize,
 
-    comments: &[StillSyntaxNode<StillSyntaxComment>],
+    comments: &[StillSyntaxNode<Box<str>>],
     full_range: lsp_types::Range,
     innermost: StillSyntaxNode<&StillSyntaxType>,
 ) {
@@ -3302,7 +3287,7 @@ fn still_syntax_type_parenthesized_if_space_separated_into(
     so_far: &mut String,
     indent: usize,
 
-    comments: &[StillSyntaxNode<StillSyntaxComment>],
+    comments: &[StillSyntaxNode<Box<str>>],
     full_range: lsp_types::Range,
     unparenthesized: StillSyntaxNode<&StillSyntaxType>,
 ) {
@@ -3324,7 +3309,7 @@ fn still_syntax_type_fields_into_string<'a>(
     so_far: &mut String,
     indent: usize,
 
-    comments: &[StillSyntaxNode<StillSyntaxComment>],
+    comments: &[StillSyntaxNode<Box<str>>],
     line_span: LineSpan,
     field0: &'a StillSyntaxTypeField,
     field1_up: &'a [StillSyntaxTypeField],
@@ -3611,7 +3596,7 @@ fn still_string_into(
 fn still_syntax_expression_not_parenthesized_into(
     so_far: &mut String,
     indent: usize,
-    comments: &[StillSyntaxNode<StillSyntaxComment>],
+    comments: &[StillSyntaxNode<Box<str>>],
     expression_node: StillSyntaxNode<&StillSyntaxExpression>,
 ) {
     match expression_node.value {
@@ -3620,7 +3605,7 @@ fn still_syntax_expression_not_parenthesized_into(
             argument0: argument0_node,
             argument1_up,
         } => {
-            let comments_before_argument0: &[StillSyntaxNode<StillSyntaxComment>] =
+            let comments_before_argument0: &[StillSyntaxNode<Box<str>>] =
                 still_syntax_comments_in_range(
                     comments,
                     lsp_types::Range {
@@ -3704,15 +3689,14 @@ fn still_syntax_expression_not_parenthesized_into(
                         previous_syntax_that_covered_comments_end = expression_node.range.start;
                     }
                     Some(of_keyword_range) => {
-                        let comments_between_case_and_of_keywords: &[StillSyntaxNode<
-                            StillSyntaxComment,
-                        >] = still_syntax_comments_in_range(
-                            comments,
-                            lsp_types::Range {
-                                start: expression_node.range.start,
-                                end: of_keyword_range.end,
-                            },
-                        );
+                        let comments_between_case_and_of_keywords: &[StillSyntaxNode<Box<str>>] =
+                            still_syntax_comments_in_range(
+                                comments,
+                                lsp_types::Range {
+                                    start: expression_node.range.start,
+                                    end: of_keyword_range.end,
+                                },
+                            );
                         if comments_between_case_and_of_keywords.is_empty() {
                             so_far.push_str("  ");
                         } else {
@@ -3728,7 +3712,7 @@ fn still_syntax_expression_not_parenthesized_into(
                     }
                 },
                 Some(matched_node) => {
-                    let comments_before_matched: &[StillSyntaxNode<StillSyntaxComment>] =
+                    let comments_before_matched: &[StillSyntaxNode<Box<str>>] =
                         still_syntax_comments_in_range(
                             comments,
                             lsp_types::Range {
@@ -3736,20 +3720,20 @@ fn still_syntax_expression_not_parenthesized_into(
                                 end: matched_node.range.start,
                             },
                         );
-                    let comments_before_of_keyword: &[StillSyntaxNode<StillSyntaxComment>] =
-                        if cases.is_empty()
-                            && let Some(of_keyword_range) = maybe_of_keyword_range
-                        {
-                            still_syntax_comments_in_range(
-                                comments,
-                                lsp_types::Range {
-                                    start: matched_node.range.start,
-                                    end: of_keyword_range.start,
-                                },
-                            )
-                        } else {
-                            &[]
-                        };
+                    let comments_before_of_keyword: &[StillSyntaxNode<Box<str>>] = if cases
+                        .is_empty()
+                        && let Some(of_keyword_range) = maybe_of_keyword_range
+                    {
+                        still_syntax_comments_in_range(
+                            comments,
+                            lsp_types::Range {
+                                start: matched_node.range.start,
+                                end: of_keyword_range.start,
+                            },
+                        )
+                    } else {
+                        &[]
+                    };
                     let before_cases_line_span: LineSpan = if comments_before_matched.is_empty()
                         && comments_before_of_keyword.is_empty()
                     {
@@ -3977,7 +3961,7 @@ fn still_syntax_expression_not_parenthesized_into(
             }
         }
         StillSyntaxExpression::List(elements) => {
-            let comments: &[StillSyntaxNode<StillSyntaxComment>] =
+            let comments: &[StillSyntaxNode<Box<str>>] =
                 still_syntax_comments_in_range(comments, expression_node.range);
             match elements.split_last() {
                 None => {
@@ -4058,7 +4042,7 @@ fn still_syntax_expression_not_parenthesized_into(
         }
         StillSyntaxExpression::Parenthesized(None) => {
             so_far.push('(');
-            let comments_in_parens: &[StillSyntaxNode<StillSyntaxComment>] =
+            let comments_in_parens: &[StillSyntaxNode<Box<str>>] =
                 still_syntax_comments_in_range(comments, expression_node.range);
             if !comments_in_parens.is_empty() {
                 still_syntax_comments_into(so_far, indent + 1, comments_in_parens);
@@ -4097,7 +4081,7 @@ fn still_syntax_expression_not_parenthesized_into(
         }
         StillSyntaxExpression::Record(fields) => match fields.split_first() {
             None => {
-                let comments_in_curlies: &[StillSyntaxNode<StillSyntaxComment>] =
+                let comments_in_curlies: &[StillSyntaxNode<Box<str>>] =
                     still_syntax_comments_in_range(comments, expression_node.range);
                 if comments_in_curlies.is_empty() {
                     so_far.push_str("{}");
@@ -4218,7 +4202,7 @@ fn still_syntax_expression_not_parenthesized_into(
 fn still_syntax_case_into(
     so_far: &mut String,
     indent: usize,
-    comments: &[StillSyntaxNode<StillSyntaxComment>],
+    comments: &[StillSyntaxNode<Box<str>>],
     previous_syntax_end: lsp_types::Position,
     case: &StillSyntaxExpressionCase,
 ) -> lsp_types::Position {
@@ -4267,7 +4251,7 @@ fn still_syntax_case_into(
 fn still_syntax_expression_fields_into_string<'a>(
     so_far: &mut String,
     indent: usize,
-    comments: &[StillSyntaxNode<StillSyntaxComment>],
+    comments: &[StillSyntaxNode<Box<str>>],
     line_span: LineSpan,
     field0: &'a StillSyntaxExpressionField,
     field1_up: &'a [StillSyntaxExpressionField],
@@ -4369,7 +4353,7 @@ fn still_syntax_expression_fields_into_string<'a>(
 fn still_syntax_let_declaration_into(
     so_far: &mut String,
     indent: usize,
-    comments: &[StillSyntaxNode<StillSyntaxComment>],
+    comments: &[StillSyntaxNode<Box<str>>],
     let_declaration_node: StillSyntaxNode<&StillSyntaxLetDeclaration>,
 ) {
     match let_declaration_node.value {
@@ -4432,7 +4416,7 @@ fn still_syntax_let_declaration_into(
 fn still_syntax_variable_declaration_into(
     so_far: &mut String,
     indent: usize,
-    comments: &[StillSyntaxNode<StillSyntaxComment>],
+    comments: &[StillSyntaxNode<Box<str>>],
     start_name_node: StillSyntaxNode<&str>,
     maybe_equals_key_symbol_range: Option<lsp_types::Range>,
     maybe_result: Option<StillSyntaxNode<&StillSyntaxExpression>>,
@@ -4491,7 +4475,7 @@ fn still_syntax_expression_to_unparenthesized(
 }
 fn still_syntax_range_line_span(
     range: lsp_types::Range,
-    comments: &[StillSyntaxNode<StillSyntaxComment>],
+    comments: &[StillSyntaxNode<Box<str>>],
 ) -> LineSpan {
     if still_syntax_comments_in_range(comments, range).is_empty()
         && range.start.line == range.end.line
@@ -4513,7 +4497,7 @@ fn still_syntax_range_line_span(
 /// ```
 /// with a potential optimization being
 fn still_syntax_expression_line_span(
-    comments: &[StillSyntaxNode<StillSyntaxComment>],
+    comments: &[StillSyntaxNode<Box<str>>],
     expression_node: StillSyntaxNode<&StillSyntaxExpression>,
 ) -> LineSpan {
     if still_syntax_comments_in_range(comments, expression_node.range).is_empty()
@@ -4549,7 +4533,7 @@ fn still_syntax_expression_line_span(
 fn still_syntax_expression_parenthesized_into(
     so_far: &mut String,
     indent: usize,
-    comments: &[StillSyntaxNode<StillSyntaxComment>],
+    comments: &[StillSyntaxNode<Box<str>>],
     full_range: lsp_types::Range,
     innermost: StillSyntaxNode<&StillSyntaxExpression>,
 ) {
@@ -4586,7 +4570,7 @@ fn still_syntax_expression_parenthesized_into(
 fn still_syntax_expression_parenthesized_if_space_separated_into(
     so_far: &mut String,
     indent: usize,
-    comments: &[StillSyntaxNode<StillSyntaxComment>],
+    comments: &[StillSyntaxNode<Box<str>>],
     expression_node: StillSyntaxNode<&StillSyntaxExpression>,
 ) {
     let unparenthesized: StillSyntaxNode<&StillSyntaxExpression> =
@@ -4786,7 +4770,7 @@ fn still_syntax_project_format(project_state: &ProjectState) -> String {
             }
         }
     }
-    let comments_after_declarations: &[StillSyntaxNode<StillSyntaxComment>] =
+    let comments_after_declarations: &[StillSyntaxNode<Box<str>>] =
         still_syntax_comments_from_position(&still_syntax_project.comments, previous_syntax_end);
     if !comments_after_declarations.is_empty() {
         builder.push_str("\n\n\n");
@@ -4800,7 +4784,7 @@ fn still_syntax_project_format(project_state: &ProjectState) -> String {
 }
 fn still_syntax_project_level_comments(
     so_far: &mut String,
-    comments: &[StillSyntaxNode<StillSyntaxComment>],
+    comments: &[StillSyntaxNode<Box<str>>],
 ) {
     if !comments.is_empty() {
         so_far.push('\n');
@@ -4809,14 +4793,14 @@ fn still_syntax_project_level_comments(
     }
 }
 fn still_syntax_documentation_comment_then_linebreak_into(so_far: &mut String, content: &str) {
-    so_far.push_str("{-|");
+    so_far.push_str("(#");
     so_far.push_str(content);
-    so_far.push_str("-}\n");
+    so_far.push_str("#)\n");
 }
 
 fn still_syntax_declaration_into(
     so_far: &mut String,
-    comments: &[StillSyntaxNode<StillSyntaxComment>],
+    comments: &[StillSyntaxNode<Box<str>>],
     declaration_node: StillSyntaxNode<&StillSyntaxDeclaration>,
 ) {
     match declaration_node.value {
@@ -4880,7 +4864,7 @@ fn still_syntax_declaration_into(
 
 fn still_syntax_type_alias_declaration_into(
     so_far: &mut String,
-    comments: &[StillSyntaxNode<StillSyntaxComment>],
+    comments: &[StillSyntaxNode<Box<str>>],
     declaration_range: lsp_types::Range,
     maybe_name: Option<StillSyntaxNode<&str>>,
     parameters: &[StillSyntaxNode<StillName>],
@@ -4961,7 +4945,7 @@ fn still_syntax_type_alias_declaration_into(
 }
 fn still_syntax_choice_type_declaration_into<'a>(
     so_far: &mut String,
-    comments: &[StillSyntaxNode<StillSyntaxComment>],
+    comments: &[StillSyntaxNode<Box<str>>],
     declaration_range: lsp_types::Range,
     maybe_name: Option<StillSyntaxNode<&str>>,
     parameters: &[StillSyntaxNode<StillName>],
@@ -5042,7 +5026,7 @@ fn still_syntax_choice_type_declaration_into<'a>(
 }
 fn still_syntax_choice_type_declaration_variant_into(
     so_far: &mut String,
-    comments: &[StillSyntaxNode<StillSyntaxComment>],
+    comments: &[StillSyntaxNode<Box<str>>],
     mut previous_syntax_end: lsp_types::Position,
     maybe_variant_name: Option<StillSyntaxNode<&str>>,
     variant_maybe_value: Option<StillSyntaxNode<&StillSyntaxType>>,
@@ -6500,13 +6484,13 @@ fn still_syntax_highlight_project_into(
     for comment_node in still_syntax_project.comments.iter() {
         still_syntax_highlight_and_place_comment_into(
             highlighted_so_far,
-            still_syntax_node_as_ref(comment_node),
+            still_syntax_node_unbox(comment_node),
         );
     }
 }
 fn still_syntax_highlight_and_place_comment_into(
     highlighted_so_far: &mut Vec<StillSyntaxNode<StillSyntaxHighlightKind>>,
-    still_syntax_comment_node: StillSyntaxNode<&StillSyntaxComment>,
+    still_syntax_comment_node: StillSyntaxNode<&str>,
 ) {
     let insert_index: usize = highlighted_so_far
         .binary_search_by(|token| {
@@ -6516,34 +6500,13 @@ fn still_syntax_highlight_and_place_comment_into(
                 .cmp(&still_syntax_comment_node.range.start)
         })
         .unwrap_or_else(|i| i);
-    match still_syntax_comment_node.value.kind {
-        StillSyntaxCommentKind::UntilLinebreak => {
-            highlighted_so_far.insert(
-                insert_index,
-                StillSyntaxNode {
-                    range: still_syntax_comment_node.range,
-                    value: StillSyntaxHighlightKind::Comment,
-                },
-            );
-        }
-        StillSyntaxCommentKind::Block => {
-            highlighted_so_far.splice(
-                insert_index..insert_index,
-                still_syntax_highlight_multi_line(
-                    StillSyntaxNode {
-                        range: still_syntax_comment_node.range,
-                        value: &still_syntax_comment_node.value.content,
-                    },
-                    2,
-                    2,
-                )
-                .map(|range| StillSyntaxNode {
-                    range: range,
-                    value: StillSyntaxHighlightKind::Comment,
-                }),
-            );
-        }
-    }
+    highlighted_so_far.insert(
+        insert_index,
+        StillSyntaxNode {
+            range: still_syntax_comment_node.range,
+            value: StillSyntaxHighlightKind::Comment,
+        },
+    );
 }
 fn still_syntax_highlight_multi_line(
     still_syntax_str_node: StillSyntaxNode<&str>,
@@ -7279,19 +7242,7 @@ struct ParseState<'a> {
     position: lsp_types::Position,
     indent: u16,
     lower_indents_stack: Vec<u16>,
-    comments: Vec<StillSyntaxNode<StillSyntaxComment>>,
-}
-#[derive(Clone, Debug, PartialEq)]
-struct StillSyntaxComment {
-    kind: StillSyntaxCommentKind,
-    content: Box<str>,
-}
-#[derive(Clone, Debug, PartialEq)]
-enum StillSyntaxCommentKind {
-    /// --
-    UntilLinebreak,
-    /// {- ... -}
-    Block,
+    comments: Vec<StillSyntaxNode<Box<str>>>,
 }
 
 fn parse_state_push_indent(state: &mut ParseState, new_indent: u16) {
@@ -7472,11 +7423,8 @@ fn parse_still_whitespace_and_comments(state: &mut ParseState) {
     {}
 }
 fn parse_still_comment(state: &mut ParseState) -> bool {
-    parse_still_comment_until_linebreak(state) || parse_still_comment_block(state)
-}
-fn parse_still_comment_until_linebreak(state: &mut ParseState) -> bool {
     let position_before: lsp_types::Position = state.position;
-    if !parse_symbol(state, "--") {
+    if !parse_symbol(state, "#") {
         return false;
     }
     let content: &str = state.source[state.offset_utf8..]
@@ -7491,68 +7439,21 @@ fn parse_still_comment_until_linebreak(state: &mut ParseState) -> bool {
     };
     state.comments.push(StillSyntaxNode {
         range: full_range,
-        value: StillSyntaxComment {
-            content: Box::from(content),
-            kind: StillSyntaxCommentKind::UntilLinebreak,
-        },
-    });
-    true
-}
-/// does not parse documentation comment (starting with {-|)
-fn parse_still_comment_block(state: &mut ParseState) -> bool {
-    if state.source[state.offset_utf8..].starts_with("{-|") {
-        return false;
-    }
-    let start_position: lsp_types::Position = state.position;
-    if !parse_symbol(state, "{-") {
-        return false;
-    }
-    let content_start_offset_utf8: usize = state.offset_utf8;
-    let mut nesting_level: u32 = 1;
-    'until_fully_unnested: loop {
-        if parse_linebreak(state) {
-        } else if parse_symbol(state, "{-") {
-            nesting_level += 1;
-        } else if parse_symbol(state, "-}") {
-            if nesting_level <= 1 {
-                break 'until_fully_unnested;
-            }
-            nesting_level -= 1;
-        } else if parse_any_guaranteed_non_linebreak_char(state) {
-        } else {
-            // end of source
-            break 'until_fully_unnested;
-        }
-    }
-    let content_including_closing: &str =
-        &state.source[content_start_offset_utf8..state.offset_utf8];
-    state.comments.push(StillSyntaxNode {
-        range: lsp_types::Range {
-            start: start_position,
-            end: state.position,
-        },
-        value: StillSyntaxComment {
-            content: Box::from(
-                content_including_closing
-                    .strip_suffix("-}")
-                    .unwrap_or(content_including_closing),
-            ),
-            kind: StillSyntaxCommentKind::Block,
-        },
+        value: Box::from(content),
     });
     true
 }
 fn parse_still_documentation_comment_block_str<'a>(state: &mut ParseState<'a>) -> Option<&'a str> {
-    if !parse_symbol(state, "{-|") {
+    if !parse_symbol(state, "(#") {
         return None;
     }
     let content_start_offset_utf8: usize = state.offset_utf8;
     let mut nesting_level: u32 = 1;
     'until_fully_unnested: loop {
         if parse_linebreak(state) {
-        } else if parse_symbol(state, "{-") {
+        } else if parse_symbol(state, "(#") {
             nesting_level += 1;
-        } else if parse_symbol(state, "-}") {
+        } else if parse_symbol(state, "#)") {
             if nesting_level <= 1 {
                 break 'until_fully_unnested;
             }
@@ -7567,7 +7468,7 @@ fn parse_still_documentation_comment_block_str<'a>(state: &mut ParseState<'a>) -
         &state.source[content_start_offset_utf8..state.offset_utf8];
     Some(
         content_including_closing
-            .strip_suffix("-}")
+            .strip_suffix("#)")
             .unwrap_or(content_including_closing),
     )
 }
@@ -7732,9 +7633,6 @@ fn parse_still_syntax_type_not_space_separated(state: &mut ParseState) -> Option
         .or_else(|| parse_still_syntax_type_record(state))
 }
 fn parse_still_syntax_type_record(state: &mut ParseState) -> Option<StillSyntaxType> {
-    if state.source[state.offset_utf8..].starts_with("{-|") {
-        return None;
-    }
     if !parse_symbol(state, "{") {
         return None;
     }
@@ -7859,9 +7757,6 @@ fn parse_still_syntax_pattern_node(
         .or_else(|| parse_still_syntax_pattern_typed(state))
 }
 fn parse_still_syntax_pattern_record(state: &mut ParseState) -> Option<StillSyntaxPattern> {
-    if state.source[state.offset_utf8..].starts_with("{-|") {
-        return None;
-    }
     if !parse_symbol(state, "{") {
         return None;
     }
@@ -8240,9 +8135,6 @@ fn parse_still_syntax_expression_reference(
 fn parse_still_syntax_expression_record_or_record_update(
     state: &mut ParseState,
 ) -> Option<StillSyntaxExpression> {
-    if state.source[state.offset_utf8..].starts_with("{-|") {
-        return None;
-    }
     if !parse_symbol(state, "{") {
         return None;
     }
