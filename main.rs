@@ -2753,7 +2753,7 @@ enum StillSyntaxExpression {
         value: Result<i64, Box<str>>,
     },
     Lambda {
-        parameters: Vec<StillSyntaxNode<StillSyntaxPattern>>,
+        parameter: Option<StillSyntaxNode<StillSyntaxPattern>>,
         arrow_key_symbol_range: Option<lsp_types::Range>,
         result: Option<StillSyntaxNode<Box<StillSyntaxExpression>>>,
     },
@@ -2911,15 +2911,15 @@ fn still_syntax_expression_type_with<'a>(
         } => todo!(),
         StillSyntaxExpression::CaseOf {
             matched,
-            of_keyword_range,
+            of_keyword_range: _,
             cases,
         } => todo!(),
         StillSyntaxExpression::Char(_) => todo!(),
         StillSyntaxExpression::Dec(_) => todo!(),
-        StillSyntaxExpression::Int { value } => todo!(),
+        StillSyntaxExpression::Int { .. } => todo!(),
         StillSyntaxExpression::Lambda {
-            parameters,
-            arrow_key_symbol_range,
+            parameter: maybe_parameter,
+            arrow_key_symbol_range: _,
             result,
         } => todo!(),
         StillSyntaxExpression::Let {
@@ -2932,11 +2932,11 @@ fn still_syntax_expression_type_with<'a>(
         StillSyntaxExpression::Parenthesized(Some(in_parens)) => {
             still_syntax_expression_type_with(bindings, still_syntax_node_unbox(in_parens))
         }
-        StillSyntaxExpression::Record(still_syntax_expression_fields) => todo!(),
+        StillSyntaxExpression::Record(fields) => todo!(),
         StillSyntaxExpression::RecordAccess { record, field } => todo!(),
         StillSyntaxExpression::RecordUpdate {
             record_variable,
-            bar_key_symbol_range,
+            bar_key_symbol_range: _,
             fields,
         } => todo!(),
         StillSyntaxExpression::Reference { name } => {
@@ -3996,7 +3996,7 @@ fn still_syntax_expression_not_parenthesized_into(
             still_int_into(so_far, value_or_err);
         }
         StillSyntaxExpression::Lambda {
-            parameters,
+            parameter: maybe_parameter,
             arrow_key_symbol_range: maybe_arrow_key_symbol_range,
             result: maybe_result,
         } => {
@@ -4010,15 +4010,15 @@ fn still_syntax_expression_not_parenthesized_into(
                     {
                         arrow_key_symbol_range.end
                     } else {
-                        parameters
-                            .last()
+                        maybe_parameter
+                            .as_ref()
                             .map(|node| node.range.end)
                             .unwrap_or(expression_node.range.start)
                     },
                 },
             );
             let mut previous_parameter_end: lsp_types::Position = expression_node.range.start;
-            if let Some((parameter0_node, parameter1_up)) = parameters.split_first() {
+            if let Some(parameter_node) = maybe_parameter {
                 still_syntax_comments_then_linebreak_indented_into(
                     so_far,
                     indent + 1,
@@ -4026,40 +4026,21 @@ fn still_syntax_expression_not_parenthesized_into(
                         parameter_comments,
                         lsp_types::Range {
                             start: previous_parameter_end,
-                            end: parameter0_node.range.start,
+                            end: parameter_node.range.start,
                         },
                     ),
                 );
                 still_syntax_pattern_not_parenthesized_into(
                     so_far,
-                    still_syntax_node_as_ref(parameter0_node),
+                    still_syntax_node_as_ref(parameter_node),
                 );
                 let line_span: LineSpan = if parameter_comments.is_empty() {
                     LineSpan::Single
                 } else {
                     LineSpan::Multiple
                 };
-                for parameter_node in parameter1_up {
-                    space_or_linebreak_indented_into(so_far, line_span, indent + 1);
-                    still_syntax_comments_then_linebreak_indented_into(
-                        so_far,
-                        indent + 1,
-                        still_syntax_comments_in_range(
-                            parameter_comments,
-                            lsp_types::Range {
-                                start: previous_parameter_end,
-                                end: parameter_node.range.start,
-                            },
-                        ),
-                    );
-                    still_syntax_pattern_not_parenthesized_into(
-                        so_far,
-                        still_syntax_node_as_ref(parameter_node),
-                    );
-                    previous_parameter_end = parameter_node.range.end;
-                }
                 space_or_linebreak_indented_into(so_far, line_span, indent);
-                previous_parameter_end = parameter0_node.range.end;
+                previous_parameter_end = parameter_node.range.end;
             }
             if maybe_result.is_none()
                 && let Some(arrow_key_symbol_range) = maybe_arrow_key_symbol_range
@@ -4869,7 +4850,7 @@ fn still_syntax_expression_any_sub(
         StillSyntaxExpression::Dec(_) => false,
         StillSyntaxExpression::Int { .. } => false,
         StillSyntaxExpression::Lambda {
-            parameters: _,
+            parameter: _,
             arrow_key_symbol_range: _,
             result: maybe_result,
         } => maybe_result.as_ref().is_some_and(|result_node| {
@@ -5859,10 +5840,10 @@ fn still_syntax_expression_find_reference_at_position<'a>(
         StillSyntaxExpression::Int { .. } => std::ops::ControlFlow::Continue(local_bindings),
         StillSyntaxExpression::Lambda {
             arrow_key_symbol_range: _,
-            parameters,
+            parameter: maybe_parameter,
             result: maybe_result,
         } => {
-            if let Some(found_symbol) = parameters.iter().find_map(|parameter| {
+            if let Some(found_symbol) = maybe_parameter.iter().find_map(|parameter| {
                 still_syntax_pattern_find_reference_at_position(
                     scope_declaration,
                     still_syntax_node_as_ref(parameter),
@@ -5874,7 +5855,7 @@ fn still_syntax_expression_find_reference_at_position<'a>(
             match maybe_result {
                 Some(result_node) => {
                     let mut introduced_bindings: Vec<StillLocalBinding> = Vec::new();
-                    for parameter_node in parameters {
+                    if let Some(parameter_node) = maybe_parameter {
                         still_syntax_pattern_bindings_into(
                             &mut introduced_bindings,
                             still_syntax_node_as_ref(parameter_node),
@@ -6419,11 +6400,11 @@ fn still_syntax_expression_uses_of_reference_into(
         StillSyntaxExpression::Dec(_) => {}
         StillSyntaxExpression::Int { .. } => {}
         StillSyntaxExpression::Lambda {
-            parameters,
+            parameter: maybe_parameter,
             arrow_key_symbol_range: _,
             result: maybe_result,
         } => {
-            for parameter_node in parameters {
+            if let Some(parameter_node) = maybe_parameter {
                 still_syntax_pattern_uses_of_reference_into(
                     uses_so_far,
                     still_syntax_node_as_ref(parameter_node),
@@ -6432,7 +6413,7 @@ fn still_syntax_expression_uses_of_reference_into(
             }
             if let Some(result_node) = maybe_result {
                 let mut local_bindings_including_from_lambda_parameters = local_bindings.to_vec();
-                for parameter_node in parameters {
+                if let Some(parameter_node) = maybe_parameter {
                     still_syntax_pattern_bindings_into(
                         &mut local_bindings_including_from_lambda_parameters,
                         still_syntax_node_as_ref(parameter_node),
@@ -7453,7 +7434,7 @@ fn still_syntax_highlight_expression_into(
             });
         }
         StillSyntaxExpression::Lambda {
-            parameters,
+            parameter: maybe_parameter,
             arrow_key_symbol_range: maybe_arrow_key_symbol_range,
             result: maybe_result,
         } => {
@@ -7464,7 +7445,7 @@ fn still_syntax_highlight_expression_into(
                 },
                 value: StillSyntaxHighlightKind::KeySymbol,
             });
-            for parameter_node in parameters {
+            if let Some(parameter_node) = maybe_parameter {
                 still_syntax_highlight_pattern_into(
                     highlighted_so_far,
                     still_syntax_node_as_ref(parameter_node),
@@ -7478,7 +7459,7 @@ fn still_syntax_highlight_expression_into(
             }
             if let Some(result_node) = maybe_result {
                 let mut local_bindings: Vec<StillLocalBinding> = local_bindings.to_vec();
-                for parameter_node in parameters {
+                if let Some(parameter_node) = maybe_parameter {
                     still_syntax_pattern_bindings_into(
                         &mut local_bindings,
                         still_syntax_node_as_ref(parameter_node),
@@ -8942,10 +8923,10 @@ fn parse_still_syntax_expression_lambda(
     let backslash_key_symbol_range: lsp_types::Range = parse_symbol_as_range(state, "\\")?;
     let mut syntax_before_result_end_position: lsp_types::Position = backslash_key_symbol_range.end;
     parse_still_whitespace_and_comments(state);
-    let mut parameters: Vec<StillSyntaxNode<StillSyntaxPattern>> = Vec::new();
-    if let Some(parameter_node) = parse_still_syntax_pattern_node(state) {
+    let maybe_parameter: Option<StillSyntaxNode<StillSyntaxPattern>> =
+        parse_still_syntax_pattern_node(state);
+    if let Some(parameter_node) = &maybe_parameter {
         syntax_before_result_end_position = parameter_node.range.end;
-        parameters.push(parameter_node);
         parse_still_whitespace_and_comments(state);
         // be lenient in allowing , after lambda parameters, even though it's invalid syntax
         while parse_symbol(state, ",") {
@@ -8969,7 +8950,7 @@ fn parse_still_syntax_expression_lambda(
             },
         },
         value: StillSyntaxExpression::Lambda {
-            parameters: parameters,
+            parameter: maybe_parameter,
             arrow_key_symbol_range: maybe_arrow_key_symbol_range,
             result: maybe_result.map(still_syntax_node_box),
         },
