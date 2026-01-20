@@ -2667,11 +2667,6 @@ enum StillSyntaxType {
         arguments: Vec<StillSyntaxNode<StillSyntaxType>>,
     },
     Record(Vec<StillSyntaxTypeField>),
-    RecordExtension {
-        record_variable: Option<StillSyntaxNode<StillName>>,
-        bar_key_symbol_range: lsp_types::Range,
-        fields: Vec<StillSyntaxTypeField>,
-    },
 }
 #[derive(Clone, Debug, PartialEq)]
 struct StillSyntaxTypeField {
@@ -2900,7 +2895,7 @@ fn still_syntax_expression_type_with<'a>(
             argument1_up,
         } => todo!(),
         StillSyntaxExpression::CaseOf {
-            matched,
+            matched: _,
             of_keyword_range: _,
             cases,
         } => todo!(),
@@ -3198,43 +3193,6 @@ fn still_syntax_type_not_parenthesized_into(
                 so_far.push('}');
             }
         },
-        StillSyntaxType::RecordExtension {
-            record_variable: maybe_record_variable,
-            bar_key_symbol_range: _,
-            fields,
-        } => {
-            let line_span: LineSpan = still_syntax_range_line_span(type_node.range, comments);
-            so_far.push_str("{ ");
-            let mut previous_syntax_end: lsp_types::Position = type_node.range.start;
-            if let Some(record_variable_node) = maybe_record_variable {
-                so_far.push_str(&record_variable_node.value);
-                previous_syntax_end = record_variable_node.range.end;
-            }
-            if let Some((field0, field1_up)) = fields.split_first() {
-                space_or_linebreak_indented_into(so_far, line_span, indent);
-                so_far.push_str("| ");
-                previous_syntax_end = still_syntax_type_fields_into_string(
-                    so_far, indent, comments, line_span, field0, field1_up,
-                );
-            }
-            space_or_linebreak_indented_into(so_far, line_span, indent);
-            let comments_before_closing_curly = still_syntax_comments_in_range(
-                comments,
-                lsp_types::Range {
-                    start: previous_syntax_end,
-                    end: type_node.range.end,
-                },
-            );
-            if !comments_before_closing_curly.is_empty() {
-                linebreak_indented_into(so_far, indent);
-                still_syntax_comments_then_linebreak_indented_into(
-                    so_far,
-                    indent + 2,
-                    comments_before_closing_curly,
-                );
-            }
-            so_far.push('}');
-        }
         StillSyntaxType::Variable(name) => {
             so_far.push_str(name);
         }
@@ -3351,8 +3309,7 @@ fn still_syntax_type_parenthesized_if_space_separated_into(
     let is_space_separated: bool = match unparenthesized.value {
         StillSyntaxType::Variable(_)
         | StillSyntaxType::Parenthesized(_)
-        | StillSyntaxType::Record(_)
-        | StillSyntaxType::RecordExtension { .. } => false,
+        | StillSyntaxType::Record(_) => false,
         StillSyntaxType::Function { .. } => true,
         StillSyntaxType::Construct { name: _, arguments } => !arguments.is_empty(),
     };
@@ -5500,33 +5457,6 @@ fn still_syntax_type_find_reference_at_position<'a>(
                     )
                 })
             }),
-            StillSyntaxType::RecordExtension {
-                record_variable: maybe_record_type_variable,
-                bar_key_symbol_range: _,
-                fields,
-            } => {
-                if let Some(record_type_variable_node) = maybe_record_type_variable
-                    && lsp_range_includes_position(record_type_variable_node.range, position)
-                {
-                    Some(StillSyntaxNode {
-                        range: record_type_variable_node.range,
-                        value: StillSyntaxSymbol::TypeVariable {
-                            scope_declaration: scope_declaration,
-                            name: &record_type_variable_node.value,
-                        },
-                    })
-                } else {
-                    fields.iter().find_map(|field| {
-                        field.value.as_ref().and_then(|field_value_node| {
-                            still_syntax_type_find_reference_at_position(
-                                scope_declaration,
-                                still_syntax_node_as_ref(field_value_node),
-                                position,
-                            )
-                        })
-                    })
-                }
-            }
             StillSyntaxType::Variable(type_variable_value) => Some(StillSyntaxNode {
                 range: still_syntax_type_node.range,
                 value: StillSyntaxSymbol::TypeVariable {
@@ -6093,27 +6023,6 @@ fn still_syntax_type_uses_of_reference_into(
             );
         }
         StillSyntaxType::Record(fields) => {
-            for field in fields {
-                if let Some(field_value_node) = &field.value {
-                    still_syntax_type_uses_of_reference_into(
-                        uses_so_far,
-                        still_syntax_node_as_ref(field_value_node),
-                        symbol_to_collect_uses_of,
-                    );
-                }
-            }
-        }
-        StillSyntaxType::RecordExtension {
-            record_variable: maybe_record_variable,
-            bar_key_symbol_range: _,
-            fields,
-        } => {
-            if let Some(record_variable_node) = maybe_record_variable
-                && symbol_to_collect_uses_of
-                    == StillSymbolToReference::TypeVariable(&record_variable_node.value)
-            {
-                uses_so_far.push(record_variable_node.range);
-            }
             for field in fields {
                 if let Some(field_value_node) = &field.value {
                     still_syntax_type_uses_of_reference_into(
@@ -6987,40 +6896,6 @@ fn still_syntax_highlight_type_into(
                 }
             }
         }
-        StillSyntaxType::RecordExtension {
-            record_variable: maybe_record_variable,
-            bar_key_symbol_range,
-            fields,
-        } => {
-            if let Some(record_variable_node) = maybe_record_variable {
-                highlighted_so_far.push(StillSyntaxNode {
-                    range: record_variable_node.range,
-                    value: StillSyntaxHighlightKind::TypeVariable,
-                });
-            }
-            highlighted_so_far.push(StillSyntaxNode {
-                range: *bar_key_symbol_range,
-                value: StillSyntaxHighlightKind::KeySymbol,
-            });
-            for field in fields {
-                highlighted_so_far.push(StillSyntaxNode {
-                    range: field.name.range,
-                    value: StillSyntaxHighlightKind::Field,
-                });
-                if let Some(colon_key_symbol_range) = field.colon_key_symbol_range {
-                    highlighted_so_far.push(StillSyntaxNode {
-                        range: colon_key_symbol_range,
-                        value: StillSyntaxHighlightKind::KeySymbol,
-                    });
-                }
-                if let Some(field_value_node) = &field.value {
-                    still_syntax_highlight_type_into(
-                        highlighted_so_far,
-                        still_syntax_node_as_ref(field_value_node),
-                    );
-                }
-            }
-        }
         StillSyntaxType::Variable(_) => {
             highlighted_so_far.push(StillSyntaxNode {
                 range: still_syntax_type_node.range,
@@ -7826,7 +7701,7 @@ fn parse_still_syntax_type_not_function_node(
         parse_still_lowercase_name(state)
             .map(StillSyntaxType::Variable)
             .or_else(|| parse_still_syntax_type_parenthesized(state))
-            .or_else(|| parse_still_syntax_type_record_or_record_extension(state))
+            .or_else(|| parse_still_syntax_type_record(state))
             .map(|type_| StillSyntaxNode {
                 range: lsp_types::Range {
                     start: start_position,
@@ -7863,11 +7738,9 @@ fn parse_still_syntax_type_not_space_separated(state: &mut ParseState) -> Option
                 }
             })
         })
-        .or_else(|| parse_still_syntax_type_record_or_record_extension(state))
+        .or_else(|| parse_still_syntax_type_record(state))
 }
-fn parse_still_syntax_type_record_or_record_extension(
-    state: &mut ParseState,
-) -> Option<StillSyntaxType> {
+fn parse_still_syntax_type_record(state: &mut ParseState) -> Option<StillSyntaxType> {
     if state.source[state.offset_utf8..].starts_with("{-|") {
         return None;
     }
@@ -7881,49 +7754,36 @@ fn parse_still_syntax_type_record_or_record_extension(
     let maybe_start_name: Option<StillSyntaxNode<StillName>> =
         parse_still_lowercase_name_node(state);
     parse_still_whitespace_and_comments(state);
-    if let Some(bar_key_symbol_range) = parse_symbol_as_range(state, "|") {
-        parse_still_whitespace_and_comments(state);
-        let mut fields: Vec<StillSyntaxTypeField> = Vec::new();
-        while let Some(field) = parse_still_syntax_type_field(state) {
-            fields.push(field);
+    match maybe_start_name {
+        None => {
+            let _: bool = parse_symbol(state, "}");
+            Some(StillSyntaxType::Record(vec![]))
+        }
+        Some(field0_name_node) => {
+            let maybe_field0_colon_key_symbol_range: Option<lsp_types::Range> =
+                parse_symbol_as_range(state, ":");
+            parse_still_whitespace_and_comments(state);
+            let maybe_field0_value: Option<StillSyntaxNode<StillSyntaxType>> =
+                parse_still_syntax_type_space_separated_node(state);
             parse_still_whitespace_and_comments(state);
             while parse_symbol(state, ",") {
                 parse_still_whitespace_and_comments(state);
             }
-        }
-        let _: bool = parse_symbol(state, "}");
-        Some(StillSyntaxType::RecordExtension {
-            record_variable: maybe_start_name,
-            bar_key_symbol_range: bar_key_symbol_range,
-            fields: fields,
-        })
-    } else if let Some(field0_name_node) = maybe_start_name {
-        let maybe_field0_colon_key_symbol_range: Option<lsp_types::Range> =
-            parse_symbol_as_range(state, ":");
-        parse_still_whitespace_and_comments(state);
-        let maybe_field0_value: Option<StillSyntaxNode<StillSyntaxType>> =
-            parse_still_syntax_type_space_separated_node(state);
-        parse_still_whitespace_and_comments(state);
-        while parse_symbol(state, ",") {
-            parse_still_whitespace_and_comments(state);
-        }
-        let mut fields: Vec<StillSyntaxTypeField> = vec![StillSyntaxTypeField {
-            name: field0_name_node,
-            colon_key_symbol_range: maybe_field0_colon_key_symbol_range,
-            value: maybe_field0_value,
-        }];
-        while let Some(field) = parse_still_syntax_type_field(state) {
-            fields.push(field);
-            parse_still_whitespace_and_comments(state);
-            while parse_symbol(state, ",") {
+            let mut fields: Vec<StillSyntaxTypeField> = vec![StillSyntaxTypeField {
+                name: field0_name_node,
+                colon_key_symbol_range: maybe_field0_colon_key_symbol_range,
+                value: maybe_field0_value,
+            }];
+            while let Some(field) = parse_still_syntax_type_field(state) {
+                fields.push(field);
                 parse_still_whitespace_and_comments(state);
+                while parse_symbol(state, ",") {
+                    parse_still_whitespace_and_comments(state);
+                }
             }
+            let _: bool = parse_symbol(state, "}");
+            Some(StillSyntaxType::Record(fields))
         }
-        let _: bool = parse_symbol(state, "}");
-        Some(StillSyntaxType::Record(fields))
-    } else {
-        let _: bool = parse_symbol(state, "}");
-        Some(StillSyntaxType::Record(vec![]))
     }
 }
 fn parse_still_syntax_type_field(state: &mut ParseState) -> Option<StillSyntaxTypeField> {
