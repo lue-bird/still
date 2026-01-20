@@ -2755,7 +2755,7 @@ enum StillSyntaxExpression {
         field: Option<StillSyntaxNode<StillName>>,
     },
     RecordUpdate {
-        record_variable: Option<StillSyntaxNode<StillName>>,
+        record: Option<StillSyntaxNode<Box<StillSyntaxExpression>>>,
         bar_key_symbol_range: lsp_types::Range,
         fields: Vec<StillSyntaxExpressionField>,
     },
@@ -2919,7 +2919,7 @@ fn still_syntax_expression_type_with<'a>(
         StillSyntaxExpression::Record(fields) => todo!(),
         StillSyntaxExpression::RecordAccess { record, field } => todo!(),
         StillSyntaxExpression::RecordUpdate {
-            record_variable,
+            record: maybe_record,
             bar_key_symbol_range: _,
             fields,
         } => todo!(),
@@ -4162,16 +4162,21 @@ fn still_syntax_expression_not_parenthesized_into(
             }
         }
         StillSyntaxExpression::RecordUpdate {
-            record_variable: maybe_record_variable,
+            record: maybe_record,
             bar_key_symbol_range: _,
             fields,
         } => {
             let line_span: LineSpan = still_syntax_range_line_span(expression_node.range, comments);
             so_far.push_str("{ ..");
             let mut previous_syntax_end: lsp_types::Position = expression_node.range.start;
-            if let Some(record_variable_node) = maybe_record_variable {
-                so_far.push_str(&record_variable_node.value);
-                previous_syntax_end = record_variable_node.range.end;
+            if let Some(record_node) = maybe_record {
+                still_syntax_expression_not_parenthesized_into(
+                    so_far,
+                    indent + 4,
+                    comments,
+                    still_syntax_node_unbox(record_node),
+                );
+                previous_syntax_end = record_node.range.end;
             }
             if let Some((field0, field1_up)) = fields.split_first() {
                 space_or_linebreak_indented_into(so_far, line_span, indent);
@@ -4710,7 +4715,7 @@ fn still_syntax_expression_any_sub(
             still_syntax_expression_any_sub(still_syntax_node_unbox(record), is_needle)
         }
         StillSyntaxExpression::RecordUpdate {
-            record_variable: _,
+            record: _,
             bar_key_symbol_range: _,
             fields,
         } => fields
@@ -5693,20 +5698,19 @@ fn still_syntax_expression_find_reference_at_position<'a>(
             )
         }
         StillSyntaxExpression::RecordUpdate {
-            record_variable: maybe_record_variable,
+            record: maybe_record,
             bar_key_symbol_range: _,
             fields,
         } => {
-            if let Some(record_variable_node) = maybe_record_variable
-                && lsp_range_includes_position(record_variable_node.range, position)
+            if let Some(record_node) = maybe_record
+                && lsp_range_includes_position(record_node.range, position)
             {
-                return std::ops::ControlFlow::Break(StillSyntaxNode {
-                    value: StillSyntaxSymbol::VariableOrVariant {
-                        name: &record_variable_node.value,
-                        local_bindings: local_bindings,
-                    },
-                    range: record_variable_node.range,
-                });
+                return still_syntax_expression_find_reference_at_position(
+                    local_bindings,
+                    scope_declaration,
+                    still_syntax_node_unbox(record_node),
+                    position,
+                );
             }
             fields
                 .iter()
@@ -6209,30 +6213,17 @@ fn still_syntax_expression_uses_of_reference_into(
             );
         }
         StillSyntaxExpression::RecordUpdate {
-            record_variable: maybe_record_variable,
+            record: maybe_record,
             bar_key_symbol_range: _,
             fields,
         } => {
-            if let Some(record_variable_node) = maybe_record_variable {
-                if let StillSymbolToReference::LocalBinding {
-                    name: symbol_name,
-                    including_let_declaration_name: _,
-                } = symbol_to_collect_uses_of
-                    && symbol_name == record_variable_node.value.as_str()
-                {
-                    if local_bindings.iter().any(|local_binding| {
-                        local_binding.name == record_variable_node.value.as_str()
-                    }) {
-                        uses_so_far.push(record_variable_node.range);
-                    }
-                } else if let StillSymbolToReference::VariableOrVariant {
-                    name: symbol_name,
-                    including_declaration_name: _,
-                } = symbol_to_collect_uses_of
-                    && symbol_name == record_variable_node.value.as_str()
-                {
-                    uses_so_far.push(record_variable_node.range);
-                }
+            if let Some(record_node) = maybe_record {
+                still_syntax_expression_uses_of_reference_into(
+                    uses_so_far,
+                    local_bindings,
+                    still_syntax_node_unbox(record_node),
+                    symbol_to_collect_uses_of,
+                );
             }
             for field in fields {
                 if let Some(field_value_node) = &field.value {
@@ -7136,13 +7127,13 @@ fn still_syntax_highlight_expression_into(
             }
         }
         StillSyntaxExpression::RecordUpdate {
-            record_variable: maybe_record_variable,
+            record: maybe_record,
             bar_key_symbol_range,
             fields,
         } => {
-            if let Some(record_variable_node) = maybe_record_variable {
+            if let Some(record_node) = maybe_record {
                 highlighted_so_far.push(StillSyntaxNode {
-                    range: record_variable_node.range,
+                    range: record_node.range,
                     value: StillSyntaxHighlightKind::Variable,
                 });
             }
@@ -8261,8 +8252,8 @@ fn parse_still_syntax_expression_record_or_record_update(
     }
     if let Some(bar_key_symbol_range) = parse_symbol_as_range(state, "..") {
         parse_still_whitespace_and_comments(state);
-        let maybe_start_name: Option<StillSyntaxNode<compact_str::CompactString>> =
-            parse_still_lowercase_name_node(state);
+        let maybe_record: Option<StillSyntaxNode<StillSyntaxExpression>> =
+            parse_still_syntax_expression_space_separated_node(state);
         parse_still_whitespace_and_comments(state);
         while parse_symbol(state, ",") {
             parse_still_whitespace_and_comments(state);
@@ -8277,7 +8268,7 @@ fn parse_still_syntax_expression_record_or_record_update(
         }
         let _: bool = parse_symbol(state, "}");
         Some(StillSyntaxExpression::RecordUpdate {
-            record_variable: maybe_start_name,
+            record: maybe_record.map(still_syntax_node_box),
             bar_key_symbol_range: bar_key_symbol_range,
             fields: fields,
         })
