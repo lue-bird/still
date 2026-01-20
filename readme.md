@@ -48,10 +48,10 @@ stack_map \{ change :\A -> B:element_change, stack :stack A:stack } ->
 ```
 
 ## TODO
-- change comment system to `Expression::WithComment` and `Pattern::WithComment` and `Type::WithComment` (each meaning it is prefixed by `#`) and _always_ preserve line-spread of original range! Then, remove all &comments parameters
-- split call and variant expression syntax tree
 - `:type:expression` for (extra) type-checking, like `:option int:Some -1`
-- type checking (notably also: check that each function output type only ever uses type variables used in the input type, and similarly: on non-function types, forbid the use of any variables)
+- split call and variant expression syntax tree, combine reference and call by only allowing arguments after reference
+- change comment system to `Expression::WithComment` and `Pattern::WithComment` and `Type::WithComment` (each meaning it is prefixed by `#`) and _always_ preserve line-spread of original range! Then, remove all &comments parameters
+- type checking (notably also: check that each function output type only ever uses type variables used in the input type, and similarly: on non-function types, forbid the use of any new variables)
 - `still build`
 - small standard library in rust (`str` (&str), `vec` (Rc<Vec<>>), `int` (i32), `dec` (f32), ?`order`, ?`char`(unicode_scalar/rune), `int_to_str`, `dec_to_str`, `int/dec_add`, `int/dec_multiply`, `dec_power`, `str_compare`, `int_compare`, `dec_compare`, ...)
 - simple io (`standard_in_read_line`, `standard_out_write`, ?`type uninitialized_or Initialized = Uninitialized | Initialized Initialized`)
@@ -63,6 +63,7 @@ stack_map \{ change :\A -> B:element_change, stack :stack A:stack } ->
 - find better string literal syntax, like zig's `//` or js' `\`\``
 - (leaning no, at least for now) add or pattern `( first | second | third )` (potentially allow `:overall:( A | B | C )` (where the inner variant patterns don't need a type) specifically for variant)
 - introduce `nat` type and require regular ints to be prefixed with `+`/`-`
+- make formatter range independent, and instead cut a line >=100 (is that possible to do when trying to get a maximally fast formatter? Because it seems an intermediate recursive structure is required)
 - output rust on save
 - support out-of-order let declarations
 
