@@ -2648,7 +2648,6 @@ enum StillSyntaxType {
 #[derive(Clone, Debug, PartialEq)]
 struct StillSyntaxTypeField {
     name: StillSyntaxNode<StillName>,
-    colon_key_symbol_range: Option<lsp_types::Range>,
     value: Option<StillSyntaxNode<StillSyntaxType>>,
 }
 
@@ -2759,7 +2758,6 @@ struct StillSyntaxExpressionCase {
 #[derive(Clone, Debug, PartialEq)]
 struct StillSyntaxExpressionField {
     name: StillSyntaxNode<StillName>,
-    equals_key_symbol_range: Option<lsp_types::Range>,
     value: Option<StillSyntaxNode<StillSyntaxExpression>>,
 }
 
@@ -2903,7 +2901,6 @@ fn still_syntax_pattern_type(
                                 if errors.is_empty() {
                                     field_types.push(StillSyntaxTypeField {
                                         name: field.name.clone(),
-                                        colon_key_symbol_range: None,
                                         value: Some(field_value_type),
                                     });
                                 }
@@ -6983,12 +6980,6 @@ fn still_syntax_highlight_type_into(
                     range: field.name.range,
                     value: StillSyntaxHighlightKind::Field,
                 });
-                if let Some(colon_key_symbol_range) = field.colon_key_symbol_range {
-                    highlighted_so_far.push(StillSyntaxNode {
-                        range: colon_key_symbol_range,
-                        value: StillSyntaxHighlightKind::KeySymbol,
-                    });
-                }
                 if let Some(field_value_node) = &field.value {
                     still_syntax_highlight_type_into(
                         highlighted_so_far,
@@ -7198,12 +7189,6 @@ fn still_syntax_highlight_expression_into(
                     range: field.name.range,
                     value: StillSyntaxHighlightKind::Field,
                 });
-                if let Some(equals_key_symbol_range) = field.equals_key_symbol_range {
-                    highlighted_so_far.push(StillSyntaxNode {
-                        range: equals_key_symbol_range,
-                        value: StillSyntaxHighlightKind::KeySymbol,
-                    });
-                }
                 if let Some(value_node) = &field.value {
                     still_syntax_highlight_expression_into(
                         highlighted_so_far,
@@ -7256,12 +7241,6 @@ fn still_syntax_highlight_expression_into(
                     range: field.name.range,
                     value: StillSyntaxHighlightKind::Field,
                 });
-                if let Some(equals_key_symbol_range) = field.equals_key_symbol_range {
-                    highlighted_so_far.push(StillSyntaxNode {
-                        range: equals_key_symbol_range,
-                        value: StillSyntaxHighlightKind::KeySymbol,
-                    });
-                }
                 if let Some(value_node) = &field.value {
                     still_syntax_highlight_expression_into(
                         highlighted_so_far,
@@ -7793,9 +7772,6 @@ fn parse_still_syntax_type_record(state: &mut ParseState) -> Option<StillSyntaxT
             Some(StillSyntaxType::Record(vec![]))
         }
         Some(field0_name_node) => {
-            let maybe_field0_colon_key_symbol_range: Option<lsp_types::Range> =
-                parse_symbol_as_range(state, ":");
-            parse_still_whitespace_and_comments(state);
             let maybe_field0_value: Option<StillSyntaxNode<StillSyntaxType>> =
                 parse_still_syntax_type_space_separated_node(state);
             parse_still_whitespace_and_comments(state);
@@ -7804,7 +7780,6 @@ fn parse_still_syntax_type_record(state: &mut ParseState) -> Option<StillSyntaxT
             }
             let mut fields: Vec<StillSyntaxTypeField> = vec![StillSyntaxTypeField {
                 name: field0_name_node,
-                colon_key_symbol_range: maybe_field0_colon_key_symbol_range,
                 value: maybe_field0_value,
             }];
             while let Some(field) = parse_still_syntax_type_field(state) {
@@ -7825,13 +7800,10 @@ fn parse_still_syntax_type_field(state: &mut ParseState) -> Option<StillSyntaxTy
     }
     let maybe_name: StillSyntaxNode<StillName> = parse_still_lowercase_name_node(state)?;
     parse_still_whitespace_and_comments(state);
-    let maybe_colon_key_symbol_range: Option<lsp_types::Range> = parse_symbol_as_range(state, ":");
-    parse_still_whitespace_and_comments(state);
     let maybe_value: Option<StillSyntaxNode<StillSyntaxType>> =
         parse_still_syntax_type_space_separated_node(state);
     Some(StillSyntaxTypeField {
         name: maybe_name,
-        colon_key_symbol_range: maybe_colon_key_symbol_range,
         value: maybe_value,
     })
 }
@@ -8316,9 +8288,6 @@ fn parse_still_syntax_expression_record_or_record_update(
         })
     } else if let Some(field0_name_node) = parse_still_lowercase_name_node(state) {
         parse_still_whitespace_and_comments(state);
-        let maybe_field0_equals_key_symbol_range: Option<lsp_types::Range> =
-            parse_symbol_as_range(state, "=");
-        parse_still_whitespace_and_comments(state);
         let maybe_field0_value: Option<StillSyntaxNode<StillSyntaxExpression>> =
             parse_still_syntax_expression_space_separated_node(state);
         parse_still_whitespace_and_comments(state);
@@ -8327,7 +8296,6 @@ fn parse_still_syntax_expression_record_or_record_update(
         }
         let mut fields: Vec<StillSyntaxExpressionField> = vec![StillSyntaxExpressionField {
             name: field0_name_node,
-            equals_key_symbol_range: maybe_field0_equals_key_symbol_range,
             value: maybe_field0_value,
         }];
         while let Some(field) = parse_still_syntax_expression_field(state) {
@@ -8352,13 +8320,10 @@ fn parse_still_syntax_expression_field(
     }
     let name_node: StillSyntaxNode<StillName> = parse_still_lowercase_name_node(state)?;
     parse_still_whitespace_and_comments(state);
-    let maybe_equals_key_symbol_range: Option<lsp_types::Range> = parse_symbol_as_range(state, "=");
-    parse_still_whitespace_and_comments(state);
     let maybe_value: Option<StillSyntaxNode<StillSyntaxExpression>> =
         parse_still_syntax_expression_space_separated_node(state);
     Some(StillSyntaxExpressionField {
         name: name_node,
-        equals_key_symbol_range: maybe_equals_key_symbol_range,
         value: maybe_value,
     })
 }
