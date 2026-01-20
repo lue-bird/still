@@ -1,4 +1,4 @@
-small, explicitly boring programming language that compiles to rust, heavily inspired by [elm](https://elm-lang.org/).
+very small, explicitly boring programming language that compiles to rust, heavily inspired by [elm](https://elm-lang.org/).
 Just experimentation.
 
 ## maybe interesting deviations
@@ -7,7 +7,7 @@ Just experimentation.
   
   Having concrete types everywhere also makes type checking faster, generates better errors and makes transpiling to almost any language very easy (e.g. elm's polymorphic number operations or `let`s are generally hard to infer and represent nicely in other languages)
 
-- no `|>` or infix operators
+- no `|>`, infix operators, currying, modules
 
 ## hello world
 
@@ -49,7 +49,7 @@ stack_map \{ change :\A -> B:element_change, stack :stack A:stack } ->
 
 ## TODO
 - `:type:expression` for (extra) type-checking, like `:option int:Some -1`
-- split call and variant expression syntax tree, combine reference and call by only allowing arguments after reference
+- split call and variant expression syntax tree
 - change comment system to `Expression::WithComment` and `Pattern::WithComment` and `Type::WithComment` (each meaning it is prefixed by `#`) and _always_ preserve line-spread of original range! Then, remove all &comments parameters
 - type checking (notably also: check that each function output type only ever uses type variables used in the input type, and similarly: on non-function types, forbid the use of any new variables)
 - `still build`
@@ -58,6 +58,8 @@ stack_map \{ change :\A -> B:element_change, stack :stack A:stack } ->
 - `case of` exhaustiveness checking
 
 ## considering
+- (leaning towards yes) actually deeply consider limiting reference calls to at most 1 argument just like variant construction.
+  That would still not eliminate the need for parens in general (see lambda and case of) but allow e.g. `html_text int_to_str half window_width`
 - adding anonymous choice types. They are not allowed to be recursive. Use `type alias` for these. choice types can then be removed
 - find better function call syntax that makes it easy to unwrap the last argument
 - find better string literal syntax, like zig's `//` or js' `\`\``
@@ -66,6 +68,7 @@ stack_map \{ change :\A -> B:element_change, stack :stack A:stack } ->
 - make formatter range independent, and instead cut a line >=100 (is that possible to do when trying to get a maximally fast formatter? Because it seems an intermediate recursive structure is required)
 - output rust on save
 - support out-of-order let declarations
+- closed lambda, call and case-of syntax like `\pattern -> expression/`, `call<arg`, `if x ( A -> x | B -> y )`, then remove ::Parenthesized
 
 To use, [install rust](https://rust-lang.org/tools/install/) and
 ```bash
