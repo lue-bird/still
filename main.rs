@@ -2658,8 +2658,8 @@ enum StillSyntaxType {
     Variable(StillName),
     Parenthesized(Option<StillSyntaxNode<Box<StillSyntaxType>>>),
     Function {
-        input: StillSyntaxNode<Box<StillSyntaxType>>,
-        arrow_key_symbol_range: lsp_types::Range,
+        input: Option<StillSyntaxNode<Box<StillSyntaxType>>>,
+        arrow_key_symbol_range: Option<lsp_types::Range>,
         output: Option<StillSyntaxNode<Box<StillSyntaxType>>>,
     },
     Construct {
@@ -3105,16 +3105,15 @@ fn still_syntax_type_not_parenthesized_into(
             }
         }
         StillSyntaxType::Function {
-            input,
+            input: maybe_input,
             arrow_key_symbol_range: _,
             output: maybe_output,
         } => still_syntax_type_function_into(
             so_far,
             comments,
             still_syntax_range_line_span(type_node.range, comments),
-            type_node.range,
             indent,
-            still_syntax_node_unbox(input),
+            maybe_input.as_ref().map(still_syntax_node_unbox),
             indent,
             maybe_output.as_ref().map(still_syntax_node_unbox),
         ),
@@ -3254,69 +3253,32 @@ fn still_syntax_type_not_parenthesized_into(
 fn still_syntax_type_function_into<'a>(
     so_far: &mut String,
     comments: &[StillSyntaxNode<StillSyntaxComment>],
-
     line_span: LineSpan,
-    full_range: lsp_types::Range,
     indent_for_input: usize,
-    input: StillSyntaxNode<&'a StillSyntaxType>,
+    maybe_input: Option<StillSyntaxNode<&'a StillSyntaxType>>,
     indent_after_input: usize,
     maybe_output: Option<StillSyntaxNode<&'a StillSyntaxType>>,
 ) {
-    let input_unparenthesized: StillSyntaxNode<&StillSyntaxType> =
-        still_syntax_type_to_unparenthesized(input);
-    match input_unparenthesized.value {
-        StillSyntaxType::Function { .. } => {
-            still_syntax_type_parenthesized_into(
-                so_far,
-                indent_for_input,
-                comments,
-                input.range,
-                input_unparenthesized,
-            );
-        }
-        _ => {
-            still_syntax_type_not_parenthesized_into(so_far, indent_for_input, comments, input);
-        }
+    so_far.push('\\');
+    if let Some(input_node) = maybe_input {
+        still_syntax_type_not_parenthesized_into(
+            so_far,
+            indent_for_input + 1,
+            comments,
+            input_node,
+        );
     }
     space_or_linebreak_indented_into(so_far, line_span, indent_after_input);
-    let comments_around_arrow: &[StillSyntaxNode<StillSyntaxComment>] =
-        still_syntax_comments_in_range(
-            comments,
-            lsp_types::Range {
-                start: input.range.end,
-                end: maybe_output
-                    .as_ref()
-                    .map(|node| node.range.start)
-                    .unwrap_or(full_range.end),
-            },
-        );
     match maybe_output {
         None => {
-            if !comments_around_arrow.is_empty() {
-                linebreak_indented_into(so_far, indent_after_input);
-                still_syntax_comments_then_linebreak_indented_into(
-                    so_far,
-                    indent_after_input,
-                    comments_around_arrow,
-                );
-            }
             so_far.push_str("-> ");
         }
         Some(output_node) => {
             so_far.push_str("->");
             space_or_linebreak_indented_into(
                 so_far,
-                if comments_around_arrow.is_empty() {
-                    still_syntax_range_line_span(output_node.range, comments)
-                } else {
-                    LineSpan::Multiple
-                },
+                still_syntax_range_line_span(output_node.range, comments),
                 next_indent(indent_after_input),
-            );
-            still_syntax_comments_then_linebreak_indented_into(
-                so_far,
-                next_indent(indent_after_input),
-                comments_around_arrow,
             );
             let output_node_unparenthesized: StillSyntaxNode<&StillSyntaxType> =
                 still_syntax_type_to_unparenthesized(output_node);
@@ -3325,16 +3287,17 @@ fn still_syntax_type_function_into<'a>(
                     input: output_input,
                     arrow_key_symbol_range: _,
                     output: output_maybe_output,
-                } => still_syntax_type_function_into(
-                    so_far,
-                    comments,
-                    line_span,
-                    output_node_unparenthesized.range,
-                    next_indent(indent_after_input),
-                    still_syntax_node_unbox(output_input),
-                    indent_after_input,
-                    output_maybe_output.as_ref().map(still_syntax_node_unbox),
-                ),
+                } => {
+                    still_syntax_type_function_into(
+                        so_far,
+                        comments,
+                        line_span,
+                        next_indent(indent_after_input),
+                        output_input.as_ref().map(still_syntax_node_unbox),
+                        indent_after_input,
+                        output_maybe_output.as_ref().map(still_syntax_node_unbox),
+                    );
+                }
                 _ => {
                     still_syntax_type_not_parenthesized_into(
                         so_far,
@@ -5618,23 +5581,27 @@ fn still_syntax_type_find_reference_at_position<'a>(
                 }
             }
             StillSyntaxType::Function {
-                input,
+                input: maybe_input,
                 arrow_key_symbol_range: _,
                 output: maybe_output,
-            } => still_syntax_type_find_reference_at_position(
-                scope_declaration,
-                still_syntax_node_unbox(input),
-                position,
-            )
-            .or_else(|| {
-                maybe_output.as_ref().and_then(|output_node| {
+            } => maybe_input
+                .as_ref()
+                .and_then(|input_node| {
                     still_syntax_type_find_reference_at_position(
                         scope_declaration,
-                        still_syntax_node_unbox(output_node),
+                        still_syntax_node_unbox(input_node),
                         position,
                     )
                 })
-            }),
+                .or_else(|| {
+                    maybe_output.as_ref().and_then(|output_node| {
+                        still_syntax_type_find_reference_at_position(
+                            scope_declaration,
+                            still_syntax_node_unbox(output_node),
+                            position,
+                        )
+                    })
+                }),
             StillSyntaxType::Parenthesized(None) => None,
             StillSyntaxType::Parenthesized(Some(in_parens)) => {
                 still_syntax_type_find_reference_at_position(
@@ -6217,15 +6184,17 @@ fn still_syntax_type_uses_of_reference_into(
             }
         }
         StillSyntaxType::Function {
-            input,
+            input: maybe_input,
             arrow_key_symbol_range: _,
             output: maybe_output,
         } => {
-            still_syntax_type_uses_of_reference_into(
-                uses_so_far,
-                still_syntax_node_unbox(input),
-                symbol_to_collect_uses_of,
-            );
+            if let Some(input) = maybe_input {
+                still_syntax_type_uses_of_reference_into(
+                    uses_so_far,
+                    still_syntax_node_unbox(input),
+                    symbol_to_collect_uses_of,
+                );
+            }
             if let Some(output_node) = maybe_output {
                 still_syntax_type_uses_of_reference_into(
                     uses_so_far,
@@ -7194,15 +7163,22 @@ fn still_syntax_highlight_type_into(
             }
         }
         StillSyntaxType::Function {
-            input,
-            arrow_key_symbol_range,
+            input: maybe_input,
+            arrow_key_symbol_range: maybe_arrow_key_symbol_range,
             output: maybe_output,
         } => {
-            still_syntax_highlight_type_into(highlighted_so_far, still_syntax_node_unbox(input));
-            highlighted_so_far.push(StillSyntaxNode {
-                range: *arrow_key_symbol_range,
-                value: StillSyntaxHighlightKind::KeySymbol,
-            });
+            if let Some(input) = maybe_input {
+                still_syntax_highlight_type_into(
+                    highlighted_so_far,
+                    still_syntax_node_unbox(input),
+                );
+            }
+            if let Some(arrow_key_symbol_range) = maybe_arrow_key_symbol_range {
+                highlighted_so_far.push(StillSyntaxNode {
+                    range: *arrow_key_symbol_range,
+                    value: StillSyntaxHighlightKind::KeySymbol,
+                });
+            }
             if let Some(output_node) = maybe_output {
                 still_syntax_highlight_type_into(
                     highlighted_so_far,
@@ -8032,34 +8008,38 @@ fn parse_still_uppercase_name_node(state: &mut ParseState) -> Option<StillSyntax
 fn parse_still_syntax_type_space_separated_node(
     state: &mut ParseState,
 ) -> Option<StillSyntaxNode<StillSyntaxType>> {
-    let start_type_node: StillSyntaxNode<StillSyntaxType> =
-        parse_still_syntax_type_not_function_node(state)?;
+    let backslash_range: lsp_types::Range = parse_symbol_as_range(state, "\\")?;
+    let maybe_input_type_node: Option<StillSyntaxNode<StillSyntaxType>> =
+        parse_still_syntax_type_not_function_node(state);
     parse_still_whitespace_and_comments(state);
-    if let Some(arrow_key_symbol_range) = parse_symbol_as_range(state, "->") {
-        parse_still_whitespace_and_comments(state);
-        let maybe_output_type: Option<StillSyntaxNode<StillSyntaxType>> =
-            if state.position.character > u32::from(state.indent) {
-                parse_still_syntax_type_space_separated_node(state)
-            } else {
-                None
-            };
-        Some(StillSyntaxNode {
-            range: lsp_types::Range {
-                start: start_type_node.range.start,
-                end: match &maybe_output_type {
-                    None => arrow_key_symbol_range.end,
-                    Some(output_type_node) => output_type_node.range.end,
-                },
+    let maybe_arrow_key_symbol_range = parse_symbol_as_range(state, "->");
+    parse_still_whitespace_and_comments(state);
+    let maybe_output_type: Option<StillSyntaxNode<StillSyntaxType>> =
+        if state.position.character > u32::from(state.indent) {
+            parse_still_syntax_type_space_separated_node(state)
+        } else {
+            None
+        };
+    Some(StillSyntaxNode {
+        range: lsp_types::Range {
+            start: maybe_input_type_node
+                .as_ref()
+                .map(|n| n.range.start)
+                .unwrap_or(backslash_range.start),
+            end: match &maybe_output_type {
+                None => maybe_arrow_key_symbol_range
+                    .map(|r| r.end)
+                    .or_else(|| maybe_input_type_node.as_ref().map(|n| n.range.end))
+                    .unwrap_or(backslash_range.end),
+                Some(output_type_node) => output_type_node.range.end,
             },
-            value: StillSyntaxType::Function {
-                input: still_syntax_node_box(start_type_node),
-                arrow_key_symbol_range: arrow_key_symbol_range,
-                output: maybe_output_type.map(still_syntax_node_box),
-            },
-        })
-    } else {
-        Some(start_type_node)
-    }
+        },
+        value: StillSyntaxType::Function {
+            input: maybe_input_type_node.map(still_syntax_node_box),
+            arrow_key_symbol_range: maybe_arrow_key_symbol_range,
+            output: maybe_output_type.map(still_syntax_node_box),
+        },
+    })
 }
 fn parse_still_syntax_type_not_function_node(
     state: &mut ParseState,
