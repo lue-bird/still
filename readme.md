@@ -12,13 +12,13 @@ Just experimentation.
 ## hello world
 
 ```still
-\:uninitialized-or {}:_ -> :io {}:Standard-out-write "hello, world\n"
+run \:uninitialized-or {}:_ -> :io {}:Standard-out-write "hello, world\n"
 ```
 
 ## echo in loop
 
 ```still
-\:uninitialized-or str:state-or-uninitialized ->
+run \:uninitialized-or str:state-or-uninitialized ->
   let state
         case state-or-uninitialized of
         :uninitialized-or str:Uninitialized -> ""

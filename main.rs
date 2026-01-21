@@ -669,7 +669,6 @@ fn respond_to_hover(
                 ),
                 StillSyntaxDeclaration::Variable {
                     start_name: origin_project_declaration_name_node,
-                    equals_key_symbol_range: _,
                     result: maybe_result_node,
                 } => present_variable_declaration_info_markdown(
                     still_syntax_node_as_ref_map(
@@ -823,7 +822,6 @@ fn respond_to_hover(
                         }
                         StillSyntaxDeclaration::Variable {
                             start_name: origin_project_declaration_name_node,
-                            equals_key_symbol_range: _,
                             result: maybe_result_node,
                         } => {
                             if origin_project_declaration_name_node.value.as_str() == hovered_name {
@@ -2104,7 +2102,6 @@ fn variable_declaration_completions_into(
             }
             StillSyntaxDeclaration::Variable {
                 start_name: start_name_node,
-                equals_key_symbol_range: _,
                 result: maybe_result_node,
             } => {
                 completion_items.push(lsp_types::CompletionItem {
@@ -2361,7 +2358,6 @@ fn respond_to_document_symbols(
                 }
                 StillSyntaxDeclaration::Variable {
                     start_name: start_name_node,
-                    equals_key_symbol_range: _,
                     result: _,
                 } => Some(lsp_types::DocumentSymbol {
                     name: start_name_node.value.to_string(),
@@ -2696,7 +2692,6 @@ enum StillSyntaxLetDeclaration {
     },
     VariableDeclaration {
         start_name: StillSyntaxNode<StillName>,
-        equals_key_symbol_range: Option<lsp_types::Range>,
         result: Option<StillSyntaxNode<Box<StillSyntaxExpression>>>,
     },
 }
@@ -2787,7 +2782,6 @@ enum StillSyntaxDeclaration {
     },
     Variable {
         start_name: StillSyntaxNode<StillName>,
-        equals_key_symbol_range: Option<lsp_types::Range>,
         result: Option<StillSyntaxNode<StillSyntaxExpression>>,
     },
 }
@@ -4616,7 +4610,6 @@ fn still_syntax_let_declaration_into(
         }
         StillSyntaxLetDeclaration::VariableDeclaration {
             start_name: start_name_node,
-            equals_key_symbol_range: maybe_equals_key_symbol_range,
             result: maybe_result,
         } => {
             still_syntax_variable_declaration_into(
@@ -4624,7 +4617,6 @@ fn still_syntax_let_declaration_into(
                 indent,
                 comments,
                 still_syntax_node_as_ref_map(start_name_node, StillName::as_str),
-                *maybe_equals_key_symbol_range,
                 maybe_result.as_ref().map(still_syntax_node_unbox),
             );
         }
@@ -4635,28 +4627,13 @@ fn still_syntax_variable_declaration_into(
     indent: usize,
     comments: &[StillSyntaxNode<Box<str>>],
     start_name_node: StillSyntaxNode<&str>,
-    maybe_equals_key_symbol_range: Option<lsp_types::Range>,
     maybe_result: Option<StillSyntaxNode<&StillSyntaxExpression>>,
 ) {
     so_far.push_str(start_name_node.value);
     so_far.push(' ');
-    if maybe_result.is_none()
-        && let Some(equals_key_symbol_range) = maybe_equals_key_symbol_range
-        && let comments_before_equals_key_symbol = still_syntax_comments_in_range(
-            comments,
-            lsp_types::Range {
-                start: start_name_node.range.start,
-                end: equals_key_symbol_range.start,
-            },
-        )
-        && !comments_before_equals_key_symbol.is_empty()
-    {
+    if maybe_result.is_none() {
         linebreak_indented_into(so_far, indent);
-        still_syntax_comments_then_linebreak_indented_into(
-            so_far,
-            next_indent(indent),
-            comments_before_equals_key_symbol,
-        );
+        still_syntax_comments_then_linebreak_indented_into(so_far, next_indent(indent), comments);
     }
     so_far.push('=');
     linebreak_indented_into(so_far, next_indent(indent));
@@ -4877,7 +4854,6 @@ fn still_syntax_expression_any_sub(
                     } => expression.as_ref(),
                     StillSyntaxLetDeclaration::VariableDeclaration {
                         start_name: _,
-                        equals_key_symbol_range: _,
                         result,
                     } => result.as_ref(),
                 })
@@ -5082,7 +5058,6 @@ fn still_syntax_declaration_into(
         }
         StillSyntaxDeclaration::Variable {
             start_name: start_name_node,
-            equals_key_symbol_range: maybe_equals_key_symbol_range,
             result: maybe_result,
         } => {
             still_syntax_variable_declaration_into(
@@ -5090,7 +5065,6 @@ fn still_syntax_declaration_into(
                 0,
                 comments,
                 still_syntax_node_as_ref_map(start_name_node, StillName::as_str),
-                *maybe_equals_key_symbol_range,
                 maybe_result.as_ref().map(still_syntax_node_as_ref),
             );
         }
@@ -5530,7 +5504,6 @@ fn still_syntax_declaration_find_variable_at_position<'a>(
             }
             StillSyntaxDeclaration::Variable {
                 start_name: start_name_node,
-                equals_key_symbol_range: _,
                 result: maybe_result,
             } => {
                 if lsp_range_includes_position(start_name_node.range, position) {
@@ -6028,7 +6001,6 @@ fn still_syntax_let_declaration_find_variable_at_position<'a>(
         }
         StillSyntaxLetDeclaration::VariableDeclaration {
             start_name,
-            equals_key_symbol_range: _,
             result: maybe_result_node,
         } => {
             if lsp_range_includes_position(start_name.range, position) {
@@ -6200,7 +6172,6 @@ fn still_syntax_declaration_uses_of_variable_into(
         }
         StillSyntaxDeclaration::Variable {
             start_name: start_name_node,
-            equals_key_symbol_range: _,
             result: maybe_result,
         } => {
             if symbol_to_collect_uses_of
@@ -6580,7 +6551,6 @@ fn still_syntax_let_declaration_uses_of_variable_into(
         }
         StillSyntaxLetDeclaration::VariableDeclaration {
             start_name: start_name_node,
-            equals_key_symbol_range: _,
             result: maybe_result,
         } => {
             if symbol_to_collect_uses_of
@@ -6671,7 +6641,6 @@ fn still_syntax_let_declaration_introduced_bindings_into<'a>(
         }
         StillSyntaxLetDeclaration::VariableDeclaration {
             start_name: start_name_node,
-            equals_key_symbol_range: _,
             result: maybe_result_node,
         } => {
             bindings_so_far.push(StillLocalBinding {
@@ -6871,19 +6840,12 @@ fn still_syntax_highlight_declaration_into(
     match still_syntax_declaration_node.value {
         StillSyntaxDeclaration::Variable {
             start_name: start_name_node,
-            equals_key_symbol_range: maybe_equals_key_symbol_range,
             result: maybe_result,
         } => {
             highlighted_so_far.push(StillSyntaxNode {
                 range: start_name_node.range,
                 value: StillSyntaxHighlightKind::DeclaredVariable,
             });
-            if let &Some(equals_key_symbol_range) = maybe_equals_key_symbol_range {
-                highlighted_so_far.push(StillSyntaxNode {
-                    range: equals_key_symbol_range,
-                    value: StillSyntaxHighlightKind::KeySymbol,
-                });
-            }
             if let Some(result_node) = maybe_result {
                 still_syntax_highlight_expression_into(
                     highlighted_so_far,
@@ -7521,19 +7483,12 @@ fn still_syntax_highlight_let_declaration_into(
         }
         StillSyntaxLetDeclaration::VariableDeclaration {
             start_name: start_name_node,
-            equals_key_symbol_range: maybe_equals_key_symbol_range,
             result: maybe_result,
         } => {
             highlighted_so_far.push(StillSyntaxNode {
                 range: start_name_node.range,
                 value: StillSyntaxHighlightKind::DeclaredVariable,
             });
-            if let &Some(equals_key_symbol_range) = maybe_equals_key_symbol_range {
-                highlighted_so_far.push(StillSyntaxNode {
-                    range: equals_key_symbol_range,
-                    value: StillSyntaxHighlightKind::KeySymbol,
-                });
-            }
             if let Some(result_node) = maybe_result {
                 still_syntax_highlight_expression_into(
                     highlighted_so_far,
@@ -8791,8 +8746,6 @@ fn parse_still_syntax_let_variable_declaration_node(
 ) -> Option<StillSyntaxNode<StillSyntaxLetDeclaration>> {
     let start_name_node: StillSyntaxNode<StillName> = parse_still_lowercase_name_node(state)?;
     parse_still_whitespace_and_comments(state);
-    let maybe_equals_key_symbol_range: Option<lsp_types::Range> = parse_symbol_as_range(state, "=");
-    parse_still_whitespace_and_comments(state);
     let maybe_result: Option<StillSyntaxNode<StillSyntaxExpression>> =
         if state.position.character <= u32::from(state.indent) {
             None
@@ -8805,12 +8758,10 @@ fn parse_still_syntax_let_variable_declaration_node(
             end: maybe_result
                 .as_ref()
                 .map(|node| node.range.end)
-                .or_else(|| maybe_equals_key_symbol_range.map(|range| range.end))
                 .unwrap_or(start_name_node.range.end),
         },
         value: StillSyntaxLetDeclaration::VariableDeclaration {
             start_name: start_name_node,
-            equals_key_symbol_range: maybe_equals_key_symbol_range,
             result: maybe_result.map(still_syntax_node_box),
         },
     })
@@ -8999,8 +8950,6 @@ fn parse_still_syntax_declaration_variable_node(
 ) -> Option<StillSyntaxNode<StillSyntaxDeclaration>> {
     let start_name_node: StillSyntaxNode<StillName> = parse_still_lowercase_name_node(state)?;
     parse_still_whitespace_and_comments(state);
-    let maybe_equals_key_symbol_range: Option<lsp_types::Range> = parse_symbol_as_range(state, "=");
-    parse_still_whitespace_and_comments(state);
     let maybe_result: Option<StillSyntaxNode<StillSyntaxExpression>> =
         if state.position.character <= u32::from(state.indent) {
             None
@@ -9013,12 +8962,10 @@ fn parse_still_syntax_declaration_variable_node(
             end: maybe_result
                 .as_ref()
                 .map(|node| node.range.end)
-                .or_else(|| maybe_equals_key_symbol_range.map(|range| range.end))
                 .unwrap_or(start_name_node.range.end),
         },
         value: StillSyntaxDeclaration::Variable {
             start_name: start_name_node,
-            equals_key_symbol_range: maybe_equals_key_symbol_range,
             result: maybe_result,
         },
     })
