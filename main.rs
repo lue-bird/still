@@ -551,7 +551,6 @@ fn initialize_state_for_project_into(
 const uninitialized_project_state: ProjectState = ProjectState {
     source: String::new(),
     syntax: StillSyntaxProject {
-        comments: vec![],
         declarations: vec![],
     },
     problems: vec![],
@@ -634,7 +633,6 @@ fn respond_to_hover(
                             "variant in\n"
                         },
                         &present_choice_type_declaration_info_markdown(
-                            &hovered_project_state.syntax.comments,
                             declaration_node.range,
                             origin_project_declaration_name
                                 .as_ref()
@@ -658,8 +656,6 @@ fn respond_to_hover(
                     equals_key_symbol_range: _,
                     type_,
                 } => present_type_alias_declaration_info_markdown(
-                    &hovered_project_state.syntax.comments,
-                    declaration_node.range,
                     maybe_declaration_name
                         .as_ref()
                         .map(|n| still_syntax_node_as_ref_map(n, StillName::as_str)),
@@ -764,7 +760,6 @@ fn respond_to_hover(
                                 Some(format!(
                                     "variant in\n{}",
                                     &present_choice_type_declaration_info_markdown(
-                                        &hovered_project_state.syntax.comments,
                                         origin_project_declaration_node.range,
                                         origin_project_declaration_name.as_ref().map(|n| {
                                             still_syntax_node_as_ref_map(n, StillName::as_str)
@@ -802,8 +797,6 @@ fn respond_to_hover(
                                 Some(format!(
                                     "constructor function for record\n{}",
                                     &present_type_alias_declaration_info_markdown(
-                                        &hovered_project_state.syntax.comments,
-                                        origin_project_declaration_node.range,
                                         Some(still_syntax_node_as_ref_map(
                                             origin_project_declaration_name_node,
                                             StillName::as_str
@@ -881,7 +874,6 @@ fn respond_to_hover(
                                     == hovered_name
                             {
                                 Some(present_choice_type_declaration_info_markdown(
-                                    &hovered_project_state.syntax.comments,
                                     origin_project_declaration_node.range,
                                     Some(still_syntax_node_as_ref_map(
                                         origin_project_declaration_name_node,
@@ -919,8 +911,6 @@ fn respond_to_hover(
                                     == hovered_name
                             {
                                 Some(present_type_alias_declaration_info_markdown(
-                                    &hovered_project_state.syntax.comments,
-                                    origin_project_declaration_node.range,
                                     Some(still_syntax_node_as_ref_map(
                                         origin_project_declaration_name_node,
                                         StillName::as_str,
@@ -978,17 +968,14 @@ fn let_declaration_info_markdown(
             format!(
                 "```still\nlet {} :{}{}\n```\n",
                 start_name_node.value,
-                match still_syntax_range_line_span(
-                    lsp_types::Range {
-                        start: start_name_node.range.end,
-                        end: hovered_local_binding_type.range.end
-                    },
-                    &[]
-                ) {
+                match still_syntax_range_line_span(lsp_types::Range {
+                    start: start_name_node.range.end,
+                    end: hovered_local_binding_type.range.end
+                }) {
                     LineSpan::Single => " ",
                     LineSpan::Multiple => "\n    ",
                 },
-                &still_syntax_type_to_string(hovered_local_binding_type, 4, &[])
+                &still_syntax_type_to_string(hovered_local_binding_type, 4)
             )
         }
     }
@@ -1311,7 +1298,7 @@ fn respond_to_rename(
             name: type_variable_to_rename,
         } => {
             let mut all_uses_of_renamed_type_variable: Vec<lsp_types::Range> = Vec::new();
-            still_syntax_declaration_uses_of_variable_into(
+            still_syntax_declaration_uses_of_symbol_into(
                 &mut all_uses_of_renamed_type_variable,
                 scope_declaration,
                 StillSymbolToReference::TypeVariable(type_variable_to_rename),
@@ -1352,7 +1339,7 @@ fn respond_to_rename(
             state_iter_all_projects(state)
                 .filter_map(move |project| {
                     let mut all_uses_of_at_docs_project_member: Vec<lsp_types::Range> = Vec::new();
-                    still_syntax_project_uses_of_variable_into(
+                    still_syntax_project_uses_of_symbol_into(
                         &mut all_uses_of_at_docs_project_member,
                         &project.project_state.syntax,
                         still_declared_symbol_to_rename,
@@ -1384,7 +1371,7 @@ fn respond_to_rename(
             scope_expression,
         } => {
             let mut all_uses_of_let_declaration_to_rename: Vec<lsp_types::Range> = Vec::new();
-            still_syntax_expression_uses_of_variable_into(
+            still_syntax_expression_uses_of_symbol_into(
                 &mut all_uses_of_let_declaration_to_rename,
                 &[StillLocalBinding {
                     name: to_rename_name,
@@ -1433,7 +1420,7 @@ fn respond_to_rename(
                         // already included in scope expression
                     }
                 }
-                still_syntax_expression_uses_of_variable_into(
+                still_syntax_expression_uses_of_symbol_into(
                     &mut all_uses_of_local_binding_to_rename,
                     &[StillLocalBinding {
                         name: to_rename_name,
@@ -1469,7 +1456,7 @@ fn respond_to_rename(
                 state_iter_all_projects(state)
                     .filter_map(|project| {
                         let mut all_uses_of_renamed_variable: Vec<lsp_types::Range> = Vec::new();
-                        still_syntax_project_uses_of_variable_into(
+                        still_syntax_project_uses_of_symbol_into(
                             &mut all_uses_of_renamed_variable,
                             &project.project_state.syntax,
                             symbol_to_find,
@@ -1506,7 +1493,7 @@ fn respond_to_rename(
             state_iter_all_projects(state)
                 .filter_map(|project| {
                     let mut all_uses_of_renamed_type: Vec<lsp_types::Range> = Vec::new();
-                    still_syntax_project_uses_of_variable_into(
+                    still_syntax_project_uses_of_symbol_into(
                         &mut all_uses_of_renamed_type,
                         &project.project_state.syntax,
                         still_declared_symbol_to_rename,
@@ -1555,7 +1542,7 @@ fn respond_to_references(
             name: type_variable_to_find,
         } => {
             let mut all_uses_of_found_type_variable: Vec<lsp_types::Range> = Vec::new();
-            still_syntax_declaration_uses_of_variable_into(
+            still_syntax_declaration_uses_of_symbol_into(
                 &mut all_uses_of_found_type_variable,
                 scope_declaration,
                 StillSymbolToReference::TypeVariable(type_variable_to_find),
@@ -1591,7 +1578,7 @@ fn respond_to_references(
                 }
             };
             let mut all_uses_of_found_project_member: Vec<lsp_types::Range> = Vec::new();
-            still_syntax_project_uses_of_variable_into(
+            still_syntax_project_uses_of_symbol_into(
                 &mut all_uses_of_found_project_member,
                 &to_find_project_state.syntax,
                 still_declared_symbol_to_find,
@@ -1615,7 +1602,7 @@ fn respond_to_references(
             scope_expression,
         } => {
             let mut all_uses_of_found_let_declaration: Vec<lsp_types::Range> = Vec::new();
-            still_syntax_expression_uses_of_variable_into(
+            still_syntax_expression_uses_of_symbol_into(
                 &mut all_uses_of_found_let_declaration,
                 &[StillLocalBinding {
                     name: to_find_name,
@@ -1662,7 +1649,7 @@ fn respond_to_references(
                         }
                     }
                 }
-                still_syntax_expression_uses_of_variable_into(
+                still_syntax_expression_uses_of_symbol_into(
                     &mut all_uses_of_found_local_binding,
                     &[StillLocalBinding {
                         name: to_find_name,
@@ -1696,7 +1683,7 @@ fn respond_to_references(
                             .include_declaration,
                     };
                 let mut all_uses_of_found_variable: Vec<lsp_types::Range> = Vec::new();
-                still_syntax_project_uses_of_variable_into(
+                still_syntax_project_uses_of_symbol_into(
                     &mut all_uses_of_found_variable,
                     &to_find_project_state.syntax,
                     symbol_to_find,
@@ -1724,7 +1711,7 @@ fn respond_to_references(
                     including_declaration_name: references_arguments.context.include_declaration,
                 };
             let mut all_uses_of_found_type: Vec<lsp_types::Range> = Vec::new();
-            still_syntax_project_uses_of_variable_into(
+            still_syntax_project_uses_of_symbol_into(
                 &mut all_uses_of_found_type,
                 &to_find_project_state.syntax,
                 still_declared_symbol_to_find,
@@ -1844,11 +1831,11 @@ fn present_variable_declaration_info_markdown(
             format!(
                 "```still\n{} :{}{}\n```\n",
                 start_name_node.value,
-                match still_syntax_range_line_span(retrieved_type.range, &[]) {
+                match still_syntax_range_line_span(retrieved_type.range) {
                     LineSpan::Single => " ",
                     LineSpan::Multiple => "\n    ",
                 },
-                &still_syntax_type_to_string(retrieved_type, 4, &[])
+                &still_syntax_type_to_string(retrieved_type, 4)
             )
         }
         None => format!("```still\n{}\n```\n", &start_name_node.value),
@@ -1861,8 +1848,6 @@ fn present_variable_declaration_info_markdown(
     }
 }
 fn present_type_alias_declaration_info_markdown(
-    comments: &[StillSyntaxNode<Box<str>>],
-    declaration_range: lsp_types::Range,
     maybe_name: Option<StillSyntaxNode<&str>>,
     maybe_documentation: Option<&str>,
     parameters: &[StillSyntaxNode<StillName>],
@@ -1873,8 +1858,6 @@ fn present_type_alias_declaration_info_markdown(
         maybe_name.map(|name_node| still_syntax_node_map(name_node, str::to_string));
     still_syntax_type_alias_declaration_into(
         &mut declaration_as_string,
-        still_syntax_comments_in_range(comments, declaration_range),
-        declaration_range,
         maybe_fully_qualified_name
             .as_ref()
             .map(|name_node| still_syntax_node_as_ref_map(name_node, String::as_str)),
@@ -1891,7 +1874,6 @@ fn present_type_alias_declaration_info_markdown(
 }
 
 fn present_choice_type_declaration_info_markdown(
-    comments: &[StillSyntaxNode<Box<str>>],
     declaration_range: lsp_types::Range,
     maybe_name: Option<StillSyntaxNode<&str>>,
     maybe_documentation: Option<&str>,
@@ -1905,7 +1887,6 @@ fn present_choice_type_declaration_info_markdown(
         maybe_name.map(|name_node| still_syntax_node_map(name_node, str::to_string));
     still_syntax_choice_type_declaration_into(
         &mut declaration_string,
-        still_syntax_comments_in_range(comments, declaration_range),
         declaration_range,
         maybe_fully_qualified_name
             .as_ref()
@@ -2026,7 +2007,6 @@ fn variable_declaration_completions_into(
                     let info_markdown: String = format!(
                         "variant in\n{}",
                         present_choice_type_declaration_info_markdown(
-                            &project_syntax.comments,
                             origin_project_declaration_node.range,
                             Some(still_syntax_node_as_ref_map(
                                 choice_type_name_node,
@@ -2083,8 +2063,6 @@ fn variable_declaration_completions_into(
                                 value: format!(
                                     "constructor function for record\n{}",
                                     &present_type_alias_declaration_info_markdown(
-                                        &project_syntax.comments,
-                                        origin_project_declaration_node.range,
                                         Some(still_syntax_node_as_ref_map(
                                             name_node,
                                             StillName::as_str
@@ -2173,7 +2151,6 @@ fn type_declaration_completions_into(
                             lsp_types::MarkupContent {
                                 kind: lsp_types::MarkupKind::Markdown,
                                 value: present_choice_type_declaration_info_markdown(
-                                    &project_syntax.comments,
                                     origin_project_declaration_node.range,
                                     Some(still_syntax_node_as_ref_map(
                                         name_node,
@@ -2208,8 +2185,6 @@ fn type_declaration_completions_into(
                             lsp_types::MarkupContent {
                                 kind: lsp_types::MarkupKind::Markdown,
                                 value: present_type_alias_declaration_info_markdown(
-                                    &project_syntax.comments,
-                                    origin_project_declaration_node.range,
                                     Some(still_syntax_node_as_ref_map(
                                         name_node,
                                         StillName::as_str,
@@ -2630,6 +2605,10 @@ fn list_files_passing_test_in_directory_at_path_into(
 enum StillSyntaxType {
     Variable(StillName),
     Parenthesized(Option<StillSyntaxNode<Box<StillSyntaxType>>>),
+    WithComment {
+        comment: StillSyntaxNode<Box<str>>,
+        type_: Option<StillSyntaxNode<Box<StillSyntaxType>>>,
+    },
     Function {
         inputs: Vec<StillSyntaxNode<StillSyntaxType>>,
         arrow_key_symbol_range: Option<lsp_types::Range>,
@@ -2656,6 +2635,10 @@ enum StillSyntaxPattern {
     String {
         content: String,
         quoting_style: StillSyntaxStringQuotingStyle,
+    },
+    WithComment {
+        comment: StillSyntaxNode<Box<str>>,
+        pattern: Option<StillSyntaxNode<Box<StillSyntaxPattern>>>,
     },
     Typed {
         type_: Option<StillSyntaxNode<StillSyntaxType>>,
@@ -2724,6 +2707,10 @@ enum StillSyntaxExpression {
     },
     Vec(Vec<StillSyntaxNode<StillSyntaxExpression>>),
     Parenthesized(Option<StillSyntaxNode<Box<StillSyntaxExpression>>>),
+    WithComment {
+        comment: StillSyntaxNode<Box<str>>,
+        expression: Option<StillSyntaxNode<Box<StillSyntaxExpression>>>,
+    },
     Typed {
         type_: Option<StillSyntaxNode<StillSyntaxType>>,
         expression: Option<StillSyntaxNode<StillSyntaxExpressionUntyped>>,
@@ -2844,7 +2831,6 @@ fn still_syntax_node_box<Value>(
 
 #[derive(Clone, Debug, PartialEq)]
 struct StillSyntaxProject {
-    comments: Vec<StillSyntaxNode<Box<str>>>,
     declarations: Vec<Result<StillSyntaxDocumentedDeclaration, Box<str>>>,
 }
 
@@ -2866,6 +2852,18 @@ fn still_syntax_pattern_type(
         StillSyntaxPattern::Char(_) => Ok(still_syntax_node_empty(still_syntax_type_char)),
         StillSyntaxPattern::Int { .. } => Ok(still_syntax_node_empty(still_syntax_type_int)),
         StillSyntaxPattern::String { .. } => Ok(still_syntax_node_empty(still_syntax_type_str)),
+        StillSyntaxPattern::WithComment {
+            comment: _,
+            pattern: maybe_pattern_after_comment,
+        } => match maybe_pattern_after_comment {
+            None => Err(vec![RetrieveTypeError {
+                range: pattern_node.range,
+                message: Box::from("missing pattern after the comment"),
+            }]),
+            Some(pattern_node_after_comment) => {
+                still_syntax_pattern_type(still_syntax_node_unbox(pattern_node_after_comment))
+            }
+        },
         StillSyntaxPattern::Typed {
             type_: maybe_type,
             pattern: _,
@@ -2873,7 +2871,7 @@ fn still_syntax_pattern_type(
             let Some(type_node) = maybe_type else {
                 return Err(vec![RetrieveTypeError {
                     range: pattern_node.range,
-                    message: Box::from("type missing between :here:"),
+                    message: Box::from("missing type between :here:"),
                 }]);
             };
             Ok(still_syntax_node_as_ref_map(
@@ -3049,11 +3047,24 @@ fn still_syntax_expression_type_with(
         },
         StillSyntaxExpression::Parenthesized(None) => Err(vec![RetrieveTypeError {
             range: expression_node.range,
-            message: Box::from("expression inside the parens missing between (here)"),
+            message: Box::from("missing expression inside the parens between (here)"),
         }]),
         StillSyntaxExpression::Parenthesized(Some(in_parens)) => {
             still_syntax_expression_type_with(bindings, still_syntax_node_unbox(in_parens))
         }
+        StillSyntaxExpression::WithComment {
+            comment: _,
+            expression: maybe_expression_after_comment,
+        } => match maybe_expression_after_comment {
+            None => Err(vec![RetrieveTypeError {
+                range: expression_node.range,
+                message: Box::from("missing expression after the comment"),
+            }]),
+            Some(expression_node_after_comment) => still_syntax_expression_type_with(
+                bindings,
+                still_syntax_node_unbox(expression_node_after_comment),
+            ),
+        },
         StillSyntaxExpression::Record(fields) => todo!(),
         StillSyntaxExpression::RecordAccess { record, field } => todo!(),
         StillSyntaxExpression::RecordUpdate {
@@ -3134,71 +3145,17 @@ fn space_or_linebreak_indented_into(so_far: &mut String, line_span: LineSpan, in
 fn still_syntax_type_to_string(
     still_syntax_type: StillSyntaxNode<&StillSyntaxType>,
     indent: usize,
-    comments: &[StillSyntaxNode<Box<str>>],
 ) -> String {
     let mut builder: String = String::new();
     still_syntax_type_not_parenthesized_into(
         &mut builder,
         indent,
-        comments, // pass from parens and slice?
+        // pass from parens and slice?
         still_syntax_type,
     );
     builder
 }
 
-fn still_syntax_comments_in_range(
-    comments: &[StillSyntaxNode<Box<str>>],
-    range: lsp_types::Range,
-) -> &[StillSyntaxNode<Box<str>>] {
-    if comments.is_empty() {
-        return &[];
-    }
-    let comments_in_range_start_index: usize = comments
-        .binary_search_by(|comment_node| comment_node.range.start.cmp(&range.start))
-        .unwrap_or_else(|i| i);
-    let comments_in_range_end_exclusive_index: usize = comments
-        .binary_search_by(|comment_node| comment_node.range.start.cmp(&range.end))
-        .unwrap_or_else(|i| i);
-    &comments[comments_in_range_start_index..comments_in_range_end_exclusive_index]
-}
-fn still_syntax_comments_from_position(
-    comments: &[StillSyntaxNode<Box<str>>],
-    start_position: lsp_types::Position,
-) -> &[StillSyntaxNode<Box<str>>] {
-    let comments_in_range_start_index: usize = comments
-        .binary_search_by(|comment_node| comment_node.range.start.cmp(&start_position))
-        .unwrap_or_else(|i| i);
-    &comments[comments_in_range_start_index..]
-}
-
-/// same caveat as `still_syntax_comments_into` apply.
-/// use in combination with `still_syntax_comments_in_range`
-fn still_syntax_comments_then_linebreak_indented_into(
-    so_far: &mut String,
-    indent: usize,
-    comments: &[StillSyntaxNode<Box<str>>],
-) {
-    for comment_node_in_range in comments {
-        still_syntax_comment_into(so_far, &comment_node_in_range.value);
-        linebreak_indented_into(so_far, indent);
-    }
-}
-/// use in combination with `still_syntax_comments_in_range`
-fn still_syntax_comments_into(
-    so_far: &mut String,
-    indent: usize,
-    comments: &[StillSyntaxNode<Box<str>>],
-) {
-    let mut comments_iterator = comments.iter();
-    let Some(first_comment_node) = comments_iterator.next() else {
-        return;
-    };
-    still_syntax_comment_into(so_far, &first_comment_node.value);
-    for comment_node_in_range in comments_iterator {
-        linebreak_indented_into(so_far, indent);
-        still_syntax_comment_into(so_far, &comment_node_in_range.value);
-    }
-}
 fn still_syntax_comment_into(so_far: &mut String, comment: &str) {
     so_far.push('#');
     so_far.push_str(comment);
@@ -3222,7 +3179,6 @@ fn next_indent(current_indent: usize) -> usize {
 fn still_syntax_type_not_parenthesized_into(
     so_far: &mut String,
     indent: usize,
-    comments: &[StillSyntaxNode<Box<str>>],
     type_node: StillSyntaxNode<&StillSyntaxType>,
 ) {
     match type_node.value {
@@ -3230,30 +3186,15 @@ fn still_syntax_type_not_parenthesized_into(
             name: variable,
             arguments,
         } => {
-            let line_span: LineSpan = still_syntax_range_line_span(type_node.range, comments);
+            let line_span: LineSpan = still_syntax_range_line_span(type_node.range);
             so_far.push_str(&variable.value);
-            let mut previous_syntax_end: lsp_types::Position = variable.range.end;
             for argument_node in arguments {
                 space_or_linebreak_indented_into(so_far, line_span, next_indent(indent));
-                still_syntax_comments_then_linebreak_indented_into(
-                    so_far,
-                    next_indent(indent),
-                    still_syntax_comments_in_range(
-                        comments,
-                        lsp_types::Range {
-                            start: previous_syntax_end,
-                            end: argument_node.range.start,
-                        },
-                    ),
-                );
                 still_syntax_type_parenthesized_if_space_separated_into(
                     so_far,
                     next_indent(indent),
-                    comments,
-                    argument_node.range,
                     still_syntax_type_to_unparenthesized(still_syntax_node_as_ref(argument_node)),
                 );
-                previous_syntax_end = argument_node.range.end;
             }
         }
         StillSyntaxType::Function {
@@ -3262,100 +3203,44 @@ fn still_syntax_type_not_parenthesized_into(
             output: maybe_output,
         } => still_syntax_type_function_into(
             so_far,
-            comments,
-            still_syntax_range_line_span(type_node.range, comments),
+            still_syntax_range_line_span(type_node.range),
             indent,
             inputs,
-            indent,
             maybe_output.as_ref().map(still_syntax_node_unbox),
         ),
         StillSyntaxType::Parenthesized(None) => {
-            so_far.push('(');
-            let comments_in_parens: &[StillSyntaxNode<Box<str>>] =
-                still_syntax_comments_in_range(comments, type_node.range);
-            if !comments_in_parens.is_empty() {
-                still_syntax_comments_into(so_far, indent + 1, comments_in_parens);
-                linebreak_indented_into(so_far, indent);
-            }
-            so_far.push(')');
+            so_far.push_str("()");
         }
         StillSyntaxType::Parenthesized(Some(in_parens)) => {
-            let innermost: StillSyntaxNode<&StillSyntaxType> =
-                still_syntax_type_to_unparenthesized(still_syntax_node_unbox(in_parens));
-            let comments_before_innermost: &[StillSyntaxNode<Box<str>>] =
-                still_syntax_comments_in_range(
-                    comments,
-                    lsp_types::Range {
-                        start: type_node.range.start,
-                        end: innermost.range.start,
-                    },
-                );
-            let comments_after_innermost: &[StillSyntaxNode<Box<str>>] =
-                still_syntax_comments_in_range(
-                    comments,
-                    lsp_types::Range {
-                        start: innermost.range.end,
-                        end: type_node.range.end,
-                    },
-                );
-            if comments_before_innermost.is_empty() && comments_after_innermost.is_empty() {
-                still_syntax_type_not_parenthesized_into(so_far, indent, comments, innermost);
-            } else {
-                still_syntax_type_parenthesized_into(
+            still_syntax_type_not_parenthesized_into(
+                so_far,
+                indent,
+                still_syntax_node_unbox(in_parens),
+            );
+        }
+        StillSyntaxType::WithComment {
+            comment: comment_node,
+            type_: maybe_type_after_comment,
+        } => {
+            still_syntax_comment_into(so_far, &comment_node.value);
+            linebreak_indented_into(so_far, indent);
+            if let Some(type_node_after_comment) = maybe_type_after_comment {
+                still_syntax_type_not_parenthesized_into(
                     so_far,
                     indent,
-                    comments,
-                    type_node.range,
-                    innermost,
+                    still_syntax_node_unbox(type_node_after_comment),
                 );
             }
         }
         StillSyntaxType::Record(fields) => match fields.split_first() {
             None => {
-                let comments_in_curlies: &[StillSyntaxNode<Box<str>>] =
-                    still_syntax_comments_in_range(comments, type_node.range);
-                if comments_in_curlies.is_empty() {
-                    so_far.push_str("{}");
-                } else {
-                    so_far.push('{');
-                    still_syntax_comments_into(so_far, indent + 1, comments);
-                    linebreak_indented_into(so_far, indent);
-                    so_far.push('}');
-                }
+                so_far.push_str("{}");
             }
             Some((field0, field1_up)) => {
-                let line_span: LineSpan = still_syntax_range_line_span(type_node.range, comments);
+                let line_span: LineSpan = still_syntax_range_line_span(type_node.range);
                 so_far.push_str("{ ");
-                still_syntax_comments_then_linebreak_indented_into(
-                    so_far,
-                    indent + 2,
-                    still_syntax_comments_in_range(
-                        comments,
-                        lsp_types::Range {
-                            start: type_node.range.start,
-                            end: field0.name.range.start,
-                        },
-                    ),
-                );
-                let previous_syntax_end: lsp_types::Position = still_syntax_type_fields_into_string(
-                    so_far, indent, comments, line_span, field0, field1_up,
-                );
+                still_syntax_type_fields_into_string(so_far, indent, line_span, field0, field1_up);
                 space_or_linebreak_indented_into(so_far, line_span, indent);
-                let comments_before_closing_curly = still_syntax_comments_in_range(
-                    comments,
-                    lsp_types::Range {
-                        start: previous_syntax_end,
-                        end: type_node.range.end,
-                    },
-                );
-                if !comments_before_closing_curly.is_empty() {
-                    linebreak_indented_into(so_far, indent);
-                    still_syntax_comments_then_linebreak_indented_into(
-                        so_far,
-                        indent,
-                        comments_before_closing_curly,
-                    );
-                }
                 so_far.push('}');
             }
         },
@@ -3367,11 +3252,9 @@ fn still_syntax_type_not_parenthesized_into(
 
 fn still_syntax_type_function_into(
     so_far: &mut String,
-    comments: &[StillSyntaxNode<Box<str>>],
     line_span: LineSpan,
     indent_for_input: usize,
     inputs: &[StillSyntaxNode<StillSyntaxType>],
-    _: usize,
     maybe_output: Option<StillSyntaxNode<&StillSyntaxType>>,
 ) {
     so_far.push('\\');
@@ -3379,7 +3262,6 @@ fn still_syntax_type_function_into(
         still_syntax_type_not_parenthesized_into(
             so_far,
             indent_for_input + 1,
-            comments,
             still_syntax_node_as_ref(input0_node),
         );
         for input_node in input1_up {
@@ -3388,7 +3270,6 @@ fn still_syntax_type_function_into(
             still_syntax_type_not_parenthesized_into(
                 so_far,
                 indent_for_input + 1,
-                comments,
                 still_syntax_node_as_ref(input_node),
             );
         }
@@ -3399,7 +3280,6 @@ fn still_syntax_type_function_into(
         still_syntax_type_not_parenthesized_into(
             so_far,
             next_indent(indent_for_input + 3),
-            comments,
             output_node,
         );
     }
@@ -3408,37 +3288,11 @@ fn still_syntax_type_function_into(
 fn still_syntax_type_parenthesized_into(
     so_far: &mut String,
     indent: usize,
-
-    comments: &[StillSyntaxNode<Box<str>>],
-    full_range: lsp_types::Range,
-    innermost: StillSyntaxNode<&StillSyntaxType>,
+    innermost_node: StillSyntaxNode<&StillSyntaxType>,
 ) {
     so_far.push('(');
-    let start_so_far_length: usize = so_far.len();
-    still_syntax_comments_then_linebreak_indented_into(
-        so_far,
-        indent + 1,
-        still_syntax_comments_in_range(
-            comments,
-            lsp_types::Range {
-                start: full_range.start,
-                end: innermost.range.start,
-            },
-        ),
-    );
-    still_syntax_comments_then_linebreak_indented_into(
-        so_far,
-        indent + 1,
-        still_syntax_comments_in_range(
-            comments,
-            lsp_types::Range {
-                start: innermost.range.end,
-                end: full_range.end,
-            },
-        ),
-    );
-    still_syntax_type_not_parenthesized_into(so_far, indent + 1, comments, innermost);
-    if so_far[start_so_far_length..].contains('\n') {
+    still_syntax_type_not_parenthesized_into(so_far, indent + 1, innermost_node);
+    if still_syntax_range_line_span(innermost_node.range) == LineSpan::Multiple {
         linebreak_indented_into(so_far, indent);
     }
     so_far.push(')');
@@ -3446,30 +3300,26 @@ fn still_syntax_type_parenthesized_into(
 fn still_syntax_type_parenthesized_if_space_separated_into(
     so_far: &mut String,
     indent: usize,
-
-    comments: &[StillSyntaxNode<Box<str>>],
-    full_range: lsp_types::Range,
-    unparenthesized: StillSyntaxNode<&StillSyntaxType>,
+    unparenthesized_node: StillSyntaxNode<&StillSyntaxType>,
 ) {
-    let is_space_separated: bool = match unparenthesized.value {
+    let is_space_separated: bool = match unparenthesized_node.value {
         StillSyntaxType::Variable(_)
         | StillSyntaxType::Parenthesized(_)
         | StillSyntaxType::Record(_) => false,
         StillSyntaxType::Function { .. } => true,
+        StillSyntaxType::WithComment { .. } => true,
         StillSyntaxType::Construct { name: _, arguments } => !arguments.is_empty(),
     };
     if is_space_separated {
-        still_syntax_type_parenthesized_into(so_far, indent, comments, full_range, unparenthesized);
+        still_syntax_type_parenthesized_into(so_far, indent, unparenthesized_node);
     } else {
-        still_syntax_type_not_parenthesized_into(so_far, indent, comments, unparenthesized);
+        still_syntax_type_not_parenthesized_into(so_far, indent, unparenthesized_node);
     }
 }
 /// returns the last syntax end position
 fn still_syntax_type_fields_into_string<'a>(
     so_far: &mut String,
     indent: usize,
-
-    comments: &[StillSyntaxNode<Box<str>>],
     line_span: LineSpan,
     field0: &'a StillSyntaxTypeField,
     field1_up: &'a [StillSyntaxTypeField],
@@ -3478,37 +3328,17 @@ fn still_syntax_type_fields_into_string<'a>(
     let mut previous_syntax_end: lsp_types::Position = field0.name.range.end;
     so_far.push_str(" :");
     if let Some(field0_value_node) = &field0.value {
-        let comments_before_field0_value = still_syntax_comments_in_range(
-            comments,
-            lsp_types::Range {
-                start: field0.name.range.end,
-                end: field0_value_node.range.start,
-            },
-        );
         space_or_linebreak_indented_into(
             so_far,
-            if comments_before_field0_value.is_empty() {
-                still_syntax_range_line_span(
-                    lsp_types::Range {
-                        start: field0.name.range.end,
-                        end: field0_value_node.range.end,
-                    },
-                    comments,
-                )
-            } else {
-                LineSpan::Multiple
-            },
+            still_syntax_range_line_span(lsp_types::Range {
+                start: field0.name.range.end,
+                end: field0_value_node.range.end,
+            }),
             next_indent(indent + 2),
-        );
-        still_syntax_comments_then_linebreak_indented_into(
-            so_far,
-            next_indent(indent + 2),
-            comments_before_field0_value,
         );
         still_syntax_type_not_parenthesized_into(
             so_far,
             next_indent(indent + 2),
-            comments,
             still_syntax_node_as_ref(field0_value_node),
         );
         previous_syntax_end = field0_value_node.range.end;
@@ -3518,52 +3348,23 @@ fn still_syntax_type_fields_into_string<'a>(
             linebreak_indented_into(so_far, indent);
         }
         so_far.push_str(", ");
-        still_syntax_comments_then_linebreak_indented_into(
-            so_far,
-            indent + 2,
-            still_syntax_comments_in_range(
-                comments,
-                lsp_types::Range {
-                    start: previous_syntax_end,
-                    end: field.name.range.start,
-                },
-            ),
-        );
+
         so_far.push_str(&field.name.value);
         previous_syntax_end = field.name.range.end;
         so_far.push_str(" :");
         if let Some(field_value_node) = &field.value {
-            let comments_before_field_value = still_syntax_comments_in_range(
-                comments,
-                lsp_types::Range {
-                    start: field.name.range.end,
-                    end: field_value_node.range.start,
-                },
-            );
             space_or_linebreak_indented_into(
                 so_far,
-                if comments_before_field_value.is_empty() {
-                    still_syntax_range_line_span(
-                        lsp_types::Range {
-                            start: field.name.range.end,
-                            end: field_value_node.range.end,
-                        },
-                        comments,
-                    )
-                } else {
-                    LineSpan::Multiple
-                },
+                still_syntax_range_line_span(lsp_types::Range {
+                    start: field.name.range.end,
+                    end: field_value_node.range.end,
+                }),
                 next_indent(indent + 2),
             );
-            still_syntax_comments_then_linebreak_indented_into(
-                so_far,
-                next_indent(indent + 2),
-                comments_before_field_value,
-            );
+
             still_syntax_type_not_parenthesized_into(
                 so_far,
                 next_indent(indent + 2),
-                comments,
                 still_syntax_node_as_ref(field_value_node),
             );
             previous_syntax_end = field_value_node.range.end;
@@ -3571,9 +3372,9 @@ fn still_syntax_type_fields_into_string<'a>(
     }
     previous_syntax_end
 }
-// TODO add indent
 fn still_syntax_pattern_into(
     so_far: &mut String,
+    indent: usize,
     pattern_node: StillSyntaxNode<&StillSyntaxPattern>,
 ) {
     match pattern_node.value {
@@ -3587,6 +3388,20 @@ fn still_syntax_pattern_into(
             content,
             quoting_style,
         } => still_string_into(so_far, *quoting_style, content),
+        StillSyntaxPattern::WithComment {
+            comment: comment_node,
+            pattern: maybe_pattern_after_comment,
+        } => {
+            still_syntax_comment_into(so_far, &comment_node.value);
+            linebreak_indented_into(so_far, indent);
+            if let Some(pattern_node_after_comment) = maybe_pattern_after_comment {
+                still_syntax_pattern_into(
+                    so_far,
+                    indent,
+                    still_syntax_node_unbox(pattern_node_after_comment),
+                );
+            }
+        }
         StillSyntaxPattern::Typed {
             type_: maybe_type_node,
             pattern: maybe_pattern_node_in_typed,
@@ -3596,11 +3411,16 @@ fn still_syntax_pattern_into(
                 still_syntax_type_not_parenthesized_into(
                     so_far,
                     1,
-                    &[],
                     still_syntax_node_as_ref(type_node),
                 );
+                if still_syntax_range_line_span(type_node.range) == LineSpan::Multiple {
+                    linebreak_indented_into(so_far, indent);
+                }
             }
             so_far.push(':');
+            if still_syntax_range_line_span(pattern_node.range) == LineSpan::Multiple {
+                linebreak_indented_into(so_far, indent);
+            }
             if let Some(pattern_node_in_typed) = maybe_pattern_node_in_typed {
                 match &pattern_node_in_typed.value {
                     StillSyntaxPatternUntyped::Ignored => {
@@ -3615,8 +3435,16 @@ fn still_syntax_pattern_into(
                     } => {
                         still_name_into(so_far, &variable.value);
                         if let Some(value_node) = maybe_value {
-                            so_far.push(' ');
-                            still_syntax_pattern_into(so_far, still_syntax_node_unbox(value_node));
+                            space_or_linebreak_indented_into(
+                                so_far,
+                                still_syntax_range_line_span(pattern_node_in_typed.range),
+                                next_indent(indent),
+                            );
+                            still_syntax_pattern_into(
+                                so_far,
+                                next_indent(indent),
+                                still_syntax_node_unbox(value_node),
+                            );
                         }
                     }
                 }
@@ -3631,17 +3459,36 @@ fn still_syntax_pattern_into(
                 Some(field0) => {
                     so_far.push_str("{ ");
                     so_far.push_str(&field0.name.value);
-                    so_far.push(' ');
                     if let Some(field0_value) = &field0.value {
-                        still_syntax_pattern_into(so_far, still_syntax_node_as_ref(field0_value));
+                        space_or_linebreak_indented_into(
+                            so_far,
+                            still_syntax_range_line_span(lsp_types::Range {
+                                start: field0.name.range.start,
+                                end: field0_value.range.end,
+                            }),
+                            next_indent(indent),
+                        );
+                        still_syntax_pattern_into(
+                            so_far,
+                            next_indent(indent),
+                            still_syntax_node_as_ref(field0_value),
+                        );
                     }
                     for field in field_names_iterator {
                         so_far.push_str(", ");
                         so_far.push_str(&field.name.value);
-                        so_far.push(' ');
                         if let Some(field_value) = &field.value {
+                            space_or_linebreak_indented_into(
+                                so_far,
+                                still_syntax_range_line_span(lsp_types::Range {
+                                    start: field.name.range.start,
+                                    end: field_value.range.end,
+                                }),
+                                next_indent(indent),
+                            );
                             still_syntax_pattern_into(
                                 so_far,
+                                next_indent(indent),
                                 still_syntax_node_as_ref(field_value),
                             );
                         }
@@ -3764,7 +3611,6 @@ fn still_string_into(
 fn still_syntax_expression_not_parenthesized_into(
     so_far: &mut String,
     indent: usize,
-    comments: &[StillSyntaxNode<Box<str>>],
     expression_node: StillSyntaxNode<&StillSyntaxExpression>,
 ) {
     match expression_node.value {
@@ -3776,10 +3622,7 @@ fn still_syntax_expression_not_parenthesized_into(
             if let Some((argument0_node, argument1_up)) = arguments.split_first() {
                 let line_span_before_argument0: LineSpan = if variable_node.range.start.line
                     == argument0_node.range.end.line
-                    && still_syntax_expression_line_span(
-                        comments,
-                        still_syntax_node_as_ref(argument0_node),
-                    ) == LineSpan::Single
+                    && still_syntax_range_line_span(argument0_node.range) == LineSpan::Single
                 {
                     LineSpan::Single
                 } else {
@@ -3787,9 +3630,7 @@ fn still_syntax_expression_not_parenthesized_into(
                 };
                 let full_line_span: LineSpan = match line_span_before_argument0 {
                     LineSpan::Multiple => LineSpan::Multiple,
-                    LineSpan::Single => {
-                        still_syntax_expression_line_span(comments, expression_node)
-                    }
+                    LineSpan::Single => still_syntax_range_line_span(expression_node.range),
                 };
                 space_or_linebreak_indented_into(
                     so_far,
@@ -3799,154 +3640,51 @@ fn still_syntax_expression_not_parenthesized_into(
                 still_syntax_expression_parenthesized_if_space_separated_into(
                     so_far,
                     next_indent(indent),
-                    comments,
                     still_syntax_node_as_ref(argument0_node),
                 );
-                let mut previous_syntax_end: lsp_types::Position = argument0_node.range.end;
                 for argument_node in argument1_up.iter().map(still_syntax_node_as_ref) {
                     space_or_linebreak_indented_into(so_far, full_line_span, next_indent(indent));
-                    still_syntax_comments_then_linebreak_indented_into(
-                        so_far,
-                        next_indent(indent),
-                        still_syntax_comments_in_range(
-                            comments,
-                            lsp_types::Range {
-                                start: previous_syntax_end,
-                                end: argument_node.range.start,
-                            },
-                        ),
-                    );
                     still_syntax_expression_parenthesized_if_space_separated_into(
                         so_far,
                         next_indent(indent),
-                        comments,
                         argument_node,
                     );
-                    previous_syntax_end = argument_node.range.end;
                 }
             }
         }
         StillSyntaxExpression::CaseOf {
             matched: maybe_matched,
-            of_keyword_range: maybe_of_keyword_range,
+            of_keyword_range: _,
             cases,
         } => {
             so_far.push_str("case");
-            let previous_syntax_that_covered_comments_end: lsp_types::Position;
             match maybe_matched {
-                None => match maybe_of_keyword_range {
-                    None => {
-                        so_far.push_str("  ");
-                        previous_syntax_that_covered_comments_end = expression_node.range.start;
-                    }
-                    Some(of_keyword_range) => {
-                        let comments_between_case_and_of_keywords: &[StillSyntaxNode<Box<str>>] =
-                            still_syntax_comments_in_range(
-                                comments,
-                                lsp_types::Range {
-                                    start: expression_node.range.start,
-                                    end: of_keyword_range.end,
-                                },
-                            );
-                        if comments_between_case_and_of_keywords.is_empty() {
-                            so_far.push_str("  ");
-                        } else {
-                            linebreak_indented_into(so_far, next_indent(indent));
-                            still_syntax_comments_into(
-                                so_far,
-                                next_indent(indent),
-                                comments_between_case_and_of_keywords,
-                            );
-                            linebreak_indented_into(so_far, indent);
-                        }
-                        previous_syntax_that_covered_comments_end = of_keyword_range.end;
-                    }
-                },
+                None => {
+                    so_far.push_str("  ");
+                }
                 Some(matched_node) => {
-                    let comments_before_matched: &[StillSyntaxNode<Box<str>>] =
-                        still_syntax_comments_in_range(
-                            comments,
-                            lsp_types::Range {
-                                start: expression_node.range.start,
-                                end: matched_node.range.start,
-                            },
-                        );
-                    let comments_before_of_keyword: &[StillSyntaxNode<Box<str>>] = if cases
-                        .is_empty()
-                        && let Some(of_keyword_range) = maybe_of_keyword_range
-                    {
-                        still_syntax_comments_in_range(
-                            comments,
-                            lsp_types::Range {
-                                start: matched_node.range.start,
-                                end: of_keyword_range.start,
-                            },
-                        )
-                    } else {
-                        &[]
-                    };
-                    let before_cases_line_span: LineSpan = if comments_before_matched.is_empty()
-                        && comments_before_of_keyword.is_empty()
-                    {
-                        still_syntax_expression_line_span(
-                            comments,
-                            still_syntax_node_unbox(matched_node),
-                        )
-                    } else {
-                        LineSpan::Multiple
-                    };
+                    let before_cases_line_span: LineSpan =
+                        still_syntax_range_line_span(matched_node.range);
                     space_or_linebreak_indented_into(
                         so_far,
                         before_cases_line_span,
                         next_indent(indent),
                     );
-                    still_syntax_comments_then_linebreak_indented_into(
-                        so_far,
-                        next_indent(indent),
-                        comments_before_matched,
-                    );
                     still_syntax_expression_not_parenthesized_into(
                         so_far,
                         next_indent(indent),
-                        comments,
                         still_syntax_node_unbox(matched_node),
                     );
                     space_or_linebreak_indented_into(so_far, before_cases_line_span, indent);
-                    if let Some(of_keyword_range) = maybe_of_keyword_range
-                        && !comments_before_of_keyword.is_empty()
-                    {
-                        linebreak_indented_into(so_far, indent);
-                        still_syntax_comments_then_linebreak_indented_into(
-                            so_far,
-                            next_indent(indent),
-                            comments_before_matched,
-                        );
-                        previous_syntax_that_covered_comments_end = of_keyword_range.end;
-                    } else {
-                        previous_syntax_that_covered_comments_end = matched_node.range.end;
-                    }
                 }
             }
             so_far.push_str("of");
             linebreak_indented_into(so_far, next_indent(indent));
             if let Some((case0, case1_up)) = cases.split_first() {
-                let mut previous_syntax_end: lsp_types::Position = still_syntax_case_into(
-                    so_far,
-                    next_indent(indent),
-                    comments,
-                    previous_syntax_that_covered_comments_end,
-                    case0,
-                );
+                still_syntax_case_into(so_far, next_indent(indent), case0);
                 for case in case1_up {
-                    so_far.push('\n');
                     linebreak_indented_into(so_far, next_indent(indent));
-                    previous_syntax_end = still_syntax_case_into(
-                        so_far,
-                        next_indent(indent),
-                        comments,
-                        previous_syntax_end,
-                        case,
-                    );
+                    still_syntax_case_into(so_far, next_indent(indent), case);
                 }
             }
         }
@@ -3973,76 +3711,40 @@ fn still_syntax_expression_not_parenthesized_into(
             result: maybe_result,
         } => {
             so_far.push('\\');
-            let mut previous_parameter_end: lsp_types::Position = expression_node.range.start;
-            for parameter_node in parameters {
-                still_syntax_comments_then_linebreak_indented_into(
+            if let Some((last_parameter_node, parameters_before_last)) = parameters.split_last() {
+                let parameters_line_span: LineSpan =
+                    still_syntax_range_line_span(lsp_types::Range {
+                        start: expression_node.range.start,
+                        end: maybe_arrow_key_symbol_range
+                            .map(|r| r.end)
+                            .unwrap_or(last_parameter_node.range.end),
+                    });
+                for parameter_node in parameters_before_last {
+                    still_syntax_pattern_into(
+                        so_far,
+                        indent + 1,
+                        still_syntax_node_as_ref(parameter_node),
+                    );
+                    space_or_linebreak_indented_into(so_far, parameters_line_span, indent);
+                    so_far.push(',');
+                }
+                still_syntax_pattern_into(
                     so_far,
                     indent + 1,
-                    still_syntax_comments_in_range(
-                        comments,
-                        lsp_types::Range {
-                            start: previous_parameter_end,
-                            end: parameter_node.range.start,
-                        },
-                    ),
+                    still_syntax_node_as_ref(last_parameter_node),
                 );
-                still_syntax_pattern_into(so_far, still_syntax_node_as_ref(parameter_node));
-                space_or_linebreak_indented_into(
-                    so_far,
-                    match parameters.last() {
-                        None => LineSpan::Single,
-                        Some(last_parameter_node) => still_syntax_range_line_span(
-                            lsp_types::Range {
-                                start: expression_node.range.start,
-                                end: last_parameter_node.range.end,
-                            },
-                            comments,
-                        ),
-                    },
-                    indent,
-                );
-                previous_parameter_end = parameter_node.range.end;
-            }
-            if maybe_result.is_none()
-                && let Some(arrow_key_symbol_range) = maybe_arrow_key_symbol_range
-                && let comments_before_arrow_key_symbol = still_syntax_comments_in_range(
-                    comments,
-                    lsp_types::Range {
-                        start: previous_parameter_end,
-                        end: arrow_key_symbol_range.start,
-                    },
-                )
-                && !comments_before_arrow_key_symbol.is_empty()
-            {
-                linebreak_indented_into(so_far, indent);
-                still_syntax_comments_then_linebreak_indented_into(
-                    so_far,
-                    indent,
-                    comments_before_arrow_key_symbol,
-                );
+                space_or_linebreak_indented_into(so_far, parameters_line_span, indent);
             }
             so_far.push_str("->");
             space_or_linebreak_indented_into(
                 so_far,
-                still_syntax_expression_line_span(comments, expression_node),
+                still_syntax_range_line_span(expression_node.range),
                 next_indent(indent),
             );
             if let Some(result_node) = maybe_result {
-                still_syntax_comments_then_linebreak_indented_into(
-                    so_far,
-                    next_indent(indent),
-                    still_syntax_comments_in_range(
-                        comments,
-                        lsp_types::Range {
-                            start: previous_parameter_end,
-                            end: result_node.range.start,
-                        },
-                    ),
-                );
                 still_syntax_expression_not_parenthesized_into(
                     so_far,
                     next_indent(indent),
-                    comments,
                     still_syntax_node_unbox(result_node),
                 );
             }
@@ -4052,170 +3754,75 @@ fn still_syntax_expression_not_parenthesized_into(
             result: maybe_result,
         } => {
             so_far.push_str("let");
-            let mut previous_declaration_end: lsp_types::Position = expression_node.range.end;
             match maybe_declaration {
                 None => {
                     linebreak_indented_into(so_far, next_indent(indent));
                 }
                 Some(declaration_node) => {
                     linebreak_indented_into(so_far, next_indent(indent));
-                    still_syntax_comments_then_linebreak_indented_into(
-                        so_far,
-                        next_indent(indent),
-                        still_syntax_comments_in_range(
-                            comments,
-                            lsp_types::Range {
-                                start: previous_declaration_end,
-                                end: declaration_node.range.start,
-                            },
-                        ),
-                    );
+
                     still_syntax_let_declaration_into(
                         so_far,
                         next_indent(indent),
-                        comments,
                         still_syntax_node_as_ref(declaration_node),
                     );
-                    previous_declaration_end = declaration_node.range.end;
                 }
             }
             linebreak_indented_into(so_far, indent);
             if let Some(result_node) = maybe_result {
-                still_syntax_comments_then_linebreak_indented_into(
-                    so_far,
-                    indent,
-                    still_syntax_comments_in_range(
-                        comments,
-                        lsp_types::Range {
-                            start: previous_declaration_end,
-                            end: result_node.range.start,
-                        },
-                    ),
-                );
                 still_syntax_expression_not_parenthesized_into(
                     so_far,
                     indent,
-                    comments,
                     still_syntax_node_unbox(result_node),
                 );
             }
         }
-        StillSyntaxExpression::Vec(elements) => {
-            let comments: &[StillSyntaxNode<Box<str>>] =
-                still_syntax_comments_in_range(comments, expression_node.range);
-            match elements.split_last() {
-                None => {
-                    if comments.is_empty() {
-                        so_far.push_str("[]");
-                    } else {
-                        so_far.push('[');
-                        still_syntax_comments_into(so_far, indent + 1, comments);
-                        linebreak_indented_into(so_far, indent);
-                        so_far.push(']');
-                    }
-                }
-                Some((last_element_node, elements_before_last)) => {
-                    so_far.push_str("[ ");
-                    let line_span: LineSpan =
-                        still_syntax_expression_line_span(comments, expression_node);
-                    let mut previous_element_end: lsp_types::Position = expression_node.range.start;
-                    for element_node in elements_before_last {
-                        still_syntax_comments_then_linebreak_indented_into(
-                            so_far,
-                            indent,
-                            still_syntax_comments_in_range(
-                                comments,
-                                lsp_types::Range {
-                                    start: previous_element_end,
-                                    end: element_node.range.start,
-                                },
-                            ),
-                        );
-                        still_syntax_expression_not_parenthesized_into(
-                            so_far,
-                            indent + 2,
-                            comments,
-                            still_syntax_node_as_ref(element_node),
-                        );
-                        if line_span == LineSpan::Multiple {
-                            linebreak_indented_into(so_far, indent);
-                        }
-                        so_far.push_str(", ");
-                        previous_element_end = element_node.range.end;
-                    }
-                    still_syntax_comments_then_linebreak_indented_into(
-                        so_far,
-                        indent + 2,
-                        still_syntax_comments_in_range(
-                            comments,
-                            lsp_types::Range {
-                                start: previous_element_end,
-                                end: last_element_node.range.start,
-                            },
-                        ),
-                    );
+        StillSyntaxExpression::Vec(elements) => match elements.split_last() {
+            None => {
+                so_far.push_str("[]");
+            }
+            Some((last_element_node, elements_before_last)) => {
+                so_far.push_str("[ ");
+                let line_span: LineSpan = still_syntax_range_line_span(expression_node.range);
+                for element_node in elements_before_last {
                     still_syntax_expression_not_parenthesized_into(
                         so_far,
                         indent + 2,
-                        comments,
-                        still_syntax_node_as_ref(last_element_node),
+                        still_syntax_node_as_ref(element_node),
                     );
-                    space_or_linebreak_indented_into(so_far, line_span, indent);
-                    let comments_after_last_element = still_syntax_comments_in_range(
-                        comments,
-                        lsp_types::Range {
-                            start: last_element_node.range.end,
-                            end: expression_node.range.end,
-                        },
-                    );
-                    if !comments_after_last_element.is_empty() {
+                    if line_span == LineSpan::Multiple {
                         linebreak_indented_into(so_far, indent);
-                        still_syntax_comments_then_linebreak_indented_into(
-                            so_far,
-                            indent + 2,
-                            comments_after_last_element,
-                        );
                     }
-                    so_far.push(']');
+                    so_far.push_str(", ");
                 }
+                still_syntax_expression_not_parenthesized_into(
+                    so_far,
+                    indent + 2,
+                    still_syntax_node_as_ref(last_element_node),
+                );
+                space_or_linebreak_indented_into(so_far, line_span, indent);
+                so_far.push(']');
             }
-        }
+        },
         StillSyntaxExpression::Parenthesized(None) => {
-            so_far.push('(');
-            let comments_in_parens: &[StillSyntaxNode<Box<str>>] =
-                still_syntax_comments_in_range(comments, expression_node.range);
-            if !comments_in_parens.is_empty() {
-                still_syntax_comments_into(so_far, indent + 1, comments_in_parens);
-                linebreak_indented_into(so_far, indent);
-            }
-            so_far.push(')');
+            so_far.push_str("())");
         }
         StillSyntaxExpression::Parenthesized(Some(in_parens)) => {
             let innermost: StillSyntaxNode<&StillSyntaxExpression> =
                 still_syntax_expression_to_unparenthesized(still_syntax_node_unbox(in_parens));
-            let comments_before_innermost = still_syntax_comments_in_range(
-                comments,
-                lsp_types::Range {
-                    start: expression_node.range.start,
-                    end: innermost.range.start,
-                },
-            );
-            let comments_after_innermost = still_syntax_comments_in_range(
-                comments,
-                lsp_types::Range {
-                    start: innermost.range.end,
-                    end: expression_node.range.end,
-                },
-            );
-            if comments_before_innermost.is_empty() && comments_after_innermost.is_empty() {
-                still_syntax_expression_not_parenthesized_into(so_far, indent, comments, innermost);
-            } else {
-                still_syntax_expression_parenthesized_into(
+            still_syntax_expression_not_parenthesized_into(so_far, indent, innermost);
+        }
+        StillSyntaxExpression::WithComment {
+            comment: comment_node,
+            expression: maybe_expression_after_expression,
+        } => {
+            still_syntax_comment_into(so_far, &comment_node.value);
+            linebreak_indented_into(so_far, indent);
+            if let Some(expression_node_after_expression) = maybe_expression_after_expression {
+                still_syntax_expression_not_parenthesized_into(
                     so_far,
                     indent,
-                    comments,
-                    expression_node.range,
-                    innermost,
+                    still_syntax_node_unbox(expression_node_after_expression),
                 );
             }
         }
@@ -4228,12 +3835,11 @@ fn still_syntax_expression_not_parenthesized_into(
                 still_syntax_type_not_parenthesized_into(
                     so_far,
                     1,
-                    &[],
                     still_syntax_node_as_ref(type_node),
                 );
                 space_or_linebreak_indented_into(
                     so_far,
-                    still_syntax_range_line_span(type_node.range, comments),
+                    still_syntax_range_line_span(type_node.range),
                     indent,
                 );
             }
@@ -4241,7 +3847,7 @@ fn still_syntax_expression_not_parenthesized_into(
             if let Some(expression_node_in_typed) = maybe_expression {
                 space_or_linebreak_indented_into(
                     so_far,
-                    still_syntax_range_line_span(expression_node.range, comments),
+                    still_syntax_range_line_span(expression_node.range),
                     indent,
                 );
                 match &expression_node_in_typed.value {
@@ -4252,7 +3858,7 @@ fn still_syntax_expression_not_parenthesized_into(
                         so_far.push_str(&name_node.value);
                         if let Some(value_node) = maybe_value {
                             let line_span: LineSpan =
-                                still_syntax_range_line_span(expression_node.range, comments);
+                                still_syntax_range_line_span(expression_node.range);
                             space_or_linebreak_indented_into(
                                 so_far,
                                 line_span,
@@ -4261,7 +3867,6 @@ fn still_syntax_expression_not_parenthesized_into(
                             still_syntax_expression_not_parenthesized_into(
                                 so_far,
                                 next_indent(indent),
-                                comments,
                                 still_syntax_node_unbox(value_node),
                             );
                         }
@@ -4270,7 +3875,6 @@ fn still_syntax_expression_not_parenthesized_into(
                         still_syntax_expression_not_parenthesized_into(
                             so_far,
                             indent,
-                            comments,
                             StillSyntaxNode {
                                 range: expression_node_in_typed.range,
                                 value: expression_node_other_in_typed,
@@ -4282,52 +3886,15 @@ fn still_syntax_expression_not_parenthesized_into(
         }
         StillSyntaxExpression::Record(fields) => match fields.split_first() {
             None => {
-                let comments_in_curlies: &[StillSyntaxNode<Box<str>>] =
-                    still_syntax_comments_in_range(comments, expression_node.range);
-                if comments_in_curlies.is_empty() {
-                    so_far.push_str("{}");
-                } else {
-                    so_far.push('{');
-                    still_syntax_comments_into(so_far, indent + 1, comments);
-                    linebreak_indented_into(so_far, indent);
-                    so_far.push('}');
-                }
+                so_far.push_str("{}");
             }
             Some((field0, field1_up)) => {
-                let line_span: LineSpan =
-                    still_syntax_range_line_span(expression_node.range, comments);
+                let line_span: LineSpan = still_syntax_range_line_span(expression_node.range);
                 so_far.push_str("{ ");
-                still_syntax_comments_then_linebreak_indented_into(
-                    so_far,
-                    indent + 2,
-                    still_syntax_comments_in_range(
-                        comments,
-                        lsp_types::Range {
-                            start: expression_node.range.start,
-                            end: field0.name.range.start,
-                        },
-                    ),
+                still_syntax_expression_fields_into_string(
+                    so_far, indent, line_span, field0, field1_up,
                 );
-                let previous_syntax_end: lsp_types::Position =
-                    still_syntax_expression_fields_into_string(
-                        so_far, indent, comments, line_span, field0, field1_up,
-                    );
                 space_or_linebreak_indented_into(so_far, line_span, indent);
-                let comments_before_closing_curly = still_syntax_comments_in_range(
-                    comments,
-                    lsp_types::Range {
-                        start: previous_syntax_end,
-                        end: expression_node.range.end,
-                    },
-                );
-                if !comments_before_closing_curly.is_empty() {
-                    linebreak_indented_into(so_far, indent);
-                    still_syntax_comments_then_linebreak_indented_into(
-                        so_far,
-                        indent,
-                        comments_before_closing_curly,
-                    );
-                }
                 so_far.push('}');
             }
         },
@@ -4338,7 +3905,6 @@ fn still_syntax_expression_not_parenthesized_into(
             still_syntax_expression_parenthesized_if_space_separated_into(
                 so_far,
                 indent,
-                comments,
                 still_syntax_node_unbox(record),
             );
             so_far.push('.');
@@ -4351,41 +3917,23 @@ fn still_syntax_expression_not_parenthesized_into(
             spread_key_symbol_range: _,
             fields,
         } => {
-            let line_span: LineSpan = still_syntax_range_line_span(expression_node.range, comments);
+            let line_span: LineSpan = still_syntax_range_line_span(expression_node.range);
             so_far.push_str("{ ..");
-            let mut previous_syntax_end: lsp_types::Position = expression_node.range.start;
             if let Some(record_node) = maybe_record {
                 still_syntax_expression_not_parenthesized_into(
                     so_far,
                     indent + 4,
-                    comments,
                     still_syntax_node_unbox(record_node),
                 );
-                previous_syntax_end = record_node.range.end;
             }
             if let Some((field0, field1_up)) = fields.split_first() {
                 space_or_linebreak_indented_into(so_far, line_span, indent);
                 so_far.push_str(", ");
-                previous_syntax_end = still_syntax_expression_fields_into_string(
-                    so_far, indent, comments, line_span, field0, field1_up,
+                still_syntax_expression_fields_into_string(
+                    so_far, indent, line_span, field0, field1_up,
                 );
             }
             space_or_linebreak_indented_into(so_far, line_span, indent);
-            let comments_before_closing_curly = still_syntax_comments_in_range(
-                comments,
-                lsp_types::Range {
-                    start: previous_syntax_end,
-                    end: expression_node.range.end,
-                },
-            );
-            if !comments_before_closing_curly.is_empty() {
-                linebreak_indented_into(so_far, indent);
-                still_syntax_comments_then_linebreak_indented_into(
-                    so_far,
-                    indent + 2,
-                    comments_before_closing_curly,
-                );
-            }
             so_far.push('}');
         }
         StillSyntaxExpression::String {
@@ -4400,44 +3948,19 @@ fn still_syntax_expression_not_parenthesized_into(
 fn still_syntax_case_into(
     so_far: &mut String,
     indent: usize,
-    comments: &[StillSyntaxNode<Box<str>>],
-    previous_syntax_end: lsp_types::Position,
     case: &StillSyntaxExpressionCase,
 ) -> lsp_types::Position {
     let before_case_arrow_key_symbol: lsp_types::Position = case
         .arrow_key_symbol_range
         .map(|range| range.end)
         .unwrap_or(case.pattern.range.end);
-    still_syntax_comments_then_linebreak_indented_into(
-        so_far,
-        indent,
-        still_syntax_comments_in_range(
-            comments,
-            lsp_types::Range {
-                start: previous_syntax_end,
-                end: before_case_arrow_key_symbol,
-            },
-        ),
-    );
-    still_syntax_pattern_into(so_far, still_syntax_node_as_ref(&case.pattern));
+    still_syntax_pattern_into(so_far, indent, still_syntax_node_as_ref(&case.pattern));
     so_far.push_str(" ->");
     linebreak_indented_into(so_far, next_indent(indent));
     if let Some(result_node) = &case.result {
-        still_syntax_comments_then_linebreak_indented_into(
-            so_far,
-            next_indent(indent),
-            still_syntax_comments_in_range(
-                comments,
-                lsp_types::Range {
-                    start: before_case_arrow_key_symbol,
-                    end: result_node.range.end,
-                },
-            ),
-        );
         still_syntax_expression_not_parenthesized_into(
             so_far,
             next_indent(indent),
-            comments,
             still_syntax_node_as_ref(result_node),
         );
         result_node.range.end
@@ -4449,146 +3972,73 @@ fn still_syntax_case_into(
 fn still_syntax_expression_fields_into_string<'a>(
     so_far: &mut String,
     indent: usize,
-    comments: &[StillSyntaxNode<Box<str>>],
     line_span: LineSpan,
     field0: &'a StillSyntaxExpressionField,
     field1_up: &'a [StillSyntaxExpressionField],
-) -> lsp_types::Position {
+) {
     so_far.push_str(&field0.name.value);
-    let mut previous_syntax_end: lsp_types::Position = field0.name.range.end;
     so_far.push_str(" =");
     if let Some(field0_value_node) = &field0.value {
-        let comments_before_field0_value = still_syntax_comments_in_range(
-            comments,
-            lsp_types::Range {
-                start: field0.name.range.end,
-                end: field0_value_node.range.start,
-            },
-        );
         space_or_linebreak_indented_into(
             so_far,
-            if comments_before_field0_value.is_empty() {
-                still_syntax_expression_line_span(
-                    comments,
-                    still_syntax_node_as_ref(field0_value_node),
-                )
-            } else {
-                LineSpan::Multiple
-            },
+            still_syntax_range_line_span(field0_value_node.range),
             next_indent(indent + 2),
         );
-        still_syntax_comments_then_linebreak_indented_into(
-            so_far,
-            next_indent(indent + 2),
-            comments_before_field0_value,
-        );
+
         still_syntax_expression_not_parenthesized_into(
             so_far,
             next_indent(indent + 2),
-            comments,
             still_syntax_node_as_ref(field0_value_node),
         );
-        previous_syntax_end = field0_value_node.range.end;
     }
     for field in field1_up {
         if line_span == LineSpan::Multiple {
             linebreak_indented_into(so_far, indent);
         }
         so_far.push_str(", ");
-        still_syntax_comments_then_linebreak_indented_into(
-            so_far,
-            indent + 2,
-            still_syntax_comments_in_range(
-                comments,
-                lsp_types::Range {
-                    start: previous_syntax_end,
-                    end: field.name.range.start,
-                },
-            ),
-        );
         so_far.push_str(&field.name.value);
-        previous_syntax_end = field.name.range.end;
         so_far.push_str(" =");
         if let Some(field_value_node) = &field.value {
-            let comments_before_field_value = still_syntax_comments_in_range(
-                comments,
-                lsp_types::Range {
-                    start: field.name.range.end,
-                    end: field_value_node.range.start,
-                },
-            );
             space_or_linebreak_indented_into(
                 so_far,
-                if comments_before_field_value.is_empty() {
-                    still_syntax_range_line_span(
-                        lsp_types::Range {
-                            start: field.name.range.end,
-                            end: field_value_node.range.end,
-                        },
-                        comments,
-                    )
-                } else {
-                    LineSpan::Multiple
-                },
+                still_syntax_range_line_span(lsp_types::Range {
+                    start: field.name.range.end,
+                    end: field_value_node.range.end,
+                }),
                 next_indent(indent + 2),
-            );
-            still_syntax_comments_then_linebreak_indented_into(
-                so_far,
-                next_indent(indent + 2),
-                comments_before_field_value,
             );
             still_syntax_expression_not_parenthesized_into(
                 so_far,
                 next_indent(indent + 2),
-                comments,
                 still_syntax_node_as_ref(field_value_node),
             );
-            previous_syntax_end = field_value_node.range.end;
         }
     }
-    previous_syntax_end
 }
 fn still_syntax_let_declaration_into(
     so_far: &mut String,
     indent: usize,
-    comments: &[StillSyntaxNode<Box<str>>],
     let_declaration_node: StillSyntaxNode<&StillSyntaxLetDeclaration>,
 ) {
     match let_declaration_node.value {
         StillSyntaxLetDeclaration::Destructuring {
             pattern: pattern_node,
-            equals_key_symbol_range: maybe_equals_key_symbol_range,
+            equals_key_symbol_range: _,
             expression: maybe_expression,
         } => {
-            still_syntax_comments_into(
+            still_syntax_pattern_into(so_far, indent, still_syntax_node_as_ref(pattern_node));
+            space_or_linebreak_indented_into(
                 so_far,
-                indent,
-                still_syntax_comments_in_range(
-                    comments,
-                    lsp_types::Range {
-                        start: let_declaration_node.range.start,
-                        end: maybe_equals_key_symbol_range
-                            .map(|range| range.start)
-                            .unwrap_or(pattern_node.range.end),
-                    },
-                ),
+                still_syntax_range_line_span(pattern_node.range),
+                next_indent(indent),
             );
-            still_syntax_pattern_into(so_far, still_syntax_node_as_ref(pattern_node));
             so_far.push_str(" =");
             linebreak_indented_into(so_far, next_indent(indent));
             if let Some(expression_node) = maybe_expression {
-                still_syntax_comments_into(
+                still_syntax_expression_not_parenthesized_into(
                     so_far,
                     next_indent(indent),
-                    still_syntax_comments_in_range(
-                        comments,
-                        lsp_types::Range {
-                            start: maybe_equals_key_symbol_range
-                                .map(|range| range.end)
-                                .unwrap_or(pattern_node.range.end),
-                            end: expression_node.range.end,
-                        },
-                    ),
+                    still_syntax_node_unbox(expression_node),
                 );
             }
         }
@@ -4599,7 +4049,6 @@ fn still_syntax_let_declaration_into(
             still_syntax_variable_declaration_into(
                 so_far,
                 indent,
-                comments,
                 still_syntax_node_as_ref_map(start_name_node, StillName::as_str),
                 maybe_result.as_ref().map(still_syntax_node_unbox),
             );
@@ -4609,7 +4058,6 @@ fn still_syntax_let_declaration_into(
 fn still_syntax_variable_declaration_into(
     so_far: &mut String,
     indent: usize,
-    comments: &[StillSyntaxNode<Box<str>>],
     start_name_node: StillSyntaxNode<&str>,
     maybe_result: Option<StillSyntaxNode<&StillSyntaxExpression>>,
 ) {
@@ -4617,28 +4065,11 @@ fn still_syntax_variable_declaration_into(
     so_far.push(' ');
     if maybe_result.is_none() {
         linebreak_indented_into(so_far, indent);
-        still_syntax_comments_then_linebreak_indented_into(so_far, next_indent(indent), comments);
     }
     so_far.push('=');
     linebreak_indented_into(so_far, next_indent(indent));
     if let Some(result_node) = maybe_result {
-        still_syntax_comments_then_linebreak_indented_into(
-            so_far,
-            next_indent(indent),
-            still_syntax_comments_in_range(
-                comments,
-                lsp_types::Range {
-                    start: start_name_node.range.start,
-                    end: result_node.range.start,
-                },
-            ),
-        );
-        still_syntax_expression_not_parenthesized_into(
-            so_far,
-            next_indent(indent),
-            comments,
-            result_node,
-        );
+        still_syntax_expression_not_parenthesized_into(so_far, next_indent(indent), result_node);
     }
 }
 fn still_syntax_expression_to_unparenthesized(
@@ -4651,96 +4082,22 @@ fn still_syntax_expression_to_unparenthesized(
         _ => expression_node,
     }
 }
-fn still_syntax_range_line_span(
-    range: lsp_types::Range,
-    comments: &[StillSyntaxNode<Box<str>>],
-) -> LineSpan {
-    if still_syntax_comments_in_range(comments, range).is_empty()
-        && range.start.line == range.end.line
-    {
+fn still_syntax_range_line_span(range: lsp_types::Range) -> LineSpan {
+    if range.start.line == range.end.line {
         LineSpan::Single
     } else {
         LineSpan::Multiple
     }
 }
-/// A more accurate (but probably slower) alternative:
-/// ```rust
-/// let so_far_length_before = so_far.len();
-/// ...into(so_far, ...);
-/// if so_far[so_far_length_before..].contains('\n') {
-///     so_far.insert_str(so_far_length_before, ..linebreak indented..);
-/// } else {
-///     so_far.insert(so_far_length_before, ' ');
-/// }
-/// ```
-/// with a potential optimization being
-fn still_syntax_expression_line_span(
-    comments: &[StillSyntaxNode<Box<str>>],
-    expression_node: StillSyntaxNode<&StillSyntaxExpression>,
-) -> LineSpan {
-    if still_syntax_comments_in_range(comments, expression_node.range).is_empty()
-        && expression_node.range.start.line == expression_node.range.end.line
-        && !still_syntax_expression_any_sub(expression_node, |sub_node| match sub_node.value {
-            StillSyntaxExpression::CaseOf { .. } => true,
-            StillSyntaxExpression::Let { .. } => true,
-            StillSyntaxExpression::String {
-                content,
-                quoting_style,
-            } => {
-                *quoting_style == StillSyntaxStringQuotingStyle::TripleQuoted
-                    && content.contains('\n')
-            }
-            StillSyntaxExpression::Int { .. }
-            | StillSyntaxExpression::Dec(_)
-            | StillSyntaxExpression::Char(_)
-            | StillSyntaxExpression::Parenthesized(_)
-            | StillSyntaxExpression::Typed { .. }
-            | StillSyntaxExpression::Vec(_)
-            | StillSyntaxExpression::Lambda { .. }
-            | StillSyntaxExpression::Record(_)
-            | StillSyntaxExpression::RecordUpdate { .. }
-            | StillSyntaxExpression::RecordAccess { .. }
-            | StillSyntaxExpression::VariableOrCall { .. } => false,
-        })
-    {
-        LineSpan::Single
-    } else {
-        LineSpan::Multiple
-    }
-}
+
 fn still_syntax_expression_parenthesized_into(
     so_far: &mut String,
     indent: usize,
-    comments: &[StillSyntaxNode<Box<str>>],
-    full_range: lsp_types::Range,
     innermost: StillSyntaxNode<&StillSyntaxExpression>,
 ) {
     so_far.push('(');
-    let start_so_far_length: usize = so_far.len();
-    still_syntax_comments_then_linebreak_indented_into(
-        so_far,
-        indent + 1,
-        still_syntax_comments_in_range(
-            comments,
-            lsp_types::Range {
-                start: full_range.start,
-                end: innermost.range.start,
-            },
-        ),
-    );
-    still_syntax_comments_then_linebreak_indented_into(
-        so_far,
-        indent + 1,
-        still_syntax_comments_in_range(
-            comments,
-            lsp_types::Range {
-                start: innermost.range.end,
-                end: full_range.end,
-            },
-        ),
-    );
-    still_syntax_expression_not_parenthesized_into(so_far, indent + 1, comments, innermost);
-    if so_far[start_so_far_length..].contains('\n') {
+    still_syntax_expression_not_parenthesized_into(so_far, indent + 1, innermost);
+    if still_syntax_range_line_span(innermost.range) == LineSpan::Multiple {
         linebreak_indented_into(so_far, indent);
     }
     so_far.push(')');
@@ -4748,7 +4105,6 @@ fn still_syntax_expression_parenthesized_into(
 fn still_syntax_expression_parenthesized_if_space_separated_into(
     so_far: &mut String,
     indent: usize,
-    comments: &[StillSyntaxNode<Box<str>>],
     expression_node: StillSyntaxNode<&StillSyntaxExpression>,
 ) {
     let unparenthesized: StillSyntaxNode<&StillSyntaxExpression> =
@@ -4759,6 +4115,7 @@ fn still_syntax_expression_parenthesized_if_space_separated_into(
         StillSyntaxExpression::VariableOrCall { .. } => true,
         StillSyntaxExpression::CaseOf { .. } => true,
         StillSyntaxExpression::Typed { .. } => true,
+        StillSyntaxExpression::WithComment { .. } => true,
         StillSyntaxExpression::Char(_) => false,
         StillSyntaxExpression::Dec(_) => false,
         StillSyntaxExpression::Int { .. } => false,
@@ -4770,154 +4127,15 @@ fn still_syntax_expression_parenthesized_if_space_separated_into(
         StillSyntaxExpression::String { .. } => false,
     };
     if is_space_separated {
-        still_syntax_expression_parenthesized_into(
-            so_far,
-            indent,
-            comments,
-            expression_node.range,
-            unparenthesized,
-        );
+        still_syntax_expression_parenthesized_into(so_far, indent, unparenthesized);
     } else {
-        still_syntax_expression_not_parenthesized_into(so_far, indent, comments, expression_node);
-    }
-}
-fn still_syntax_expression_any_sub(
-    expression_node: StillSyntaxNode<&StillSyntaxExpression>,
-    is_needle: impl Fn(StillSyntaxNode<&StillSyntaxExpression>) -> bool + Copy,
-) -> bool {
-    if is_needle(expression_node) {
-        return true;
-    }
-    match expression_node.value {
-        StillSyntaxExpression::VariableOrCall {
-            variable: _,
-            arguments,
-        } => arguments.iter().any(|argument_node| {
-            still_syntax_expression_any_sub(still_syntax_node_as_ref(argument_node), is_needle)
-        }),
-        StillSyntaxExpression::CaseOf {
-            matched: maybe_matched,
-            of_keyword_range: _,
-            cases,
-        } => {
-            maybe_matched.as_ref().is_some_and(|matched_node| {
-                still_syntax_expression_any_sub(still_syntax_node_unbox(matched_node), is_needle)
-            }) || cases
-                .iter()
-                .filter_map(|case| case.result.as_ref())
-                .any(|case_result_node| {
-                    still_syntax_expression_any_sub(
-                        still_syntax_node_as_ref(case_result_node),
-                        is_needle,
-                    )
-                })
-        }
-        StillSyntaxExpression::Char(_) => false,
-        StillSyntaxExpression::Dec(_) => false,
-        StillSyntaxExpression::Int { .. } => false,
-        StillSyntaxExpression::Lambda {
-            parameters: _,
-            arrow_key_symbol_range: _,
-            result: maybe_result,
-        } => maybe_result.as_ref().is_some_and(|result_node| {
-            still_syntax_expression_any_sub(still_syntax_node_unbox(result_node), is_needle)
-        }),
-        StillSyntaxExpression::Let {
-            declaration: maybe_declaration,
-            result: maybe_result,
-        } => {
-            maybe_result.as_ref().is_some_and(|result_node| {
-                still_syntax_expression_any_sub(still_syntax_node_unbox(result_node), is_needle)
-            }) || maybe_declaration
-                .as_ref()
-                .and_then(|declaration_node| match &declaration_node.value {
-                    StillSyntaxLetDeclaration::Destructuring {
-                        pattern: _,
-                        equals_key_symbol_range: _,
-                        expression,
-                    } => expression.as_ref(),
-                    StillSyntaxLetDeclaration::VariableDeclaration {
-                        start_name: _,
-                        result,
-                    } => result.as_ref(),
-                })
-                .is_some_and(|declaration_expression_node| {
-                    still_syntax_expression_any_sub(
-                        still_syntax_node_unbox(declaration_expression_node),
-                        is_needle,
-                    )
-                })
-        }
-        StillSyntaxExpression::Vec(elements) => elements.iter().any(|element_node| {
-            still_syntax_expression_any_sub(still_syntax_node_as_ref(element_node), is_needle)
-        }),
-        StillSyntaxExpression::Parenthesized(None) => false,
-        StillSyntaxExpression::Parenthesized(Some(in_parens)) => {
-            still_syntax_expression_any_sub(still_syntax_node_unbox(in_parens), is_needle)
-        }
-        StillSyntaxExpression::Typed {
-            type_: _,
-            expression: maybe_expression,
-        } => maybe_expression
-            .as_ref()
-            .is_some_and(
-                |expression_node_in_typed| match &expression_node_in_typed.value {
-                    StillSyntaxExpressionUntyped::Variant {
-                        name: _,
-                        value: maybe_value,
-                    } => maybe_value.as_ref().is_some_and(|argument_node| {
-                        still_syntax_expression_any_sub(
-                            still_syntax_node_unbox(argument_node),
-                            is_needle,
-                        )
-                    }),
-                    StillSyntaxExpressionUntyped::Other(other_expression_in_typed) => {
-                        still_syntax_expression_any_sub(
-                            StillSyntaxNode {
-                                range: expression_node_in_typed.range,
-                                value: other_expression_in_typed,
-                            },
-                            is_needle,
-                        )
-                    }
-                },
-            ),
-        StillSyntaxExpression::Record(fields) => fields
-            .iter()
-            .filter_map(|field| field.value.as_ref())
-            .any(|field_value_node| {
-                still_syntax_expression_any_sub(
-                    still_syntax_node_as_ref(field_value_node),
-                    is_needle,
-                )
-            }),
-        StillSyntaxExpression::RecordAccess { record, field: _ } => {
-            still_syntax_expression_any_sub(still_syntax_node_unbox(record), is_needle)
-        }
-        StillSyntaxExpression::RecordUpdate {
-            record: _,
-            spread_key_symbol_range: _,
-            fields,
-        } => fields
-            .iter()
-            .filter_map(|field| field.value.as_ref())
-            .any(|field_value_node| {
-                still_syntax_expression_any_sub(
-                    still_syntax_node_as_ref(field_value_node),
-                    is_needle,
-                )
-            }),
-        StillSyntaxExpression::String { .. } => false,
+        still_syntax_expression_not_parenthesized_into(so_far, indent, expression_node);
     }
 }
 
 fn still_syntax_project_format(project_state: &ProjectState) -> String {
     let still_syntax_project: &StillSyntaxProject = &project_state.syntax;
     let mut builder: String = String::with_capacity(project_state.source.len());
-    let mut previous_syntax_end: lsp_types::Position = lsp_types::Position {
-        line: 0,
-        character: 0,
-    };
     builder.push('\n');
     for documented_declaration_or_err in &still_syntax_project.declarations {
         match documented_declaration_or_err {
@@ -4927,66 +4145,24 @@ fn still_syntax_project_format(project_state: &ProjectState) -> String {
             Ok(documented_declaration) => {
                 builder.push_str("\n\n");
                 if let Some(project_documentation_node) = &documented_declaration.documentation {
-                    still_syntax_project_level_comments(
-                        &mut builder,
-                        still_syntax_comments_in_range(
-                            &still_syntax_project.comments,
-                            lsp_types::Range {
-                                start: previous_syntax_end,
-                                end: project_documentation_node.range.start,
-                            },
-                        ),
-                    );
                     still_syntax_documentation_comment_then_linebreak_into(
                         &mut builder,
                         &project_documentation_node.value,
                     );
-                    previous_syntax_end = project_documentation_node.range.end;
                 }
                 if let Some(declaration_node) = &documented_declaration.declaration {
-                    still_syntax_project_level_comments(
-                        &mut builder,
-                        still_syntax_comments_in_range(
-                            &still_syntax_project.comments,
-                            lsp_types::Range {
-                                start: previous_syntax_end,
-                                end: declaration_node.range.start,
-                            },
-                        ),
-                    );
                     still_syntax_declaration_into(
                         &mut builder,
-                        &still_syntax_project.comments,
                         still_syntax_node_as_ref(declaration_node),
                     );
-                    previous_syntax_end = declaration_node.range.end;
                     builder.push('\n');
                 }
             }
         }
     }
-    let comments_after_declarations: &[StillSyntaxNode<Box<str>>] =
-        still_syntax_comments_from_position(&still_syntax_project.comments, previous_syntax_end);
-    if !comments_after_declarations.is_empty() {
-        builder.push_str("\n\n\n");
-        still_syntax_comments_then_linebreak_indented_into(
-            &mut builder,
-            0,
-            comments_after_declarations,
-        );
-    }
     builder
 }
-fn still_syntax_project_level_comments(
-    so_far: &mut String,
-    comments: &[StillSyntaxNode<Box<str>>],
-) {
-    if !comments.is_empty() {
-        so_far.push('\n');
-        still_syntax_comments_then_linebreak_indented_into(so_far, 0, comments);
-        so_far.push_str("\n\n");
-    }
-}
+
 fn still_syntax_documentation_comment_then_linebreak_into(so_far: &mut String, content: &str) {
     so_far.push_str("(#");
     so_far.push_str(content);
@@ -4995,7 +4171,6 @@ fn still_syntax_documentation_comment_then_linebreak_into(so_far: &mut String, c
 
 fn still_syntax_declaration_into(
     so_far: &mut String,
-    comments: &[StillSyntaxNode<Box<str>>],
     declaration_node: StillSyntaxNode<&StillSyntaxDeclaration>,
 ) {
     match declaration_node.value {
@@ -5009,7 +4184,6 @@ fn still_syntax_declaration_into(
         } => {
             still_syntax_choice_type_declaration_into(
                 so_far,
-                comments,
                 declaration_node.range,
                 maybe_name
                     .as_ref()
@@ -5031,8 +4205,6 @@ fn still_syntax_declaration_into(
         } => {
             still_syntax_type_alias_declaration_into(
                 so_far,
-                comments,
-                declaration_node.range,
                 maybe_name
                     .as_ref()
                     .map(|n| still_syntax_node_as_ref_map(n, StillName::as_str)),
@@ -5047,7 +4219,6 @@ fn still_syntax_declaration_into(
             still_syntax_variable_declaration_into(
                 so_far,
                 0,
-                comments,
                 still_syntax_node_as_ref_map(start_name_node, StillName::as_str),
                 maybe_result.as_ref().map(still_syntax_node_as_ref),
             );
@@ -5057,88 +4228,27 @@ fn still_syntax_declaration_into(
 
 fn still_syntax_type_alias_declaration_into(
     so_far: &mut String,
-    comments: &[StillSyntaxNode<Box<str>>],
-    declaration_range: lsp_types::Range,
     maybe_name: Option<StillSyntaxNode<&str>>,
     parameters: &[StillSyntaxNode<StillName>],
     maybe_type: Option<StillSyntaxNode<&StillSyntaxType>>,
 ) {
-    let mut previous_syntax_end: lsp_types::Position = declaration_range.start;
     so_far.push_str("type alias ");
     if let Some(name_node) = maybe_name {
-        still_syntax_comments_then_linebreak_indented_into(
-            so_far,
-            11,
-            still_syntax_comments_in_range(
-                comments,
-                lsp_types::Range {
-                    start: declaration_range.start,
-                    end: name_node.range.start,
-                },
-            ),
-        );
         so_far.push_str(name_node.value);
-        previous_syntax_end = name_node.range.end;
     }
-    let comments_before_and_between_parameters = match parameters.last() {
-        None => &[],
-        Some(last_parameter) => still_syntax_comments_in_range(
-            comments,
-            lsp_types::Range {
-                start: previous_syntax_end,
-                end: last_parameter.range.end,
-            },
-        ),
-    };
     for parameter_node in parameters {
-        if comments_before_and_between_parameters.is_empty() {
-            so_far.push(' ');
-        } else {
-            linebreak_indented_into(so_far, 12);
-            still_syntax_comments_then_linebreak_indented_into(
-                so_far,
-                12,
-                still_syntax_comments_in_range(
-                    comments,
-                    lsp_types::Range {
-                        start: previous_syntax_end,
-                        end: parameter_node.range.start,
-                    },
-                ),
-            );
-        }
+        so_far.push(' ');
         so_far.push_str(&parameter_node.value);
-        previous_syntax_end = parameter_node.range.end;
     }
     if let Some(type_node) = maybe_type {
-        space_or_linebreak_indented_into(
-            so_far,
-            if comments_before_and_between_parameters.is_empty() {
-                LineSpan::Single
-            } else {
-                LineSpan::Multiple
-            },
-            4,
-        );
-        so_far.push('=');
+        so_far.push_str(" =");
         linebreak_indented_into(so_far, 4);
-        still_syntax_comments_then_linebreak_indented_into(
-            so_far,
-            4,
-            still_syntax_comments_in_range(
-                comments,
-                lsp_types::Range {
-                    start: previous_syntax_end,
-                    end: type_node.range.start,
-                },
-            ),
-        );
-        still_syntax_type_not_parenthesized_into(so_far, 4, comments, type_node);
+
+        still_syntax_type_not_parenthesized_into(so_far, 4, type_node);
     }
 }
 fn still_syntax_choice_type_declaration_into<'a>(
     so_far: &mut String,
-    comments: &[StillSyntaxNode<Box<str>>],
     declaration_range: lsp_types::Range,
     maybe_name: Option<StillSyntaxNode<&str>>,
     parameters: &[StillSyntaxNode<StillName>],
@@ -5149,47 +4259,11 @@ fn still_syntax_choice_type_declaration_into<'a>(
     let mut previous_syntax_end: lsp_types::Position = declaration_range.start;
     so_far.push_str("type ");
     if let Some(name_node) = maybe_name {
-        still_syntax_comments_then_linebreak_indented_into(
-            so_far,
-            5,
-            still_syntax_comments_in_range(
-                comments,
-                lsp_types::Range {
-                    start: declaration_range.start,
-                    end: name_node.range.start,
-                },
-            ),
-        );
         so_far.push_str(name_node.value);
         previous_syntax_end = name_node.range.end;
     }
-    let comments_before_and_between_parameters = match parameters.last() {
-        None => &[],
-        Some(last_parameter) => still_syntax_comments_in_range(
-            comments,
-            lsp_types::Range {
-                start: previous_syntax_end,
-                end: last_parameter.range.end,
-            },
-        ),
-    };
     for parameter_node in parameters {
-        if comments_before_and_between_parameters.is_empty() {
-            so_far.push(' ');
-        } else {
-            linebreak_indented_into(so_far, 8);
-            still_syntax_comments_then_linebreak_indented_into(
-                so_far,
-                8,
-                still_syntax_comments_in_range(
-                    comments,
-                    lsp_types::Range {
-                        start: previous_syntax_end,
-                        end: parameter_node.range.start,
-                    },
-                ),
-            );
-        }
+        so_far.push(' ');
         so_far.push_str(&parameter_node.value);
         previous_syntax_end = parameter_node.range.end;
     }
@@ -5197,7 +4271,6 @@ fn still_syntax_choice_type_declaration_into<'a>(
     so_far.push_str("= ");
     previous_syntax_end = still_syntax_choice_type_declaration_variant_into(
         so_far,
-        comments,
         previous_syntax_end,
         maybe_variant0_name,
         variant0_maybe_value,
@@ -5207,7 +4280,6 @@ fn still_syntax_choice_type_declaration_into<'a>(
         so_far.push_str("| ");
         previous_syntax_end = still_syntax_choice_type_declaration_variant_into(
             so_far,
-            comments,
             previous_syntax_end,
             variant
                 .name
@@ -5219,54 +4291,27 @@ fn still_syntax_choice_type_declaration_into<'a>(
 }
 fn still_syntax_choice_type_declaration_variant_into(
     so_far: &mut String,
-    comments: &[StillSyntaxNode<Box<str>>],
     mut previous_syntax_end: lsp_types::Position,
     maybe_variant_name: Option<StillSyntaxNode<&str>>,
     variant_maybe_value: Option<StillSyntaxNode<&StillSyntaxType>>,
 ) -> lsp_types::Position {
     if let Some(variant_name_node) = maybe_variant_name {
-        still_syntax_comments_then_linebreak_indented_into(
-            so_far,
-            6,
-            still_syntax_comments_in_range(
-                comments,
-                lsp_types::Range {
-                    start: previous_syntax_end,
-                    end: variant_name_node.range.start,
-                },
-            ),
-        );
         so_far.push_str(variant_name_node.value);
         previous_syntax_end = variant_name_node.range.end;
     }
     let Some(variant_last_value_node) = variant_maybe_value else {
         return previous_syntax_end;
     };
-    let line_span: LineSpan = still_syntax_range_line_span(
-        lsp_types::Range {
-            start: previous_syntax_end,
-            end: variant_last_value_node.range.end,
-        },
-        comments,
-    );
+    let line_span: LineSpan = still_syntax_range_line_span(lsp_types::Range {
+        start: previous_syntax_end,
+        end: variant_last_value_node.range.end,
+    });
     if let Some(value_node) = variant_maybe_value {
         space_or_linebreak_indented_into(so_far, line_span, 8);
-        still_syntax_comments_then_linebreak_indented_into(
-            so_far,
-            8,
-            still_syntax_comments_in_range(
-                comments,
-                lsp_types::Range {
-                    start: previous_syntax_end,
-                    end: value_node.range.start,
-                },
-            ),
-        );
+
         still_syntax_type_parenthesized_if_space_separated_into(
             so_far,
             8,
-            comments,
-            value_node.range,
             still_syntax_type_to_unparenthesized(value_node),
         );
         previous_syntax_end = value_node.range.end;
@@ -5337,7 +4382,7 @@ fn still_syntax_project_find_symbol_at_position<'a>(
         .filter_map(|declaration_or_err| declaration_or_err.as_ref().ok())
         .find_map(|documented_declaration| {
             let declaration_node = documented_declaration.declaration.as_ref()?;
-            still_syntax_declaration_find_variable_at_position(
+            still_syntax_declaration_find_symbol_at_position(
                 still_syntax_node_as_ref(declaration_node),
                 documented_declaration
                     .documentation
@@ -5348,7 +4393,7 @@ fn still_syntax_project_find_symbol_at_position<'a>(
         })
 }
 
-fn still_syntax_declaration_find_variable_at_position<'a>(
+fn still_syntax_declaration_find_symbol_at_position<'a>(
     still_syntax_declaration_node: StillSyntaxNode<&'a StillSyntaxDeclaration>,
     maybe_documentation: Option<&'a str>,
     position: lsp_types::Position,
@@ -5405,7 +4450,7 @@ fn still_syntax_declaration_find_variable_at_position<'a>(
                         })
                         .or_else(|| {
                             variant0_maybe_value.iter().find_map(|variant_value| {
-                                still_syntax_type_find_variable_at_position(
+                                still_syntax_type_find_symbol_at_position(
                                     still_syntax_declaration_node.value,
                                     still_syntax_node_as_ref(variant_value),
                                     position,
@@ -5430,7 +4475,7 @@ fn still_syntax_declaration_find_variable_at_position<'a>(
                                     })
                                 } else {
                                     variant.value.iter().find_map(|variant_value| {
-                                        still_syntax_type_find_variable_at_position(
+                                        still_syntax_type_find_symbol_at_position(
                                             still_syntax_declaration_node.value,
                                             still_syntax_node_as_ref(variant_value),
                                             position,
@@ -5477,7 +4522,7 @@ fn still_syntax_declaration_find_variable_at_position<'a>(
                         })
                         .or_else(|| {
                             maybe_type.as_ref().and_then(|type_node| {
-                                still_syntax_type_find_variable_at_position(
+                                still_syntax_type_find_symbol_at_position(
                                     still_syntax_declaration_node.value,
                                     still_syntax_node_as_ref(type_node),
                                     position,
@@ -5501,7 +4546,7 @@ fn still_syntax_declaration_find_variable_at_position<'a>(
                     })
                 } else {
                     maybe_result.as_ref().and_then(|result_node| {
-                        still_syntax_expression_find_variable_at_position(
+                        still_syntax_expression_find_symbol_at_position(
                             vec![(still_syntax_node_as_ref(result_node), Vec::new())],
                             still_syntax_declaration_node.value,
                             still_syntax_node_as_ref(result_node),
@@ -5515,7 +4560,7 @@ fn still_syntax_declaration_find_variable_at_position<'a>(
     }
 }
 
-fn still_syntax_pattern_find_variable_at_position<'a>(
+fn still_syntax_pattern_find_symbol_at_position<'a>(
     scope_declaration: &'a StillSyntaxDeclaration,
     still_syntax_pattern_node: StillSyntaxNode<&'a StillSyntaxPattern>,
     position: lsp_types::Position,
@@ -5529,7 +4574,7 @@ fn still_syntax_pattern_find_variable_at_position<'a>(
         } => maybe_type_node
             .as_ref()
             .and_then(|type_node| {
-                still_syntax_type_find_variable_at_position(
+                still_syntax_type_find_symbol_at_position(
                     scope_declaration,
                     still_syntax_node_as_ref(type_node),
                     position,
@@ -5554,7 +4599,7 @@ fn still_syntax_pattern_find_variable_at_position<'a>(
                             })
                         } else {
                             maybe_value.as_ref().and_then(|value| {
-                                still_syntax_pattern_find_variable_at_position(
+                                still_syntax_pattern_find_symbol_at_position(
                                     scope_declaration,
                                     still_syntax_node_unbox(value),
                                     position,
@@ -5564,12 +4609,32 @@ fn still_syntax_pattern_find_variable_at_position<'a>(
                     }
                 }
             }),
-        StillSyntaxPattern::Record(_) => None,
+        StillSyntaxPattern::WithComment {
+            comment: _,
+            pattern: maybe_pattern_after_expression,
+        } => maybe_pattern_after_expression
+            .as_ref()
+            .and_then(|pattern_node_after_expression| {
+                still_syntax_pattern_find_symbol_at_position(
+                    scope_declaration,
+                    still_syntax_node_unbox(pattern_node_after_expression),
+                    position,
+                )
+            }),
+        StillSyntaxPattern::Record(fields) => fields.iter().find_map(|field| {
+            field.value.as_ref().and_then(|field_value_node| {
+                still_syntax_pattern_find_symbol_at_position(
+                    scope_declaration,
+                    still_syntax_node_as_ref(field_value_node),
+                    position,
+                )
+            })
+        }),
         StillSyntaxPattern::String { .. } => None,
     }
 }
 
-fn still_syntax_type_find_variable_at_position<'a>(
+fn still_syntax_type_find_symbol_at_position<'a>(
     scope_declaration: &'a StillSyntaxDeclaration,
     still_syntax_type_node: StillSyntaxNode<&'a StillSyntaxType>,
     position: lsp_types::Position,
@@ -5591,7 +4656,7 @@ fn still_syntax_type_find_variable_at_position<'a>(
                     })
                 } else {
                     arguments.iter().find_map(|argument| {
-                        still_syntax_type_find_variable_at_position(
+                        still_syntax_type_find_symbol_at_position(
                             scope_declaration,
                             still_syntax_node_as_ref(argument),
                             position,
@@ -5606,7 +4671,7 @@ fn still_syntax_type_find_variable_at_position<'a>(
             } => inputs
                 .iter()
                 .find_map(|input_node| {
-                    still_syntax_type_find_variable_at_position(
+                    still_syntax_type_find_symbol_at_position(
                         scope_declaration,
                         still_syntax_node_as_ref(input_node),
                         position,
@@ -5614,7 +4679,7 @@ fn still_syntax_type_find_variable_at_position<'a>(
                 })
                 .or_else(|| {
                     maybe_output.as_ref().and_then(|output_node| {
-                        still_syntax_type_find_variable_at_position(
+                        still_syntax_type_find_symbol_at_position(
                             scope_declaration,
                             still_syntax_node_unbox(output_node),
                             position,
@@ -5623,15 +4688,27 @@ fn still_syntax_type_find_variable_at_position<'a>(
                 }),
             StillSyntaxType::Parenthesized(None) => None,
             StillSyntaxType::Parenthesized(Some(in_parens)) => {
-                still_syntax_type_find_variable_at_position(
+                still_syntax_type_find_symbol_at_position(
                     scope_declaration,
                     still_syntax_node_unbox(in_parens),
                     position,
                 )
             }
+            StillSyntaxType::WithComment {
+                comment: _,
+                type_: maybe_type_after_comment,
+            } => maybe_type_after_comment
+                .as_ref()
+                .and_then(|type_node_after_comment| {
+                    still_syntax_type_find_symbol_at_position(
+                        scope_declaration,
+                        still_syntax_node_unbox(type_node_after_comment),
+                        position,
+                    )
+                }),
             StillSyntaxType::Record(fields) => fields.iter().find_map(|field| {
                 field.value.as_ref().and_then(|field_value_node| {
-                    still_syntax_type_find_variable_at_position(
+                    still_syntax_type_find_symbol_at_position(
                         scope_declaration,
                         still_syntax_node_as_ref(field_value_node),
                         position,
@@ -5671,7 +4748,7 @@ fn on_some_break<A>(maybe: Option<A>) -> std::ops::ControlFlow<A, ()> {
     }
 }
 
-fn still_syntax_expression_find_variable_at_position<'a>(
+fn still_syntax_expression_find_symbol_at_position<'a>(
     mut local_bindings: StillLocalBindings<'a>,
     scope_declaration: &'a StillSyntaxDeclaration,
     still_syntax_expression_node: StillSyntaxNode<&'a StillSyntaxExpression>,
@@ -5697,7 +4774,7 @@ fn still_syntax_expression_find_variable_at_position<'a>(
             arguments
                 .iter()
                 .try_fold(local_bindings, |local_bindings, argument| {
-                    still_syntax_expression_find_variable_at_position(
+                    still_syntax_expression_find_symbol_at_position(
                         local_bindings,
                         scope_declaration,
                         still_syntax_node_as_ref(argument),
@@ -5711,7 +4788,7 @@ fn still_syntax_expression_find_variable_at_position<'a>(
             cases,
         } => {
             if let Some(matched_node) = maybe_matched {
-                local_bindings = still_syntax_expression_find_variable_at_position(
+                local_bindings = still_syntax_expression_find_symbol_at_position(
                     local_bindings,
                     scope_declaration,
                     still_syntax_node_unbox(matched_node),
@@ -5721,7 +4798,7 @@ fn still_syntax_expression_find_variable_at_position<'a>(
             cases
                 .iter()
                 .try_fold(local_bindings, |mut local_bindings, case| {
-                    if let Some(found_symbol) = still_syntax_pattern_find_variable_at_position(
+                    if let Some(found_symbol) = still_syntax_pattern_find_symbol_at_position(
                         scope_declaration,
                         still_syntax_node_as_ref(&case.pattern),
                         position,
@@ -5741,7 +4818,7 @@ fn still_syntax_expression_find_variable_at_position<'a>(
                             still_syntax_node_as_ref(case_result_node),
                             introduced_bindings,
                         ));
-                        still_syntax_expression_find_variable_at_position(
+                        still_syntax_expression_find_symbol_at_position(
                             local_bindings,
                             scope_declaration,
                             still_syntax_node_as_ref(case_result_node),
@@ -5761,7 +4838,7 @@ fn still_syntax_expression_find_variable_at_position<'a>(
             result: maybe_result,
         } => {
             if let Some(found_symbol) = parameters.iter().find_map(|parameter| {
-                still_syntax_pattern_find_variable_at_position(
+                still_syntax_pattern_find_symbol_at_position(
                     scope_declaration,
                     still_syntax_node_as_ref(parameter),
                     position,
@@ -5780,7 +4857,7 @@ fn still_syntax_expression_find_variable_at_position<'a>(
                     }
                     local_bindings
                         .push((still_syntax_node_unbox(result_node), introduced_bindings));
-                    still_syntax_expression_find_variable_at_position(
+                    still_syntax_expression_find_symbol_at_position(
                         local_bindings,
                         scope_declaration,
                         still_syntax_node_unbox(result_node),
@@ -5806,7 +4883,7 @@ fn still_syntax_expression_find_variable_at_position<'a>(
                 declarations
                     .iter()
                     .try_fold(local_bindings, |local_bindings, declaration| {
-                        still_syntax_let_declaration_find_variable_at_position(
+                        still_syntax_let_declaration_find_symbol_at_position(
                             local_bindings,
                             scope_declaration,
                             still_syntax_expression_node,
@@ -5815,7 +4892,7 @@ fn still_syntax_expression_find_variable_at_position<'a>(
                         )
                     })?;
             match maybe_result {
-                Some(result_node) => still_syntax_expression_find_variable_at_position(
+                Some(result_node) => still_syntax_expression_find_symbol_at_position(
                     local_bindings,
                     scope_declaration,
                     still_syntax_node_unbox(result_node),
@@ -5828,7 +4905,7 @@ fn still_syntax_expression_find_variable_at_position<'a>(
             elements
                 .iter()
                 .try_fold(local_bindings, |local_bindings, element| {
-                    still_syntax_expression_find_variable_at_position(
+                    still_syntax_expression_find_symbol_at_position(
                         local_bindings,
                         scope_declaration,
                         still_syntax_node_as_ref(element),
@@ -5840,19 +4917,31 @@ fn still_syntax_expression_find_variable_at_position<'a>(
             std::ops::ControlFlow::Continue(local_bindings)
         }
         StillSyntaxExpression::Parenthesized(Some(in_parens)) => {
-            still_syntax_expression_find_variable_at_position(
+            still_syntax_expression_find_symbol_at_position(
                 local_bindings,
                 scope_declaration,
                 still_syntax_node_unbox(in_parens),
                 position,
             )
         }
+        StillSyntaxExpression::WithComment {
+            comment: _,
+            expression: maybe_expression_after_comment,
+        } => match maybe_expression_after_comment {
+            None => std::ops::ControlFlow::Continue(local_bindings),
+            Some(expression_node_after_comment) => still_syntax_expression_find_symbol_at_position(
+                local_bindings,
+                scope_declaration,
+                still_syntax_node_unbox(expression_node_after_comment),
+                position,
+            ),
+        },
         StillSyntaxExpression::Typed {
             type_: maybe_type,
             expression: maybe_expression_in_typed,
         } => {
             if let Some(found) = maybe_type.as_ref().and_then(|type_node| {
-                still_syntax_type_find_variable_at_position(
+                still_syntax_type_find_symbol_at_position(
                     scope_declaration,
                     still_syntax_node_as_ref(type_node),
                     position,
@@ -5877,7 +4966,7 @@ fn still_syntax_expression_find_variable_at_position<'a>(
                             });
                         }
                         match maybe_value {
-                            Some(value_node) => still_syntax_expression_find_variable_at_position(
+                            Some(value_node) => still_syntax_expression_find_symbol_at_position(
                                 local_bindings,
                                 scope_declaration,
                                 still_syntax_node_unbox(value_node),
@@ -5887,7 +4976,7 @@ fn still_syntax_expression_find_variable_at_position<'a>(
                         }
                     }
                     StillSyntaxExpressionUntyped::Other(other_expression_in_typed) => {
-                        still_syntax_expression_find_variable_at_position(
+                        still_syntax_expression_find_symbol_at_position(
                             local_bindings,
                             scope_declaration,
                             StillSyntaxNode {
@@ -5904,7 +4993,7 @@ fn still_syntax_expression_find_variable_at_position<'a>(
             fields
                 .iter()
                 .try_fold(local_bindings, |local_bindings, field| match &field.value {
-                    Some(field_value_node) => still_syntax_expression_find_variable_at_position(
+                    Some(field_value_node) => still_syntax_expression_find_symbol_at_position(
                         local_bindings,
                         scope_declaration,
                         still_syntax_node_as_ref(field_value_node),
@@ -5914,7 +5003,7 @@ fn still_syntax_expression_find_variable_at_position<'a>(
                 })
         }
         StillSyntaxExpression::RecordAccess { record, field: _ } => {
-            still_syntax_expression_find_variable_at_position(
+            still_syntax_expression_find_symbol_at_position(
                 local_bindings,
                 scope_declaration,
                 still_syntax_node_unbox(record),
@@ -5929,7 +5018,7 @@ fn still_syntax_expression_find_variable_at_position<'a>(
             if let Some(record_node) = maybe_record
                 && lsp_range_includes_position(record_node.range, position)
             {
-                return still_syntax_expression_find_variable_at_position(
+                return still_syntax_expression_find_symbol_at_position(
                     local_bindings,
                     scope_declaration,
                     still_syntax_node_unbox(record_node),
@@ -5939,7 +5028,7 @@ fn still_syntax_expression_find_variable_at_position<'a>(
             fields
                 .iter()
                 .try_fold(local_bindings, |local_bindings, field| match &field.value {
-                    Some(field_value_node) => still_syntax_expression_find_variable_at_position(
+                    Some(field_value_node) => still_syntax_expression_find_symbol_at_position(
                         local_bindings,
                         scope_declaration,
                         still_syntax_node_as_ref(field_value_node),
@@ -5952,7 +5041,7 @@ fn still_syntax_expression_find_variable_at_position<'a>(
     }
 }
 
-fn still_syntax_let_declaration_find_variable_at_position<'a>(
+fn still_syntax_let_declaration_find_symbol_at_position<'a>(
     local_bindings: StillLocalBindings<'a>,
     scope_declaration: &'a StillSyntaxDeclaration,
     scope_expression: StillSyntaxNode<&'a StillSyntaxExpression>,
@@ -5968,13 +5057,13 @@ fn still_syntax_let_declaration_find_variable_at_position<'a>(
             equals_key_symbol_range: _,
             expression: maybe_expression,
         } => {
-            on_some_break(still_syntax_pattern_find_variable_at_position(
+            on_some_break(still_syntax_pattern_find_symbol_at_position(
                 scope_declaration,
                 still_syntax_node_as_ref(pattern),
                 position,
             ))?;
             match maybe_expression {
-                Some(expression_node) => still_syntax_expression_find_variable_at_position(
+                Some(expression_node) => still_syntax_expression_find_symbol_at_position(
                     local_bindings,
                     scope_declaration,
                     still_syntax_node_unbox(expression_node),
@@ -6001,7 +5090,7 @@ fn still_syntax_let_declaration_find_variable_at_position<'a>(
                 });
             }
             match maybe_result_node {
-                Some(result_node) => still_syntax_expression_find_variable_at_position(
+                Some(result_node) => still_syntax_expression_find_symbol_at_position(
                     local_bindings,
                     scope_declaration,
                     still_syntax_node_unbox(result_node),
@@ -6033,7 +5122,7 @@ enum StillSymbolToReference<'a> {
     },
 }
 
-fn still_syntax_project_uses_of_variable_into(
+fn still_syntax_project_uses_of_symbol_into(
     uses_so_far: &mut Vec<lsp_types::Range>,
     still_syntax_project: &StillSyntaxProject,
     symbol_to_collect_uses_of: StillSymbolToReference,
@@ -6044,7 +5133,7 @@ fn still_syntax_project_uses_of_variable_into(
         .filter_map(|declaration_or_err| declaration_or_err.as_ref().ok())
     {
         if let Some(declaration_node) = &documented_declaration.declaration {
-            still_syntax_declaration_uses_of_variable_into(
+            still_syntax_declaration_uses_of_symbol_into(
                 uses_so_far,
                 &declaration_node.value,
                 symbol_to_collect_uses_of,
@@ -6053,7 +5142,7 @@ fn still_syntax_project_uses_of_variable_into(
     }
 }
 
-fn still_syntax_declaration_uses_of_variable_into(
+fn still_syntax_declaration_uses_of_symbol_into(
     uses_so_far: &mut Vec<lsp_types::Range>,
     still_syntax_declaration: &StillSyntaxDeclaration,
     symbol_to_collect_uses_of: StillSymbolToReference,
@@ -6095,7 +5184,7 @@ fn still_syntax_declaration_uses_of_variable_into(
                 return;
             }
             if let Some(variant0_value) = variant0_maybe_value {
-                still_syntax_type_uses_of_variable_into(
+                still_syntax_type_uses_of_symbol_into(
                     uses_so_far,
                     still_syntax_node_as_ref(variant0_value),
                     symbol_to_collect_uses_of,
@@ -6113,7 +5202,7 @@ fn still_syntax_declaration_uses_of_variable_into(
                     return;
                 }
                 for variant0_value in variant.value.iter() {
-                    still_syntax_type_uses_of_variable_into(
+                    still_syntax_type_uses_of_symbol_into(
                         uses_so_far,
                         still_syntax_node_as_ref(variant0_value),
                         symbol_to_collect_uses_of,
@@ -6147,7 +5236,7 @@ fn still_syntax_declaration_uses_of_variable_into(
                 }
             }
             if let Some(type_node) = maybe_type {
-                still_syntax_type_uses_of_variable_into(
+                still_syntax_type_uses_of_symbol_into(
                     uses_so_far,
                     still_syntax_node_as_ref(type_node),
                     symbol_to_collect_uses_of,
@@ -6168,7 +5257,7 @@ fn still_syntax_declaration_uses_of_variable_into(
                 uses_so_far.push(start_name_node.range);
             }
             if let Some(result_node) = maybe_result {
-                still_syntax_expression_uses_of_variable_into(
+                still_syntax_expression_uses_of_symbol_into(
                     uses_so_far,
                     &[],
                     still_syntax_node_as_ref(result_node),
@@ -6179,7 +5268,7 @@ fn still_syntax_declaration_uses_of_variable_into(
     }
 }
 
-fn still_syntax_type_uses_of_variable_into(
+fn still_syntax_type_uses_of_symbol_into(
     uses_so_far: &mut Vec<lsp_types::Range>,
     still_syntax_type_node: StillSyntaxNode<&StillSyntaxType>,
     symbol_to_collect_uses_of: StillSymbolToReference,
@@ -6204,7 +5293,7 @@ fn still_syntax_type_uses_of_variable_into(
                 });
             }
             for argument in arguments {
-                still_syntax_type_uses_of_variable_into(
+                still_syntax_type_uses_of_symbol_into(
                     uses_so_far,
                     still_syntax_node_as_ref(argument),
                     symbol_to_collect_uses_of,
@@ -6217,14 +5306,14 @@ fn still_syntax_type_uses_of_variable_into(
             output: maybe_output,
         } => {
             for input in inputs {
-                still_syntax_type_uses_of_variable_into(
+                still_syntax_type_uses_of_symbol_into(
                     uses_so_far,
                     still_syntax_node_as_ref(input),
                     symbol_to_collect_uses_of,
                 );
             }
             if let Some(output_node) = maybe_output {
-                still_syntax_type_uses_of_variable_into(
+                still_syntax_type_uses_of_symbol_into(
                     uses_so_far,
                     still_syntax_node_unbox(output_node),
                     symbol_to_collect_uses_of,
@@ -6233,16 +5322,28 @@ fn still_syntax_type_uses_of_variable_into(
         }
         StillSyntaxType::Parenthesized(None) => {}
         StillSyntaxType::Parenthesized(Some(in_parens)) => {
-            still_syntax_type_uses_of_variable_into(
+            still_syntax_type_uses_of_symbol_into(
                 uses_so_far,
                 still_syntax_node_unbox(in_parens),
                 symbol_to_collect_uses_of,
             );
         }
+        StillSyntaxType::WithComment {
+            comment: _,
+            type_: maybe_type_after_comment,
+        } => {
+            if let Some(type_node_after_comment) = maybe_type_after_comment {
+                still_syntax_type_uses_of_symbol_into(
+                    uses_so_far,
+                    still_syntax_node_unbox(type_node_after_comment),
+                    symbol_to_collect_uses_of,
+                );
+            }
+        }
         StillSyntaxType::Record(fields) => {
             for field in fields {
                 if let Some(field_value_node) = &field.value {
-                    still_syntax_type_uses_of_variable_into(
+                    still_syntax_type_uses_of_symbol_into(
                         uses_so_far,
                         still_syntax_node_as_ref(field_value_node),
                         symbol_to_collect_uses_of,
@@ -6258,7 +5359,7 @@ fn still_syntax_type_uses_of_variable_into(
     }
 }
 
-fn still_syntax_expression_uses_of_variable_into(
+fn still_syntax_expression_uses_of_symbol_into(
     uses_so_far: &mut Vec<lsp_types::Range>,
     local_bindings: &[StillLocalBinding],
     still_syntax_expression_node: StillSyntaxNode<&StillSyntaxExpression>,
@@ -6282,7 +5383,7 @@ fn still_syntax_expression_uses_of_variable_into(
                 uses_so_far.push(still_syntax_expression_node.range);
             }
             for argument_node in arguments {
-                still_syntax_expression_uses_of_variable_into(
+                still_syntax_expression_uses_of_symbol_into(
                     uses_so_far,
                     local_bindings,
                     still_syntax_node_as_ref(argument_node),
@@ -6296,7 +5397,7 @@ fn still_syntax_expression_uses_of_variable_into(
             cases,
         } => {
             if let Some(matched_node) = maybe_matched {
-                still_syntax_expression_uses_of_variable_into(
+                still_syntax_expression_uses_of_symbol_into(
                     uses_so_far,
                     local_bindings,
                     still_syntax_node_unbox(matched_node),
@@ -6304,7 +5405,7 @@ fn still_syntax_expression_uses_of_variable_into(
                 );
             }
             for case in cases {
-                still_syntax_pattern_uses_of_variable_into(
+                still_syntax_pattern_uses_of_symbol_into(
                     uses_so_far,
                     still_syntax_node_as_ref(&case.pattern),
                     symbol_to_collect_uses_of,
@@ -6316,7 +5417,7 @@ fn still_syntax_expression_uses_of_variable_into(
                         &mut local_bindings_including_from_case_pattern,
                         still_syntax_node_as_ref(&case.pattern),
                     );
-                    still_syntax_expression_uses_of_variable_into(
+                    still_syntax_expression_uses_of_symbol_into(
                         uses_so_far,
                         &local_bindings_including_from_case_pattern,
                         still_syntax_node_as_ref(case_result_node),
@@ -6334,7 +5435,7 @@ fn still_syntax_expression_uses_of_variable_into(
             result: maybe_result,
         } => {
             for parameter_node in parameters {
-                still_syntax_pattern_uses_of_variable_into(
+                still_syntax_pattern_uses_of_symbol_into(
                     uses_so_far,
                     still_syntax_node_as_ref(parameter_node),
                     symbol_to_collect_uses_of,
@@ -6349,7 +5450,7 @@ fn still_syntax_expression_uses_of_variable_into(
                         still_syntax_node_as_ref(parameter_node),
                     );
                 }
-                still_syntax_expression_uses_of_variable_into(
+                still_syntax_expression_uses_of_symbol_into(
                     uses_so_far,
                     &local_bindings_including_from_lambda_parameters,
                     still_syntax_node_unbox(result_node),
@@ -6370,7 +5471,7 @@ fn still_syntax_expression_uses_of_variable_into(
                 );
             }
             if let Some(let_declaration_node) = maybe_declaration {
-                still_syntax_let_declaration_uses_of_variable_into(
+                still_syntax_let_declaration_uses_of_symbol_into(
                     uses_so_far,
                     &local_bindings_including_let_declaration_introduced,
                     &let_declaration_node.value,
@@ -6378,7 +5479,7 @@ fn still_syntax_expression_uses_of_variable_into(
                 );
             }
             if let Some(result) = maybe_result {
-                still_syntax_expression_uses_of_variable_into(
+                still_syntax_expression_uses_of_symbol_into(
                     uses_so_far,
                     &local_bindings_including_let_declaration_introduced,
                     still_syntax_node_unbox(result),
@@ -6388,7 +5489,7 @@ fn still_syntax_expression_uses_of_variable_into(
         }
         StillSyntaxExpression::Vec(elements) => {
             for element_node in elements {
-                still_syntax_expression_uses_of_variable_into(
+                still_syntax_expression_uses_of_symbol_into(
                     uses_so_far,
                     local_bindings,
                     still_syntax_node_as_ref(element_node),
@@ -6398,19 +5499,32 @@ fn still_syntax_expression_uses_of_variable_into(
         }
         StillSyntaxExpression::Parenthesized(None) => {}
         StillSyntaxExpression::Parenthesized(Some(in_parens)) => {
-            still_syntax_expression_uses_of_variable_into(
+            still_syntax_expression_uses_of_symbol_into(
                 uses_so_far,
                 local_bindings,
                 still_syntax_node_unbox(in_parens),
                 symbol_to_collect_uses_of,
             );
         }
+        StillSyntaxExpression::WithComment {
+            comment: _,
+            expression: maybe_expression_after_comment,
+        } => {
+            if let Some(expression_node_after_comment) = maybe_expression_after_comment {
+                still_syntax_expression_uses_of_symbol_into(
+                    uses_so_far,
+                    local_bindings,
+                    still_syntax_node_unbox(expression_node_after_comment),
+                    symbol_to_collect_uses_of,
+                );
+            }
+        }
         StillSyntaxExpression::Typed {
             type_: maybe_type,
             expression: maybe_expression_in_typed,
         } => {
             if let Some(type_node) = maybe_type {
-                still_syntax_type_uses_of_variable_into(
+                still_syntax_type_uses_of_symbol_into(
                     uses_so_far,
                     still_syntax_node_as_ref(type_node),
                     symbol_to_collect_uses_of,
@@ -6437,7 +5551,7 @@ fn still_syntax_expression_uses_of_variable_into(
                             });
                         }
                         if let Some(value_node) = maybe_value {
-                            still_syntax_expression_uses_of_variable_into(
+                            still_syntax_expression_uses_of_symbol_into(
                                 uses_so_far,
                                 local_bindings,
                                 still_syntax_node_unbox(value_node),
@@ -6446,7 +5560,7 @@ fn still_syntax_expression_uses_of_variable_into(
                         }
                     }
                     StillSyntaxExpressionUntyped::Other(other_expression_in_typed) => {
-                        still_syntax_expression_uses_of_variable_into(
+                        still_syntax_expression_uses_of_symbol_into(
                             uses_so_far,
                             local_bindings,
                             StillSyntaxNode {
@@ -6462,7 +5576,7 @@ fn still_syntax_expression_uses_of_variable_into(
         StillSyntaxExpression::Record(fields) => {
             for field in fields {
                 if let Some(field_value_node) = &field.value {
-                    still_syntax_expression_uses_of_variable_into(
+                    still_syntax_expression_uses_of_symbol_into(
                         uses_so_far,
                         local_bindings,
                         still_syntax_node_as_ref(field_value_node),
@@ -6472,7 +5586,7 @@ fn still_syntax_expression_uses_of_variable_into(
             }
         }
         StillSyntaxExpression::RecordAccess { record, field: _ } => {
-            still_syntax_expression_uses_of_variable_into(
+            still_syntax_expression_uses_of_symbol_into(
                 uses_so_far,
                 local_bindings,
                 still_syntax_node_unbox(record),
@@ -6485,7 +5599,7 @@ fn still_syntax_expression_uses_of_variable_into(
             fields,
         } => {
             if let Some(record_node) = maybe_record {
-                still_syntax_expression_uses_of_variable_into(
+                still_syntax_expression_uses_of_symbol_into(
                     uses_so_far,
                     local_bindings,
                     still_syntax_node_unbox(record_node),
@@ -6494,7 +5608,7 @@ fn still_syntax_expression_uses_of_variable_into(
             }
             for field in fields {
                 if let Some(field_value_node) = &field.value {
-                    still_syntax_expression_uses_of_variable_into(
+                    still_syntax_expression_uses_of_symbol_into(
                         uses_so_far,
                         local_bindings,
                         still_syntax_node_as_ref(field_value_node),
@@ -6507,7 +5621,7 @@ fn still_syntax_expression_uses_of_variable_into(
     }
 }
 
-fn still_syntax_let_declaration_uses_of_variable_into(
+fn still_syntax_let_declaration_uses_of_symbol_into(
     uses_so_far: &mut Vec<lsp_types::Range>,
 
     local_bindings: &[StillLocalBinding],
@@ -6520,13 +5634,13 @@ fn still_syntax_let_declaration_uses_of_variable_into(
             equals_key_symbol_range: _,
             expression: maybe_expression,
         } => {
-            still_syntax_pattern_uses_of_variable_into(
+            still_syntax_pattern_uses_of_symbol_into(
                 uses_so_far,
                 still_syntax_node_as_ref(pattern),
                 symbol_to_collect_uses_of,
             );
             if let Some(expression_node) = maybe_expression {
-                still_syntax_expression_uses_of_variable_into(
+                still_syntax_expression_uses_of_symbol_into(
                     uses_so_far,
                     local_bindings,
                     still_syntax_node_unbox(expression_node),
@@ -6548,7 +5662,7 @@ fn still_syntax_let_declaration_uses_of_variable_into(
                 return;
             }
             if let Some(result_node) = maybe_result {
-                still_syntax_expression_uses_of_variable_into(
+                still_syntax_expression_uses_of_symbol_into(
                     uses_so_far,
                     local_bindings,
                     still_syntax_node_unbox(result_node),
@@ -6559,7 +5673,7 @@ fn still_syntax_let_declaration_uses_of_variable_into(
     }
 }
 
-fn still_syntax_pattern_uses_of_variable_into(
+fn still_syntax_pattern_uses_of_symbol_into(
     uses_so_far: &mut Vec<lsp_types::Range>,
     still_syntax_pattern_node: StillSyntaxNode<&StillSyntaxPattern>,
     symbol_to_collect_uses_of: StillSymbolToReference,
@@ -6572,7 +5686,7 @@ fn still_syntax_pattern_uses_of_variable_into(
             pattern: maybe_pattern_node_in_typed,
         } => {
             if let Some(type_node) = maybe_type_node {
-                still_syntax_type_uses_of_variable_into(
+                still_syntax_type_uses_of_symbol_into(
                     uses_so_far,
                     still_syntax_node_as_ref(type_node),
                     symbol_to_collect_uses_of,
@@ -6601,7 +5715,7 @@ fn still_syntax_pattern_uses_of_variable_into(
                             });
                         }
                         if let Some(value) = maybe_value {
-                            still_syntax_pattern_uses_of_variable_into(
+                            still_syntax_pattern_uses_of_symbol_into(
                                 uses_so_far,
                                 still_syntax_node_unbox(value),
                                 symbol_to_collect_uses_of,
@@ -6611,7 +5725,27 @@ fn still_syntax_pattern_uses_of_variable_into(
                 }
             }
         }
-        StillSyntaxPattern::Record(_) => {}
+        StillSyntaxPattern::WithComment {
+            comment: _,
+            pattern: maybe_pattern_after_comment,
+        } => {
+            if let Some(pattern_node_after_comment) = maybe_pattern_after_comment {
+                still_syntax_pattern_uses_of_symbol_into(
+                    uses_so_far,
+                    still_syntax_node_unbox(pattern_node_after_comment),
+                    symbol_to_collect_uses_of,
+                );
+            }
+        }
+        StillSyntaxPattern::Record(fields) => {
+            for value in fields.iter().filter_map(|field| field.value.as_ref()) {
+                still_syntax_pattern_uses_of_symbol_into(
+                    uses_so_far,
+                    still_syntax_node_as_ref(value),
+                    symbol_to_collect_uses_of,
+                );
+            }
+        }
         StillSyntaxPattern::String { .. } => {}
     }
 }
@@ -6677,6 +5811,17 @@ fn still_syntax_pattern_bindings_into<'a>(
                 }
             }
         }
+        StillSyntaxPattern::WithComment {
+            comment: _,
+            pattern: maybe_pattern_after_comment,
+        } => {
+            if let Some(pattern_node_after_comment) = maybe_pattern_after_comment {
+                still_syntax_pattern_bindings_into(
+                    bindings_so_far,
+                    still_syntax_node_unbox(pattern_node_after_comment),
+                );
+            }
+        }
         StillSyntaxPattern::Record(fields) => {
             for field in fields {
                 if let Some(field_value_node) = &field.value {
@@ -6733,35 +5878,6 @@ fn still_syntax_highlight_project_into(
             );
         }
     }
-    // Inserting many comments in the middle can get expensive (having so many comments to make it matter will be rare).
-    // A possible solution (when comment count exceeds other syntax by some factor) is just pushing all comments an sorting the whole thing at once.
-    // Feels like overkill, though so I'll hold on on this until issues are opened :)
-    for comment_node in still_syntax_project.comments.iter() {
-        still_syntax_highlight_and_place_comment_into(
-            highlighted_so_far,
-            still_syntax_node_unbox(comment_node),
-        );
-    }
-}
-fn still_syntax_highlight_and_place_comment_into(
-    highlighted_so_far: &mut Vec<StillSyntaxNode<StillSyntaxHighlightKind>>,
-    still_syntax_comment_node: StillSyntaxNode<&str>,
-) {
-    let insert_index: usize = highlighted_so_far
-        .binary_search_by(|token| {
-            token
-                .range
-                .start
-                .cmp(&still_syntax_comment_node.range.start)
-        })
-        .unwrap_or_else(|i| i);
-    highlighted_so_far.insert(
-        insert_index,
-        StillSyntaxNode {
-            range: still_syntax_comment_node.range,
-            value: StillSyntaxHighlightKind::Comment,
-        },
-    );
 }
 fn still_syntax_highlight_multi_line(
     still_syntax_str_node: StillSyntaxNode<&str>,
@@ -7008,6 +6124,21 @@ fn still_syntax_highlight_pattern_into(
                 }
             }
         }
+        StillSyntaxPattern::WithComment {
+            comment: comment_node,
+            pattern: maybe_pattern_after_comment,
+        } => {
+            highlighted_so_far.push(StillSyntaxNode {
+                range: comment_node.range,
+                value: StillSyntaxHighlightKind::Comment,
+            });
+            if let Some(pattern_node_after_comment) = maybe_pattern_after_comment {
+                still_syntax_highlight_pattern_into(
+                    highlighted_so_far,
+                    still_syntax_node_unbox(pattern_node_after_comment),
+                );
+            }
+        }
         StillSyntaxPattern::Record(fields) => {
             for field in fields {
                 highlighted_so_far.push(StillSyntaxNode {
@@ -7083,6 +6214,21 @@ fn still_syntax_highlight_type_into(
                 highlighted_so_far,
                 still_syntax_node_unbox(in_parens),
             );
+        }
+        StillSyntaxType::WithComment {
+            comment: comment_node,
+            type_: maybe_type_after_comment,
+        } => {
+            highlighted_so_far.push(StillSyntaxNode {
+                range: comment_node.range,
+                value: StillSyntaxHighlightKind::Comment,
+            });
+            if let Some(type_node_after_comment) = maybe_type_after_comment {
+                still_syntax_highlight_type_into(
+                    highlighted_so_far,
+                    still_syntax_node_unbox(type_node_after_comment),
+                );
+            }
         }
         StillSyntaxType::Record(fields) => {
             for field in fields {
@@ -7303,6 +6449,22 @@ fn still_syntax_highlight_expression_into(
                 still_syntax_node_unbox(in_parens),
             );
         }
+        StillSyntaxExpression::WithComment {
+            comment,
+            expression: maybe_expression_after_comment,
+        } => {
+            highlighted_so_far.push(StillSyntaxNode {
+                range: comment.range,
+                value: StillSyntaxHighlightKind::KeySymbol,
+            });
+            if let Some(expression_node_after_comment) = maybe_expression_after_comment {
+                still_syntax_highlight_expression_into(
+                    highlighted_so_far,
+                    local_bindings,
+                    still_syntax_node_unbox(expression_node_after_comment),
+                );
+            }
+        }
         StillSyntaxExpression::Typed {
             type_: maybe_type,
             expression: maybe_expression_in_typed,
@@ -7492,7 +6654,6 @@ struct ParseState<'a> {
     position: lsp_types::Position,
     indent: u16,
     lower_indents_stack: Vec<u16>,
-    comments: Vec<StillSyntaxNode<Box<str>>>,
 }
 
 fn parse_state_push_indent(state: &mut ParseState, new_indent: u16) {
@@ -7666,16 +6827,13 @@ fn parse_still_keyword_as_range(state: &mut ParseState, symbol: &str) -> Option<
     }
 }
 
-fn parse_still_whitespace_and_comments(state: &mut ParseState) {
-    while parse_linebreak(state)
-        || parse_same_line_char_if(state, char::is_whitespace)
-        || parse_still_comment(state)
-    {}
+fn parse_still_whitespace(state: &mut ParseState) {
+    while parse_linebreak(state) || parse_same_line_char_if(state, char::is_whitespace) {}
 }
-fn parse_still_comment(state: &mut ParseState) -> bool {
+fn parse_still_comment(state: &mut ParseState) -> Option<StillSyntaxNode<Box<str>>> {
     let position_before: lsp_types::Position = state.position;
     if !parse_symbol(state, "#") {
-        return false;
+        return None;
     }
     let content: &str = state.source[state.offset_utf8..]
         .lines()
@@ -7687,11 +6845,10 @@ fn parse_still_comment(state: &mut ParseState) -> bool {
         start: position_before,
         end: state.position,
     };
-    state.comments.push(StillSyntaxNode {
+    Some(StillSyntaxNode {
         range: full_range,
         value: Box::from(content),
-    });
-    true
+    })
 }
 fn parse_still_documentation_comment_block_str<'a>(state: &mut ParseState<'a>) -> Option<&'a str> {
     if !parse_symbol(state, "(#") {
@@ -7796,23 +6953,47 @@ fn parse_still_uppercase_name_node(state: &mut ParseState) -> Option<StillSyntax
     })
 }
 
-fn parse_still_syntax_type_space_separated_node(
+fn parse_still_syntax_type(state: &mut ParseState) -> Option<StillSyntaxNode<StillSyntaxType>> {
+    parse_still_syntax_type_not_space_separated_node(state)
+        .or_else(|| parse_still_syntax_type_construct(state))
+        .or_else(|| parse_still_syntax_function(state))
+        .or_else(|| parse_still_syntax_type_with_comment(state))
+}
+fn parse_still_syntax_type_with_comment(
     state: &mut ParseState,
 ) -> Option<StillSyntaxNode<StillSyntaxType>> {
+    let comment_node: StillSyntaxNode<Box<str>> = parse_still_comment(state)?;
+    let maybe_type: Option<StillSyntaxNode<StillSyntaxType>> = parse_still_syntax_type(state);
+    Some(StillSyntaxNode {
+        range: lsp_types::Range {
+            start: comment_node.range.start,
+            end: maybe_type
+                .as_ref()
+                .map(|n| n.range.end)
+                .unwrap_or(comment_node.range.end),
+        },
+        value: StillSyntaxType::WithComment {
+            comment: comment_node,
+            type_: maybe_type.map(still_syntax_node_box),
+        },
+    })
+}
+fn parse_still_syntax_function(state: &mut ParseState) -> Option<StillSyntaxNode<StillSyntaxType>> {
     let backslash_range: lsp_types::Range = parse_symbol_as_range(state, "\\")?;
-    parse_still_whitespace_and_comments(state);
-    let inputs: Vec<StillSyntaxNode<StillSyntaxType>> = Vec::new();
-    while let Some(input_node) = parse_still_syntax_type_not_function_node(state) {
-        parse_still_whitespace_and_comments(state);
+    parse_still_whitespace(state);
+    let mut inputs: Vec<StillSyntaxNode<StillSyntaxType>> = Vec::new();
+    while let Some(input_node) = parse_still_syntax_type(state) {
+        inputs.push(input_node);
+        parse_still_whitespace(state);
         while parse_symbol(state, ",") {
-            parse_still_whitespace_and_comments(state);
+            parse_still_whitespace(state);
         }
     }
     let maybe_arrow_key_symbol_range = parse_symbol_as_range(state, "->");
-    parse_still_whitespace_and_comments(state);
+    parse_still_whitespace(state);
     let maybe_output_type: Option<StillSyntaxNode<StillSyntaxType>> =
         if state.position.character > u32::from(state.indent) {
-            parse_still_syntax_type_space_separated_node(state)
+            parse_still_syntax_type(state)
         } else {
             None
         };
@@ -7834,120 +7015,17 @@ fn parse_still_syntax_type_space_separated_node(
         },
     })
 }
-fn parse_still_syntax_type_not_function_node(
+fn parse_still_syntax_type_construct(
     state: &mut ParseState,
 ) -> Option<StillSyntaxNode<StillSyntaxType>> {
-    if state.position.character <= u32::from(state.indent) {
-        return None;
-    }
-    parse_still_syntax_type_construct_node(state).or_else(|| {
-        let start_position: lsp_types::Position = state.position;
-        parse_still_lowercase_name(state)
-            .map(StillSyntaxType::Variable)
-            .or_else(|| parse_still_syntax_type_parenthesized(state))
-            .or_else(|| parse_still_syntax_type_record(state))
-            .map(|type_| StillSyntaxNode {
-                range: lsp_types::Range {
-                    start: start_position,
-                    end: state.position,
-                },
-                value: type_,
-            })
-    })
-}
-fn parse_still_syntax_type_not_space_separated_node(
-    state: &mut ParseState,
-) -> Option<StillSyntaxNode<StillSyntaxType>> {
-    let start_position: lsp_types::Position = state.position;
-    parse_still_syntax_type_not_space_separated(state).map(|type_| StillSyntaxNode {
-        range: lsp_types::Range {
-            start: start_position,
-            end: state.position,
-        },
-        value: type_,
-    })
-}
-fn parse_still_syntax_type_not_space_separated(state: &mut ParseState) -> Option<StillSyntaxType> {
-    if state.position.character <= u32::from(state.indent) {
-        return None;
-    }
-    parse_still_lowercase_name(state)
-        .map(StillSyntaxType::Variable)
-        .or_else(|| parse_still_syntax_type_parenthesized(state))
-        .or_else(|| {
-            parse_still_qualified_uppercase_variable_node(state).map(|variable_node| {
-                StillSyntaxType::Construct {
-                    name: variable_node,
-                    arguments: vec![],
-                }
-            })
-        })
-        .or_else(|| parse_still_syntax_type_record(state))
-}
-fn parse_still_syntax_type_record(state: &mut ParseState) -> Option<StillSyntaxType> {
-    if !parse_symbol(state, "{") {
-        return None;
-    }
-    parse_still_whitespace_and_comments(state);
-    while parse_symbol(state, ",") {
-        parse_still_whitespace_and_comments(state);
-    }
-    let maybe_start_name: Option<StillSyntaxNode<StillName>> =
-        parse_still_lowercase_name_node(state);
-    parse_still_whitespace_and_comments(state);
-    match maybe_start_name {
-        None => {
-            let _: bool = parse_symbol(state, "}");
-            Some(StillSyntaxType::Record(vec![]))
-        }
-        Some(field0_name_node) => {
-            let maybe_field0_value: Option<StillSyntaxNode<StillSyntaxType>> =
-                parse_still_syntax_type_space_separated_node(state);
-            parse_still_whitespace_and_comments(state);
-            while parse_symbol(state, ",") {
-                parse_still_whitespace_and_comments(state);
-            }
-            let mut fields: Vec<StillSyntaxTypeField> = vec![StillSyntaxTypeField {
-                name: field0_name_node,
-                value: maybe_field0_value,
-            }];
-            while let Some(field) = parse_still_syntax_type_field(state) {
-                fields.push(field);
-                parse_still_whitespace_and_comments(state);
-                while parse_symbol(state, ",") {
-                    parse_still_whitespace_and_comments(state);
-                }
-            }
-            let _: bool = parse_symbol(state, "}");
-            Some(StillSyntaxType::Record(fields))
-        }
-    }
-}
-fn parse_still_syntax_type_field(state: &mut ParseState) -> Option<StillSyntaxTypeField> {
-    if state.position.character <= u32::from(state.indent) {
-        return None;
-    }
-    let maybe_name: StillSyntaxNode<StillName> = parse_still_lowercase_name_node(state)?;
-    parse_still_whitespace_and_comments(state);
-    let maybe_value: Option<StillSyntaxNode<StillSyntaxType>> =
-        parse_still_syntax_type_space_separated_node(state);
-    Some(StillSyntaxTypeField {
-        name: maybe_name,
-        value: maybe_value,
-    })
-}
-fn parse_still_syntax_type_construct_node(
-    state: &mut ParseState,
-) -> Option<StillSyntaxNode<StillSyntaxType>> {
-    let variable_node: StillSyntaxNode<StillName> =
-        parse_still_qualified_uppercase_variable_node(state)?;
-    parse_still_whitespace_and_comments(state);
+    let variable_node: StillSyntaxNode<StillName> = parse_still_lowercase_name_node(state)?;
+    parse_still_whitespace(state);
     let mut arguments: Vec<StillSyntaxNode<StillSyntaxType>> = Vec::new();
     let mut construct_end_position: lsp_types::Position = variable_node.range.end;
     while let Some(argument_node) = parse_still_syntax_type_not_space_separated_node(state) {
         construct_end_position = argument_node.range.end;
         arguments.push(argument_node);
-        parse_still_whitespace_and_comments(state);
+        parse_still_whitespace(state);
     }
     Some(StillSyntaxNode {
         range: lsp_types::Range {
@@ -7960,27 +7038,99 @@ fn parse_still_syntax_type_construct_node(
         },
     })
 }
-/// TODO inline
-fn parse_still_qualified_uppercase_variable_node(
+fn parse_still_syntax_type_not_space_separated_node(
     state: &mut ParseState,
-) -> Option<StillSyntaxNode<StillName>> {
-    parse_still_uppercase_name_node(state)
+) -> Option<StillSyntaxNode<StillSyntaxType>> {
+    if state.position.character <= u32::from(state.indent) {
+        return None;
+    }
+    let start_position: lsp_types::Position = state.position;
+    let type_: StillSyntaxType = parse_still_lowercase_name(state)
+        .map(StillSyntaxType::Variable)
+        .or_else(|| parse_still_syntax_type_parenthesized(state))
+        .or_else(|| {
+            parse_still_lowercase_name_node(state).map(|variable_node| StillSyntaxType::Construct {
+                name: variable_node,
+                arguments: vec![],
+            })
+        })
+        .or_else(|| parse_still_syntax_type_record(state))?;
+    Some(StillSyntaxNode {
+        range: lsp_types::Range {
+            start: start_position,
+            end: state.position,
+        },
+        value: type_,
+    })
 }
+
+fn parse_still_syntax_type_record(state: &mut ParseState) -> Option<StillSyntaxType> {
+    if !parse_symbol(state, "{") {
+        return None;
+    }
+    parse_still_whitespace(state);
+    while parse_symbol(state, ",") {
+        parse_still_whitespace(state);
+    }
+    let maybe_start_name: Option<StillSyntaxNode<StillName>> =
+        parse_still_lowercase_name_node(state);
+    parse_still_whitespace(state);
+    match maybe_start_name {
+        None => {
+            let _: bool = parse_symbol(state, "}");
+            Some(StillSyntaxType::Record(vec![]))
+        }
+        Some(field0_name_node) => {
+            let maybe_field0_value: Option<StillSyntaxNode<StillSyntaxType>> =
+                parse_still_syntax_type(state);
+            parse_still_whitespace(state);
+            while parse_symbol(state, ",") {
+                parse_still_whitespace(state);
+            }
+            let mut fields: Vec<StillSyntaxTypeField> = vec![StillSyntaxTypeField {
+                name: field0_name_node,
+                value: maybe_field0_value,
+            }];
+            while let Some(field) = parse_still_syntax_type_field(state) {
+                fields.push(field);
+                parse_still_whitespace(state);
+                while parse_symbol(state, ",") {
+                    parse_still_whitespace(state);
+                }
+            }
+            let _: bool = parse_symbol(state, "}");
+            Some(StillSyntaxType::Record(fields))
+        }
+    }
+}
+fn parse_still_syntax_type_field(state: &mut ParseState) -> Option<StillSyntaxTypeField> {
+    if state.position.character <= u32::from(state.indent) {
+        return None;
+    }
+    let maybe_name: StillSyntaxNode<StillName> = parse_still_lowercase_name_node(state)?;
+    parse_still_whitespace(state);
+    let maybe_value: Option<StillSyntaxNode<StillSyntaxType>> = parse_still_syntax_type(state);
+    Some(StillSyntaxTypeField {
+        name: maybe_name,
+        value: maybe_value,
+    })
+}
+
 fn parse_still_syntax_type_parenthesized(state: &mut ParseState) -> Option<StillSyntaxType> {
     if !parse_symbol(state, "(") {
         return None;
     }
-    parse_still_whitespace_and_comments(state);
+    parse_still_whitespace(state);
     let maybe_in_parens_0: Option<StillSyntaxNode<StillSyntaxType>> =
-        parse_still_syntax_type_space_separated_node(state);
-    parse_still_whitespace_and_comments(state);
-    let _ = parse_symbol(state, ")");
+        parse_still_syntax_type(state);
+    parse_still_whitespace(state);
+    let _: bool = parse_symbol(state, ")");
     Some(StillSyntaxType::Parenthesized(
         maybe_in_parens_0.map(still_syntax_node_box),
     ))
 }
 
-fn parse_still_syntax_pattern_node(
+fn parse_still_syntax_pattern(
     state: &mut ParseState,
 ) -> Option<StillSyntaxNode<StillSyntaxPattern>> {
     if state.position.character <= u32::from(state.indent) {
@@ -7999,15 +7149,16 @@ fn parse_still_syntax_pattern_node(
             },
             value: pattern,
         })
+        .or_else(|| parse_still_syntax_pattern_with_comment(state))
         .or_else(|| parse_still_syntax_pattern_typed(state))
 }
 fn parse_still_syntax_pattern_record(state: &mut ParseState) -> Option<StillSyntaxPattern> {
     if !parse_symbol(state, "{") {
         return None;
     }
-    parse_still_whitespace_and_comments(state);
+    parse_still_whitespace(state);
     while parse_symbol(state, ",") {
-        parse_still_whitespace_and_comments(state);
+        parse_still_whitespace(state);
     }
     let mut fields: Vec<StillSyntaxPatternField> = Vec::new();
     while let Some(field_name_node) = if state.position.character <= u32::from(state.indent) {
@@ -8015,16 +7166,16 @@ fn parse_still_syntax_pattern_record(state: &mut ParseState) -> Option<StillSynt
     } else {
         parse_still_lowercase_name_node(state)
     } {
-        parse_still_whitespace_and_comments(state);
+        parse_still_whitespace(state);
         let maybe_value: Option<StillSyntaxNode<StillSyntaxPattern>> =
-            parse_still_syntax_pattern_node(state);
+            parse_still_syntax_pattern(state);
         fields.push(StillSyntaxPatternField {
             name: field_name_node,
             value: maybe_value,
         });
-        parse_still_whitespace_and_comments(state);
+        parse_still_whitespace(state);
         while parse_symbol(state, ",") {
-            parse_still_whitespace_and_comments(state);
+            parse_still_whitespace(state);
         }
     }
     let _: bool = parse_symbol(state, "}");
@@ -8037,13 +7188,12 @@ fn parse_still_syntax_pattern_typed(
     if !parse_symbol(state, ":") {
         return None;
     }
-    parse_still_whitespace_and_comments(state);
-    let maybe_type: Option<StillSyntaxNode<StillSyntaxType>> =
-        parse_still_syntax_type_space_separated_node(state);
-    parse_still_whitespace_and_comments(state);
+    parse_still_whitespace(state);
+    let maybe_type: Option<StillSyntaxNode<StillSyntaxType>> = parse_still_syntax_type(state);
+    parse_still_whitespace(state);
     let closing_colon_range: Option<lsp_types::Range> = parse_symbol_as_range(state, ":");
     let maybe_pattern: Option<StillSyntaxNode<StillSyntaxPatternUntyped>> =
-        parse_still_syntax_pattern_untyped_node(state);
+        parse_still_syntax_pattern_untyped(state);
     Some(StillSyntaxNode {
         range: lsp_types::Range {
             start: start_position,
@@ -8060,7 +7210,7 @@ fn parse_still_syntax_pattern_typed(
         },
     })
 }
-fn parse_still_syntax_pattern_untyped_node(
+fn parse_still_syntax_pattern_untyped(
     state: &mut ParseState,
 ) -> Option<StillSyntaxNode<StillSyntaxPatternUntyped>> {
     parse_symbol_as_range(state, "_")
@@ -8072,16 +7222,15 @@ fn parse_still_syntax_pattern_untyped_node(
             parse_still_lowercase_name_node(state)
                 .map(|n| still_syntax_node_map(n, StillSyntaxPatternUntyped::Variable))
         })
-        .or_else(|| parse_still_syntax_pattern_variant_node(state))
+        .or_else(|| parse_still_syntax_pattern_variant(state))
 }
-fn parse_still_syntax_pattern_variant_node(
+fn parse_still_syntax_pattern_variant(
     state: &mut ParseState,
 ) -> Option<StillSyntaxNode<StillSyntaxPatternUntyped>> {
-    let variable_node: StillSyntaxNode<StillName> =
-        parse_still_qualified_uppercase_variable_node(state)?;
-    parse_still_whitespace_and_comments(state);
+    let variable_node: StillSyntaxNode<StillName> = parse_still_uppercase_name_node(state)?;
+    parse_still_whitespace(state);
     let maybe_value: Option<StillSyntaxNode<StillSyntaxPattern>> =
-        parse_still_syntax_pattern_node(state);
+        parse_still_syntax_pattern(state);
     Some(StillSyntaxNode {
         range: lsp_types::Range {
             start: variable_node.range.start,
@@ -8093,6 +7242,26 @@ fn parse_still_syntax_pattern_variant_node(
         value: StillSyntaxPatternUntyped::Variant {
             name: variable_node,
             value: maybe_value.map(still_syntax_node_box),
+        },
+    })
+}
+fn parse_still_syntax_pattern_with_comment(
+    state: &mut ParseState,
+) -> Option<StillSyntaxNode<StillSyntaxPattern>> {
+    let comment_node: StillSyntaxNode<Box<str>> = parse_still_comment(state)?;
+    let maybe_pattern: Option<StillSyntaxNode<StillSyntaxPattern>> =
+        parse_still_syntax_pattern(state);
+    Some(StillSyntaxNode {
+        range: lsp_types::Range {
+            start: comment_node.range.start,
+            end: maybe_pattern
+                .as_ref()
+                .map(|n| n.range.end)
+                .unwrap_or(comment_node.range.end),
+        },
+        value: StillSyntaxPattern::WithComment {
+            comment: comment_node,
+            pattern: maybe_pattern.map(still_syntax_node_box),
         },
     })
 }
@@ -8272,7 +7441,7 @@ fn parse_still_text_content_char(state: &mut ParseState) -> Option<char> {
         })
 }
 
-fn parse_still_syntax_expression_space_separated_node(
+fn parse_still_syntax_expression_space_separated(
     state: &mut ParseState,
 ) -> Option<StillSyntaxNode<StillSyntaxExpression>> {
     if state.position.character <= u32::from(state.indent) {
@@ -8283,7 +7452,8 @@ fn parse_still_syntax_expression_space_separated_node(
         .or_else(|| parse_still_syntax_expression_let_in(state))
         .or_else(|| parse_still_syntax_expression_lambda(state))
         .or_else(|| parse_still_syntax_expression_call(state))
-        .or_else(|| parse_still_syntax_expression_not_space_separated_node(state))
+        .or_else(|| parse_still_syntax_expression_with_comment_node(state))
+        .or_else(|| parse_still_syntax_expression_not_space_separated(state))
 }
 fn parse_still_syntax_expression_untyped_node(
     state: &mut ParseState,
@@ -8292,7 +7462,7 @@ fn parse_still_syntax_expression_untyped_node(
         return None;
     }
     parse_still_syntax_expression_variant_node(state).or_else(|| {
-        parse_still_syntax_expression_space_separated_node(state).map(|n| StillSyntaxNode {
+        parse_still_syntax_expression_space_separated(state).map(|n| StillSyntaxNode {
             range: n.range,
             value: StillSyntaxExpressionUntyped::Other(Box::new(n.value)),
         })
@@ -8305,10 +7475,9 @@ fn parse_still_syntax_expression_typed(
     if !parse_symbol(state, ":") {
         return None;
     }
-    parse_still_whitespace_and_comments(state);
-    let maybe_type: Option<StillSyntaxNode<StillSyntaxType>> =
-        parse_still_syntax_type_space_separated_node(state);
-    parse_still_whitespace_and_comments(state);
+    parse_still_whitespace(state);
+    let maybe_type: Option<StillSyntaxNode<StillSyntaxType>> = parse_still_syntax_type(state);
+    parse_still_whitespace(state);
     let closing_colon_range: Option<lsp_types::Range> = parse_symbol_as_range(state, ":");
     let maybe_expression: Option<StillSyntaxNode<StillSyntaxExpressionUntyped>> =
         parse_still_syntax_expression_untyped_node(state);
@@ -8333,21 +7502,21 @@ fn parse_still_syntax_expression_call(
 ) -> Option<StillSyntaxNode<StillSyntaxExpression>> {
     let variable_node: StillSyntaxNode<StillName> =
         parse_still_syntax_expression_variable_standalone(state)?;
-    parse_still_whitespace_and_comments(state);
+    parse_still_whitespace(state);
     let mut arguments: Vec<StillSyntaxNode<StillSyntaxExpression>> = Vec::new();
     let mut call_end_position: lsp_types::Position = variable_node.range.end;
     'parsing_arguments: loop {
         if state.position.character <= u32::from(state.indent) {
             break 'parsing_arguments;
         }
-        match parse_still_syntax_expression_not_space_separated_node(state) {
+        match parse_still_syntax_expression_not_space_separated(state) {
             None => {
                 break 'parsing_arguments;
             }
             Some(argument_node) => {
                 call_end_position = argument_node.range.end;
                 arguments.push(argument_node);
-                parse_still_whitespace_and_comments(state);
+                parse_still_whitespace(state);
             }
         }
     }
@@ -8366,12 +7535,12 @@ fn parse_still_syntax_expression_variant_node(
     state: &mut ParseState,
 ) -> Option<StillSyntaxNode<StillSyntaxExpressionUntyped>> {
     let name_node: StillSyntaxNode<StillName> = parse_still_uppercase_name_node(state)?;
-    parse_still_whitespace_and_comments(state);
+    parse_still_whitespace(state);
     let maybe_value: Option<StillSyntaxNode<StillSyntaxExpression>> = {
         if state.position.character <= u32::from(state.indent) {
             None
         } else {
-            parse_still_syntax_expression_not_space_separated_node(state)
+            parse_still_syntax_expression_not_space_separated(state)
         }
     };
     Some(StillSyntaxNode {
@@ -8388,7 +7557,27 @@ fn parse_still_syntax_expression_variant_node(
         },
     })
 }
-fn parse_still_syntax_expression_not_space_separated_node(
+fn parse_still_syntax_expression_with_comment_node(
+    state: &mut ParseState,
+) -> Option<StillSyntaxNode<StillSyntaxExpression>> {
+    let comment_node: StillSyntaxNode<Box<str>> = parse_still_comment(state)?;
+    let maybe_expression: Option<StillSyntaxNode<StillSyntaxExpression>> =
+        parse_still_syntax_expression_space_separated(state);
+    Some(StillSyntaxNode {
+        range: lsp_types::Range {
+            start: comment_node.range.start,
+            end: maybe_expression
+                .as_ref()
+                .map(|n| n.range.end)
+                .unwrap_or(comment_node.range.end),
+        },
+        value: StillSyntaxExpression::WithComment {
+            comment: comment_node,
+            expression: maybe_expression.map(still_syntax_node_box),
+        },
+    })
+}
+fn parse_still_syntax_expression_not_space_separated(
     state: &mut ParseState,
 ) -> Option<StillSyntaxNode<StillSyntaxExpression>> {
     let start_position: lsp_types::Position = state.position;
@@ -8453,24 +7642,24 @@ fn parse_still_syntax_expression_record_or_record_update(
     if !parse_symbol(state, "{") {
         return None;
     }
-    parse_still_whitespace_and_comments(state);
+    parse_still_whitespace(state);
     while parse_symbol(state, ",") {
-        parse_still_whitespace_and_comments(state);
+        parse_still_whitespace(state);
     }
     if let Some(spread_key_symbol_range) = parse_symbol_as_range(state, "..") {
-        parse_still_whitespace_and_comments(state);
+        parse_still_whitespace(state);
         let maybe_record: Option<StillSyntaxNode<StillSyntaxExpression>> =
-            parse_still_syntax_expression_space_separated_node(state);
-        parse_still_whitespace_and_comments(state);
+            parse_still_syntax_expression_space_separated(state);
+        parse_still_whitespace(state);
         while parse_symbol(state, ",") {
-            parse_still_whitespace_and_comments(state);
+            parse_still_whitespace(state);
         }
         let mut fields: Vec<StillSyntaxExpressionField> = Vec::new();
         while let Some(field) = parse_still_syntax_expression_field(state) {
             fields.push(field);
-            parse_still_whitespace_and_comments(state);
+            parse_still_whitespace(state);
             while parse_symbol(state, ",") {
-                parse_still_whitespace_and_comments(state);
+                parse_still_whitespace(state);
             }
         }
         let _: bool = parse_symbol(state, "}");
@@ -8480,12 +7669,12 @@ fn parse_still_syntax_expression_record_or_record_update(
             fields: fields,
         })
     } else if let Some(field0_name_node) = parse_still_lowercase_name_node(state) {
-        parse_still_whitespace_and_comments(state);
+        parse_still_whitespace(state);
         let maybe_field0_value: Option<StillSyntaxNode<StillSyntaxExpression>> =
-            parse_still_syntax_expression_space_separated_node(state);
-        parse_still_whitespace_and_comments(state);
+            parse_still_syntax_expression_space_separated(state);
+        parse_still_whitespace(state);
         while parse_symbol(state, ",") {
-            parse_still_whitespace_and_comments(state);
+            parse_still_whitespace(state);
         }
         let mut fields: Vec<StillSyntaxExpressionField> = vec![StillSyntaxExpressionField {
             name: field0_name_node,
@@ -8493,9 +7682,9 @@ fn parse_still_syntax_expression_record_or_record_update(
         }];
         while let Some(field) = parse_still_syntax_expression_field(state) {
             fields.push(field);
-            parse_still_whitespace_and_comments(state);
+            parse_still_whitespace(state);
             while parse_symbol(state, ",") {
-                parse_still_whitespace_and_comments(state);
+                parse_still_whitespace(state);
             }
         }
         let _: bool = parse_symbol(state, "}");
@@ -8512,9 +7701,9 @@ fn parse_still_syntax_expression_field(
         return None;
     }
     let name_node: StillSyntaxNode<StillName> = parse_still_lowercase_name_node(state)?;
-    parse_still_whitespace_and_comments(state);
+    parse_still_whitespace(state);
     let maybe_value: Option<StillSyntaxNode<StillSyntaxExpression>> =
-        parse_still_syntax_expression_space_separated_node(state);
+        parse_still_syntax_expression_space_separated(state);
     Some(StillSyntaxExpressionField {
         name: name_node,
         value: maybe_value,
@@ -8524,21 +7713,21 @@ fn parse_still_syntax_expression_lambda(
     state: &mut ParseState,
 ) -> Option<StillSyntaxNode<StillSyntaxExpression>> {
     let backslash_key_symbol_range: lsp_types::Range = parse_symbol_as_range(state, "\\")?;
-    parse_still_whitespace_and_comments(state);
+    parse_still_whitespace(state);
     let mut parameters: Vec<StillSyntaxNode<StillSyntaxPattern>> = Vec::new();
-    while let Some(parameter_node) = parse_still_syntax_pattern_node(state) {
+    while let Some(parameter_node) = parse_still_syntax_pattern(state) {
         parameters.push(parameter_node);
-        parse_still_whitespace_and_comments(state);
+        parse_still_whitespace(state);
         // be lenient in allowing , after lambda parameters, even though it's invalid syntax
         while parse_symbol(state, ",") {
-            parse_still_whitespace_and_comments(state);
+            parse_still_whitespace(state);
         }
     }
     let maybe_arrow_key_symbol_range: Option<lsp_types::Range> = parse_symbol_as_range(state, "->");
-    parse_still_whitespace_and_comments(state);
+    parse_still_whitespace(state);
     let maybe_result: Option<StillSyntaxNode<StillSyntaxExpression>> =
         if state.position.character > u32::from(state.indent) {
-            parse_still_syntax_expression_space_separated_node(state)
+            parse_still_syntax_expression_space_separated(state)
         } else {
             None
         };
@@ -8564,10 +7753,10 @@ fn parse_still_syntax_expression_case_of(
     state: &mut ParseState,
 ) -> Option<StillSyntaxNode<StillSyntaxExpression>> {
     let case_keyword_range: lsp_types::Range = parse_still_keyword_as_range(state, "case")?;
-    parse_still_whitespace_and_comments(state);
+    parse_still_whitespace(state);
     let maybe_matched: Option<StillSyntaxNode<StillSyntaxExpression>> =
-        parse_still_syntax_expression_space_separated_node(state);
-    parse_still_whitespace_and_comments(state);
+        parse_still_syntax_expression_space_separated(state);
+    parse_still_whitespace(state);
     Some(match parse_symbol_as_range(state, "of") {
         None => StillSyntaxNode {
             range: lsp_types::Range {
@@ -8584,7 +7773,7 @@ fn parse_still_syntax_expression_case_of(
             },
         },
         Some(of_keyword_range) => {
-            parse_still_whitespace_and_comments(state);
+            parse_still_whitespace(state);
             if state.position.character <= u32::from(state.indent) {
                 StillSyntaxNode {
                     range: lsp_types::Range {
@@ -8609,7 +7798,7 @@ fn parse_still_syntax_expression_case_of(
                         .or_else(|| case.arrow_key_symbol_range.as_ref().map(|range| range.end))
                         .unwrap_or(case.pattern.range.end);
                     cases.push(case);
-                    parse_still_whitespace_and_comments(state);
+                    parse_still_whitespace(state);
                 }
                 parse_state_pop_indent(state);
                 StillSyntaxNode {
@@ -8631,9 +7820,8 @@ fn parse_still_syntax_expression_case(state: &mut ParseState) -> Option<StillSyn
     if state.position.character < u32::from(state.indent) {
         return None;
     }
-    let case_pattern_node: StillSyntaxNode<StillSyntaxPattern> =
-        parse_still_syntax_pattern_node(state)?;
-    parse_still_whitespace_and_comments(state);
+    let case_pattern_node: StillSyntaxNode<StillSyntaxPattern> = parse_still_syntax_pattern(state)?;
+    parse_still_whitespace(state);
     Some(match parse_symbol_as_range(state, "->") {
         None => StillSyntaxExpressionCase {
             pattern: case_pattern_node,
@@ -8641,8 +7829,8 @@ fn parse_still_syntax_expression_case(state: &mut ParseState) -> Option<StillSyn
             result: None,
         },
         Some(arrow_key_symbol_range) => {
-            parse_still_whitespace_and_comments(state);
-            let maybe_result = parse_still_syntax_expression_space_separated_node(state);
+            parse_still_whitespace(state);
+            let maybe_result = parse_still_syntax_expression_space_separated(state);
             StillSyntaxExpressionCase {
                 pattern: case_pattern_node,
                 arrow_key_symbol_range: Some(arrow_key_symbol_range),
@@ -8656,7 +7844,7 @@ fn parse_still_syntax_expression_let_in(
     state: &mut ParseState,
 ) -> Option<StillSyntaxNode<StillSyntaxExpression>> {
     let let_keyword_range: lsp_types::Range = parse_still_keyword_as_range(state, "let")?;
-    parse_still_whitespace_and_comments(state);
+    parse_still_whitespace(state);
     Some(if state.position.character <= u32::from(state.indent) {
         StillSyntaxNode {
             range: let_keyword_range,
@@ -8673,12 +7861,12 @@ fn parse_still_syntax_expression_let_in(
             parse_still_syntax_let_declaration(state);
         if let Some(declaration_node) = &maybe_declaration {
             syntax_before_in_key_symbol_end_position = declaration_node.range.end;
-            parse_still_whitespace_and_comments(state);
+            parse_still_whitespace(state);
         }
         parse_state_pop_indent(state);
-        parse_still_whitespace_and_comments(state);
+        parse_still_whitespace(state);
         let maybe_result: Option<StillSyntaxNode<StillSyntaxExpression>> =
-            parse_still_syntax_expression_space_separated_node(state);
+            parse_still_syntax_expression_space_separated(state);
         StillSyntaxNode {
             range: lsp_types::Range {
                 start: let_keyword_range.start,
@@ -8706,12 +7894,12 @@ fn parse_still_syntax_let_declaration(
 fn parse_still_syntax_let_destructuring_node(
     state: &mut ParseState,
 ) -> Option<StillSyntaxNode<StillSyntaxLetDeclaration>> {
-    let pattern_node: StillSyntaxNode<StillSyntaxPattern> = parse_still_syntax_pattern_node(state)?;
-    parse_still_whitespace_and_comments(state);
+    let pattern_node: StillSyntaxNode<StillSyntaxPattern> = parse_still_syntax_pattern(state)?;
+    parse_still_whitespace(state);
     let maybe_equals_key_symbol_range: Option<lsp_types::Range> = parse_symbol_as_range(state, "=");
-    parse_still_whitespace_and_comments(state);
+    parse_still_whitespace(state);
     let maybe_expression: Option<StillSyntaxNode<StillSyntaxExpression>> =
-        parse_still_syntax_expression_space_separated_node(state);
+        parse_still_syntax_expression_space_separated(state);
     Some(StillSyntaxNode {
         range: lsp_types::Range {
             start: pattern_node.range.start,
@@ -8733,12 +7921,12 @@ fn parse_still_syntax_let_variable_declaration_node(
     state: &mut ParseState,
 ) -> Option<StillSyntaxNode<StillSyntaxLetDeclaration>> {
     let start_name_node: StillSyntaxNode<StillName> = parse_still_lowercase_name_node(state)?;
-    parse_still_whitespace_and_comments(state);
+    parse_still_whitespace(state);
     let maybe_result: Option<StillSyntaxNode<StillSyntaxExpression>> =
         if state.position.character <= u32::from(state.indent) {
             None
         } else {
-            parse_still_syntax_expression_space_separated_node(state)
+            parse_still_syntax_expression_space_separated(state)
         };
     Some(StillSyntaxNode {
         range: lsp_types::Range {
@@ -8771,16 +7959,16 @@ fn parse_still_syntax_expression_list(state: &mut ParseState) -> Option<StillSyn
     if !parse_symbol(state, "[") {
         return None;
     }
-    parse_still_whitespace_and_comments(state);
+    parse_still_whitespace(state);
     while parse_symbol(state, ",") {
-        parse_still_whitespace_and_comments(state);
+        parse_still_whitespace(state);
     }
     let mut elements: Vec<StillSyntaxNode<StillSyntaxExpression>> = Vec::new();
-    while let Some(expression_node) = parse_still_syntax_expression_space_separated_node(state) {
+    while let Some(expression_node) = parse_still_syntax_expression_space_separated(state) {
         elements.push(expression_node);
-        parse_still_whitespace_and_comments(state);
+        parse_still_whitespace(state);
         while parse_symbol(state, ",") {
-            parse_still_whitespace_and_comments(state);
+            parse_still_whitespace(state);
         }
     }
     let _: bool = parse_symbol(state, "]");
@@ -8792,10 +7980,10 @@ fn parse_still_syntax_expression_parenthesized(
     if !parse_symbol(state, "(") {
         return None;
     }
-    parse_still_whitespace_and_comments(state);
+    parse_still_whitespace(state);
     let maybe_in_parens_0: Option<StillSyntaxNode<StillSyntaxExpression>> =
-        parse_still_syntax_expression_space_separated_node(state);
-    parse_still_whitespace_and_comments(state);
+        parse_still_syntax_expression_space_separated(state);
+    parse_still_whitespace(state);
     let _ = parse_symbol(state, ")");
     Some(StillSyntaxExpression::Parenthesized(
         maybe_in_parens_0.map(still_syntax_node_box),
@@ -8815,12 +8003,12 @@ fn parse_still_syntax_declaration_choice_type_or_type_alias_node(
     state: &mut ParseState,
 ) -> Option<StillSyntaxNode<StillSyntaxDeclaration>> {
     let type_keyword_range: lsp_types::Range = parse_still_keyword_as_range(state, "type")?;
-    parse_still_whitespace_and_comments(state);
+    parse_still_whitespace(state);
     let maybe_alias_keyword_range: Option<lsp_types::Range> = parse_symbol_as_range(state, "alias");
-    parse_still_whitespace_and_comments(state);
+    parse_still_whitespace(state);
     let maybe_name_node: Option<StillSyntaxNode<StillName>> =
         parse_still_uppercase_name_node(state);
-    parse_still_whitespace_and_comments(state);
+    parse_still_whitespace(state);
     let mut syntax_before_equals_key_symbol_end_location: lsp_types::Position = maybe_name_node
         .as_ref()
         .map(|name_node| name_node.range.end)
@@ -8830,17 +8018,17 @@ fn parse_still_syntax_declaration_choice_type_or_type_alias_node(
     while let Some(parameter_node) = parse_still_lowercase_name_node(state) {
         syntax_before_equals_key_symbol_end_location = parameter_node.range.end;
         parameters.push(parameter_node);
-        parse_still_whitespace_and_comments(state);
+        parse_still_whitespace(state);
     }
     let maybe_equals_key_symbol_range: Option<lsp_types::Range> = parse_symbol_as_range(state, "=");
-    parse_still_whitespace_and_comments(state);
+    parse_still_whitespace(state);
     Some(match maybe_alias_keyword_range {
         Some(alias_keyword_range) => {
             let maybe_type: Option<StillSyntaxNode<StillSyntaxType>> =
                 if state.position.character <= u32::from(state.indent) {
                     None
                 } else {
-                    parse_still_syntax_type_space_separated_node(state)
+                    parse_still_syntax_type(state)
                 };
             let full_end_location: lsp_types::Position = maybe_type
                 .as_ref()
@@ -8864,7 +8052,7 @@ fn parse_still_syntax_declaration_choice_type_or_type_alias_node(
         None => {
             let maybe_variant0_name: Option<StillSyntaxNode<StillName>> =
                 parse_still_uppercase_name_node(state);
-            parse_still_whitespace_and_comments(state);
+            parse_still_whitespace(state);
             let variant0_maybe_value: Option<StillSyntaxNode<StillSyntaxType>> =
                 parse_still_syntax_type_not_space_separated_node(state);
             let mut full_end_position: lsp_types::Position = maybe_variant0_name
@@ -8874,7 +8062,7 @@ fn parse_still_syntax_declaration_choice_type_or_type_alias_node(
                 .unwrap_or(syntax_before_equals_key_symbol_end_location);
             if let Some(value_node) = &variant0_maybe_value {
                 full_end_position = value_node.range.end;
-                parse_still_whitespace_and_comments(state);
+                parse_still_whitespace(state);
             }
             let mut variant1_up: Vec<StillSyntaxChoiceTypeDeclarationTailingVariant> = Vec::new();
             while let Some(variant_node) =
@@ -8882,7 +8070,7 @@ fn parse_still_syntax_declaration_choice_type_or_type_alias_node(
             {
                 variant1_up.push(variant_node.value);
                 full_end_position = variant_node.range.end;
-                parse_still_whitespace_and_comments(state);
+                parse_still_whitespace(state);
             }
             StillSyntaxNode {
                 range: lsp_types::Range {
@@ -8905,12 +8093,12 @@ fn parse_still_syntax_choice_type_declaration_trailing_variant_node(
     state: &mut ParseState,
 ) -> Option<StillSyntaxNode<StillSyntaxChoiceTypeDeclarationTailingVariant>> {
     let or_key_symbol_range: lsp_types::Range = parse_symbol_as_range(state, "|")?;
-    parse_still_whitespace_and_comments(state);
+    parse_still_whitespace(state);
     while parse_symbol(state, "|") {
-        parse_still_whitespace_and_comments(state);
+        parse_still_whitespace(state);
     }
     let maybe_name: Option<StillSyntaxNode<StillName>> = parse_still_uppercase_name_node(state);
-    parse_still_whitespace_and_comments(state);
+    parse_still_whitespace(state);
     let maybe_value: Option<StillSyntaxNode<StillSyntaxType>> =
         parse_still_syntax_type_not_space_separated_node(state);
     let mut full_end_position: lsp_types::Position = maybe_name
@@ -8919,7 +8107,7 @@ fn parse_still_syntax_choice_type_declaration_trailing_variant_node(
         .unwrap_or_else(|| or_key_symbol_range.end);
     if let Some(value_node) = &maybe_value {
         full_end_position = value_node.range.end;
-        parse_still_whitespace_and_comments(state);
+        parse_still_whitespace(state);
     }
     Some(StillSyntaxNode {
         range: lsp_types::Range {
@@ -8937,12 +8125,12 @@ fn parse_still_syntax_declaration_variable_node(
     state: &mut ParseState,
 ) -> Option<StillSyntaxNode<StillSyntaxDeclaration>> {
     let start_name_node: StillSyntaxNode<StillName> = parse_still_lowercase_name_node(state)?;
-    parse_still_whitespace_and_comments(state);
+    parse_still_whitespace(state);
     let maybe_result: Option<StillSyntaxNode<StillSyntaxExpression>> =
         if state.position.character <= u32::from(state.indent) {
             None
         } else {
-            parse_still_syntax_expression_space_separated_node(state)
+            parse_still_syntax_expression_space_separated(state)
         };
     Some(StillSyntaxNode {
         range: lsp_types::Range {
@@ -8958,22 +8146,22 @@ fn parse_still_syntax_declaration_variable_node(
         },
     })
 }
-fn parse_still_syntax_documented_declaration_followed_by_whitespace_and_comments_and_whatever_indented(
+fn parse_still_syntax_documented_declaration_followed_by_whitespace_and_whatever_indented(
     state: &mut ParseState,
 ) -> Option<StillSyntaxDocumentedDeclaration> {
     match parse_still_documentation_comment_block_node(state) {
         None => parse_still_syntax_declaration_node(state).map(|declaration_node| {
-            parse_still_whitespace_and_comments(state);
+            parse_still_whitespace(state);
             StillSyntaxDocumentedDeclaration {
                 documentation: None,
                 declaration: Some(declaration_node),
             }
         }),
         Some(documentation_node) => {
-            parse_still_whitespace_and_comments(state);
+            parse_still_whitespace(state);
             let maybe_declaration: Option<StillSyntaxNode<StillSyntaxDeclaration>> =
                 parse_still_syntax_declaration_node(state);
-            parse_still_whitespace_and_comments(state);
+            parse_still_whitespace(state);
             Some(StillSyntaxDocumentedDeclaration {
                 documentation: Some(documentation_node),
                 declaration: maybe_declaration,
@@ -8991,23 +8179,27 @@ fn parse_still_syntax_project(project_source: &str) -> StillSyntaxProject {
         },
         indent: 0,
         lower_indents_stack: vec![],
-        comments: vec![],
     };
-    parse_still_whitespace_and_comments(&mut state);
+    parse_still_whitespace(&mut state);
     let mut last_valid_end_offset_utf8: usize = state.offset_utf8;
     let mut last_parsed_was_valid: bool = true;
     let mut declarations: Vec<Result<StillSyntaxDocumentedDeclaration, Box<str>>> =
         Vec::with_capacity(8);
     'parsing_declarations: loop {
         let offset_utf8_before_parsing_documented_declaration: usize = state.offset_utf8;
-        match parse_still_syntax_documented_declaration_followed_by_whitespace_and_comments_and_whatever_indented(&mut state) {
+        match parse_still_syntax_documented_declaration_followed_by_whitespace_and_whatever_indented(
+            &mut state,
+        ) {
             Some(documented_declaration) => {
                 if !last_parsed_was_valid {
-                    declarations.push(Err(Box::from(&project_source[last_valid_end_offset_utf8..offset_utf8_before_parsing_documented_declaration])));
+                    declarations.push(Err(Box::from(
+                        &project_source[last_valid_end_offset_utf8
+                            ..offset_utf8_before_parsing_documented_declaration],
+                    )));
                 }
                 last_parsed_was_valid = true;
                 declarations.push(Ok(documented_declaration));
-                parse_still_whitespace_and_comments(&mut state);
+                parse_still_whitespace(&mut state);
                 last_valid_end_offset_utf8 = state.offset_utf8;
             }
             None => {
@@ -9025,7 +8217,6 @@ fn parse_still_syntax_project(project_source: &str) -> StillSyntaxProject {
         )));
     }
     StillSyntaxProject {
-        comments: state.comments,
         declarations: declarations,
     }
 }

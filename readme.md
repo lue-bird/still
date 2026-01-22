@@ -1,9 +1,9 @@
-very small, explicitly boring programming language that compiles to rust, heavily inspired by [elm](https://elm-lang.org/).
+very small, explicitly boring programming language that compiles to rust, inspired by [elm](https://elm-lang.org/).
 Just experimentation.
 
 ## maybe interesting deviations
 
-- full type-inference considered not useful. Instead, each expression and pattern is always concretely typed, if necessary with an explicit annotation. So things like `(++) appendable -> appendable -> appendable`, `0 : number`, `[] : List any` are all not allowed, and e.g. `str-append \:str:a, :str:b -> :str:`, `0.0`, `:vec int:[]` are used instead.
+- full type-inference considered not useful. Instead, each expression and pattern is always concretely typed, if necessary with an explicit annotation. So things like `(++) appendable -> appendable -> appendable`, `0 : number`, `[] : List any` are all not allowed, and e.g. `str-append \:str:l, :str:r -> :str:`, `0.0`, `:vec int:[]` are used instead.
 
   Having concrete types everywhere also makes type checking faster, generates better errors and makes transpiling to almost any language very easy (e.g. elm's polymorphic number operations or `let`s are generally hard to infer and represent nicely in other languages)
 
@@ -48,7 +48,6 @@ stack-map :\A -> B:element-change, :stack A:stack ->
 ```
 
 ## TODO
-- change comment system to `Expression::WithComment` and `Pattern::WithComment` and `Type::WithComment` (each meaning it is prefixed by `#`) and _always_ preserve line-spread of original range! Then, remove all &comments parameters
 - `still build`
 - small standard library in rust (`str` (&str), `vec` (Rc<Vec<>>), `int` (i32), `dec` (f32), ?`order`, ?`char`(unicode-scalar/rune), `int-to-str`, `dec-to-str`, `int/dec-add`, `int/dec-multiply`, `dec-power`, `str-compare`, `int-compare`, `dec-compare`, ...)
 - type checking (notably also: check that each function output type only ever uses type variables used in the input type, and similarly: on non-function types, forbid the use of any new variables; in the error say "unknown type variable")
