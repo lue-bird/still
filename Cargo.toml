@@ -10,7 +10,11 @@ path = "main.rs"
 compact_str = "0.9.0"
 lsp-server = "0.7.9"
 lsp-types = "0.95.1"
+prettyplease = "0.2.37"
+proc-macro2 = { version = "1.0.106", default-features = false }
 serde_json = "1.0.145"
+strongly-connected-components = "1.0.0"
+syn = { version = "2.0.114", features = ["full"], default-features = false }
 
 [profile.dev]
 # speeds up build a ton (about 6-10+ times)
@@ -36,7 +40,8 @@ unused_qualifications = { level = "warn" }
 ambiguous-negative-literals = { level = "warn" }
 unused_lifetimes = { level = "warn" }
 trivial-numeric-casts = { level = "warn" }
-single-use-lifetimes = { level = "warn" }
+# contains false positives when lifetime is used in impl
+# single-use-lifetimes = { level = "warn" }
 
 # If you want to contribute, you really don't need to bother with clippy
 # I just wanted to try enabling it for myself to maybe find performance issues
