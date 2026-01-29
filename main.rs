@@ -9602,6 +9602,37 @@ fn variable_declaration_to_rust(
         .as_ref()
         .and_then(|n| still_syntax_type_to_function(type_aliases, still_syntax_node_as_ref(n)))
     {
+        None => syn::Item::Fn(syn::ItemFn {
+            attrs: rust_attrs,
+            vis: syn::Visibility::Public(syn::token::Pub(syn_span())),
+            sig: syn::Signature {
+                constness: None,
+                asyncness: None,
+                unsafety: None,
+                abi: None,
+                fn_token: syn::token::Fn(syn_span()),
+                ident: rust_ident,
+                generics: rust_generics,
+                paren_token: syn::token::Paren(syn_span()),
+                inputs: std::iter::once(default_allocator_fn_arg()).collect(),
+                output: syn::ReturnType::Type(syn::token::RArrow(syn_span()), Box::new(rust_type)),
+                variadic: None,
+            },
+            block: Box::new(syn::Block {
+                brace_token: syn::token::Brace(syn_span()),
+                stmts: vec![syn::Stmt::Expr(
+                    match variable_declaration_info.result {
+                        None => syn_expr_todo(),
+                        Some(result_node) => still_syntax_expression_to_rust(
+                            errors,
+                            variable_declarations,
+                            result_node,
+                        ),
+                    },
+                    None,
+                )],
+            }),
+        }),
         Some((inputs, maybe_output)) => match variable_declaration_info
             .result
             .and_then(still_syntax_expression_to_lambda)
@@ -9618,23 +9649,23 @@ fn variable_declaration_to_rust(
                     ident: rust_ident,
                     generics: rust_generics,
                     paren_token: syn::token::Paren(syn_span()),
-                    inputs: result_lambda_parameters
-                        .iter()
-                        .zip(inputs.iter())
-                        .map(|(parameter_node, input_type_node)| {
-                            syn::FnArg::Typed(syn::PatType {
-                                pat: Box::new(still_syntax_pattern_to_rust(
-                                    errors,
-                                    still_syntax_node_as_ref(parameter_node),
-                                )),
-                                attrs: vec![],
-                                colon_token: syn::token::Colon(syn_span()),
-                                ty: Box::new(still_syntax_type_to_rust(
-                                    errors,
-                                    still_syntax_node_as_ref(input_type_node),
-                                )),
-                            })
-                        })
+                    inputs: std::iter::once(default_allocator_fn_arg())
+                        .chain(result_lambda_parameters.iter().zip(inputs.iter()).map(
+                            |(parameter_node, input_type_node)| {
+                                syn::FnArg::Typed(syn::PatType {
+                                    pat: Box::new(still_syntax_pattern_to_rust(
+                                        errors,
+                                        still_syntax_node_as_ref(parameter_node),
+                                    )),
+                                    attrs: vec![],
+                                    colon_token: syn::token::Colon(syn_span()),
+                                    ty: Box::new(still_syntax_type_to_rust(
+                                        errors,
+                                        still_syntax_node_as_ref(input_type_node),
+                                    )),
+                                })
+                            },
+                        ))
                         .collect(),
                     output: syn::ReturnType::Type(
                         syn::token::RArrow(syn_span()),
@@ -9669,7 +9700,7 @@ fn variable_declaration_to_rust(
                     )],
                 }),
             }),
-            _ => syn::Item::Fn(syn::ItemFn {
+            None => syn::Item::Fn(syn::ItemFn {
                 attrs: rust_attrs,
                 vis: syn::Visibility::Public(syn::token::Pub(syn_span())),
                 sig: syn::Signature {
@@ -9681,10 +9712,8 @@ fn variable_declaration_to_rust(
                     ident: rust_ident,
                     generics: rust_generics,
                     paren_token: syn::token::Paren(syn_span()),
-                    inputs: inputs
-                        .iter()
-                        .enumerate()
-                        .map(|(i, input_type_node)| {
+                    inputs: std::iter::once(default_allocator_fn_arg())
+                        .chain(inputs.iter().enumerate().map(|(i, input_type_node)| {
                             syn::FnArg::Typed(syn::PatType {
                                 pat: Box::new(syn::Pat::Path(syn::ExprPath {
                                     attrs: vec![],
@@ -9700,7 +9729,7 @@ fn variable_declaration_to_rust(
                                     still_syntax_node_as_ref(input_type_node),
                                 )),
                             })
-                        })
+                        }))
                         .collect(),
                     output: syn::ReturnType::Type(
                         syn::token::RArrow(syn_span()),
@@ -9750,37 +9779,6 @@ fn variable_declaration_to_rust(
                 }),
             }),
         },
-        None => syn::Item::Fn(syn::ItemFn {
-            attrs: rust_attrs,
-            vis: syn::Visibility::Public(syn::token::Pub(syn_span())),
-            sig: syn::Signature {
-                constness: None,
-                asyncness: None,
-                unsafety: None,
-                abi: None,
-                fn_token: syn::token::Fn(syn_span()),
-                ident: rust_ident,
-                generics: rust_generics,
-                paren_token: syn::token::Paren(syn_span()),
-                inputs: syn::punctuated::Punctuated::new(),
-                output: syn::ReturnType::Type(syn::token::RArrow(syn_span()), Box::new(rust_type)),
-                variadic: None,
-            },
-            block: Box::new(syn::Block {
-                brace_token: syn::token::Brace(syn_span()),
-                stmts: vec![syn::Stmt::Expr(
-                    match variable_declaration_info.result {
-                        None => syn_expr_todo(),
-                        Some(result_node) => still_syntax_expression_to_rust(
-                            errors,
-                            variable_declarations,
-                            result_node,
-                        ),
-                    },
-                    None,
-                )],
-            }),
-        }),
     }
 }
 fn rust_generated_fn_parameter_name(index: usize) -> String {
@@ -10404,26 +10402,21 @@ fn still_syntax_expression_to_rust(
         }
         StillSyntaxExpression::Vec(elements) => syn::Expr::Call(syn::ExprCall {
             attrs: vec![],
-            func: Box::new(syn_expr_reference(["Vec", "Slice"])),
+            func: Box::new(syn_expr_reference(["vec_literal"])),
             paren_token: syn::token::Paren(syn_span()),
-            args: std::iter::once(syn::Expr::Reference(syn::ExprReference {
+            args: std::iter::once(syn::Expr::Array(syn::ExprArray {
                 attrs: vec![],
-                and_token: syn::token::And(syn_span()),
-                mutability: None,
-                expr: Box::new(syn::Expr::Array(syn::ExprArray {
-                    attrs: vec![],
-                    bracket_token: syn::token::Bracket(syn_span()),
-                    elems: elements
-                        .iter()
-                        .map(|element_node| {
-                            still_syntax_expression_to_rust(
-                                errors,
-                                project_variable_declarations,
-                                still_syntax_node_as_ref(element_node),
-                            )
-                        })
-                        .collect(),
-                })),
+                bracket_token: syn::token::Bracket(syn_span()),
+                elems: elements
+                    .iter()
+                    .map(|element_node| {
+                        still_syntax_expression_to_rust(
+                            errors,
+                            project_variable_declarations,
+                            still_syntax_node_as_ref(element_node),
+                        )
+                    })
+                    .collect(),
             }))
             .collect(),
         }),
@@ -10510,12 +10503,15 @@ fn still_syntax_expression_to_rust(
                         })
                     }
                     Some(_) => {
-                        // TODO currently all rust compiled variable declarations are fn()s
+                        // TODO currently all rust compiled variable declarations are fn(&Alloc)s
                         syn::Expr::Call(syn::ExprCall {
                             attrs: vec![],
                             func: Box::new(syn_expr_reference([&variable_node.value])),
                             paren_token: syn::token::Paren(syn_span()),
-                            args: syn::punctuated::Punctuated::new(),
+                            args: std::iter::once(syn_expr_reference([
+                                default_allocator_parameter_name,
+                            ]))
+                            .collect(),
                         })
                     }
                 }
@@ -10524,15 +10520,14 @@ fn still_syntax_expression_to_rust(
                     attrs: vec![],
                     func: Box::new(syn_expr_reference([&variable_node.value])),
                     paren_token: syn::token::Paren(syn_span()),
-                    args: arguments
-                        .iter()
-                        .map(|argument_node| {
+                    args: std::iter::once(syn_expr_reference([default_allocator_parameter_name]))
+                        .chain(arguments.iter().map(|argument_node| {
                             still_syntax_expression_to_rust(
                                 errors,
                                 project_variable_declarations,
                                 still_syntax_node_as_ref(argument_node),
                             )
-                        })
+                        }))
                         .collect(),
                 })
             }
@@ -11039,6 +11034,35 @@ fn default_parameter_bounds() -> impl Iterator<Item = syn::TypeParamBound> {
         }),
     ]
     .into_iter()
+}
+const default_allocator_parameter_name: &str = "alloc";
+fn default_allocator_fn_arg() -> syn::FnArg {
+    syn::FnArg::Typed(syn::PatType {
+        attrs: vec![],
+        pat: Box::new(syn::Pat::Ident(syn::PatIdent {
+            attrs: vec![],
+            by_ref: None,
+            mutability: None,
+            ident: syn_ident(default_allocator_parameter_name),
+            subpat: None,
+        })),
+        colon_token: syn::token::Colon(syn_span()),
+        ty: Box::new(syn::Type::Reference(syn::TypeReference {
+            and_token: syn::token::And(syn_span()),
+            mutability: None,
+            lifetime: Some(syn_default_lifetime()),
+            elem: Box::new(syn::Type::ImplTrait(syn::TypeImplTrait {
+                impl_token: syn::token::Impl(syn_span()),
+                bounds: std::iter::once(syn::TypeParamBound::Trait(syn::TraitBound {
+                    paren_token: None,
+                    modifier: syn::TraitBoundModifier::None,
+                    lifetimes: None,
+                    path: syn_path_reference(["Alloc"]),
+                }))
+                .collect(),
+            })),
+        })),
+    })
 }
 fn syn_expr_todo() -> syn::Expr {
     syn::Expr::Macro(syn::ExprMacro {

@@ -193,8 +193,8 @@ fn chrs_to_str<'a>(allocator: &'a impl Alloc, chars: Vec<Chr>) -> Str<'a> {
 }
 
 /// Do not call `_.to_vec()` on it. Prefer `Rc::unwrap_or_clone` or `StillToOwned::to_owned`
-pub type Vec<'a, A> = std::rc::Rc<std::vec::Vec<A>>;
-impl<A: Clone + StillToOwned> StillToOwned for Vec<'_, A> {
+pub type Vec<A> = std::rc::Rc<std::vec::Vec<A>>;
+impl<A: Clone + StillToOwned> StillToOwned for Vec<A> {
     type Owned = std::vec::Vec<A::Owned>;
     fn to_owned(self) -> Self::Owned {
         match std::rc::Rc::try_unwrap(self) {
@@ -205,24 +205,26 @@ impl<A: Clone + StillToOwned> StillToOwned for Vec<'_, A> {
 }
 impl<A: OwnedToStill> OwnedToStill for std::vec::Vec<A> {
     type Still<'a>
-        = Vec<'a, A::Still<'a>>
+        = Vec<A::Still<'a>>
     where
         A: 'a;
     fn to_still<'a>(&'a self) -> Self::Still<'a> {
         std::rc::Rc::new(self.iter().map(A::to_still).collect())
     }
 }
-
-fn vec_repeat<A: Clone>(element: A, length: Int) -> Vec<'static, A> {
+fn vec_literal<const N: usize, A>(elements: [A; N]) -> Vec<A> {
+    std::rc::Rc::new(std::vec::Vec::from(elements))
+}
+fn vec_repeat<A: Clone>(element: A, length: Int) -> Vec<A> {
     std::rc::Rc::new(std::iter::repeat_n(element, length as usize).collect::<std::vec::Vec<A>>())
 }
 fn vec_length<A>(vec: Vec<A>) -> Int {
-    vec.as_slice().len() as Int
+    vec.len() as Int
 }
 fn vec_get<A: Clone>(index: Int, vec: Vec<A>) -> Opt<A> {
-    vec.as_slice().get(index as usize).cloned()
+    vec.get(index as usize).cloned()
 }
-fn vec_take<'a, A: Clone>(taken_length: Int, vec: Vec<'a, A>) -> Vec<'a, A> {
+fn vec_take<A: Clone>(taken_length: Int, vec: Vec<A>) -> Vec<A> {
     match std::rc::Rc::try_unwrap(vec) {
         Ok(mut owned_vec) => {
             owned_vec.truncate(taken_length as usize);
@@ -236,11 +238,11 @@ fn vec_take<'a, A: Clone>(taken_length: Int, vec: Vec<'a, A>) -> Vec<'a, A> {
         ),
     }
 }
-fn vec_attach<A: Clone>(left: Vec<A>, right: Vec<A>) -> Vec<'static, A> {
+fn vec_attach<A: Clone>(left: Vec<A>, right: Vec<A>) -> Vec<A> {
     let mut combined: std::vec::Vec<A> = std::rc::Rc::unwrap_or_clone(left);
     match std::rc::Rc::try_unwrap(right) {
         Err(rc) => {
-            combined.extend_from_slice(rc.as_slice());
+            combined.extend_from_slice(&rc);
         }
         Ok(owned) => {
             combined.extend(owned);
@@ -248,11 +250,11 @@ fn vec_attach<A: Clone>(left: Vec<A>, right: Vec<A>) -> Vec<'static, A> {
     }
     std::rc::Rc::new(combined)
 }
-fn vec_flatten<A: Clone>(vec_vec: Vec<Vec<A>>) -> Vec<'static, A> {
+fn vec_flatten<A: Clone>(vec_vec: Vec<Vec<A>>) -> Vec<A> {
     std::rc::Rc::new(match std::rc::Rc::try_unwrap(vec_vec) {
         Err(vec_vec) => vec_vec
             .iter()
-            .flat_map(|inner| inner.as_slice().iter())
+            .flat_map(|inner| inner.iter())
             .cloned()
             .collect::<std::vec::Vec<A>>(),
         Ok(vec_vec) => {
@@ -260,7 +262,7 @@ fn vec_flatten<A: Clone>(vec_vec: Vec<Vec<A>>) -> Vec<'static, A> {
             for inner in vec_vec {
                 match std::rc::Rc::try_unwrap(inner) {
                     Err(inner) => {
-                        flattened.extend_from_slice(inner.as_slice());
+                        flattened.extend_from_slice(&inner);
                     }
                     Ok(inner) => {
                         flattened.extend(inner);
@@ -272,6 +274,6 @@ fn vec_flatten<A: Clone>(vec_vec: Vec<Vec<A>>) -> Vec<'static, A> {
     })
 }
 fn strs_flatten<'a>(allocator: &'a impl Alloc, vec_of_str: Vec<Str>) -> Str<'a> {
-    let string: String = vec_of_str.as_slice().iter().copied().collect::<String>();
+    let string: String = vec_of_str.iter().copied().collect::<String>();
     allocator.alloc(string)
 }
