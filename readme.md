@@ -1,34 +1,41 @@
 very small, explicitly boring programming language that compiles to rust, inspired by [elm](https://elm-lang.org/).
-Just experimentation, use with a bucket of caution and salt.
+> ⚠️ Just experimentation, use with a bucket of caution and salt.
 
 ### hello world
 
 ```still
-run \:opt {}:_ > :io {}:Standard-out-write "hello, world\n"
+run \:opt {}:_ >
+    :io {}:Standard-out-write "hello, world\n"
+```
+the equivalent elm code would be
+```elm
+run : Maybe {} -> Io {}
+run = \_ ->
+    StandardOutWrite "hello, world\n"
 ```
 
 ### echo in loop
 
 ```still
-run \:opt str:state-or-uninitialized >
-  let state
-        case state-or-uninitialized of
-        :opt str:Absent > ""
-        :opt str:Present :str:initialized > initialized
-  :io str:Io-batch
-      [ :io str:Standard-out-write
-          (str-flatten [ ansi-clear-screen, state, "\nType a sentence to echo: " ])
-      , :io str:Standard-in-read-line (\:str:line > line)
-      ]
-
 ansi-clear-screen "\u{001B}c"
+
+run \:opt str:state-or-uninitialized >
+    let state
+          case state-or-uninitialized of
+          :opt str:Absent > ""
+          :opt str:Present :str:initialized > initialized
+    :io str:Io-batch
+        [ :io str:Standard-out-write
+            (str-flatten [ ansi-clear-screen, state, "\nType a sentence to echo: " ])
+        , :io str:Standard-in-read-line (\:str:line > line)
+        ]
 ```
 
 ## maybe interesting
 
 - each expression and pattern is always concretely typed, if necessary with an explicit annotation. So things like `(++) appendable -> appendable -> appendable`, `0 : number`, `[] : List any` are all not allowed, and e.g. `str-append \:str:l, :str:r > :str:`, `0.0`, `:vec int:[]` are used instead.
 
-  → Faster type checking, good errors, easy compilation to almost any language
+  → Faster type checking, precise errors, easy compilation to almost any language
 
 - no blocking compile errors. You can always build, even if your record is still missing a field value, your matching is still inexhaustive, some parens are empty, etc.
   You will still see all the errors, though.
@@ -46,8 +53,7 @@ ansi-clear-screen "\u{001B}c"
 ## TODO
 - track which variable declaration actually requires an allocator
 - clone local value variables (unless their type suggests `Copy`)
-- generate record structs (derive Clone, [Copy], [Debug], [PartialEq])
-- generate implementations for `StillToOwned` and `OwnedToStill` for all generated types
+- generate implementations for `StillToOwned` and `OwnedToStill` for generated choice types
 - capture context in local function declarations
 - rename `case of` to `if x = ... > ... = ... > ...` and remove let destructuring. previous:
   ```still
