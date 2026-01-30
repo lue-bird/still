@@ -1,4 +1,5 @@
 #![allow(dead_code, non_shorthand_field_patterns)]
+#![allow(clippy::needless_pass_by_value)]
 
 // core //
 
@@ -21,9 +22,9 @@ pub trait Alloc {
 /// that is entirely self-owned and whose parts
 /// don't point into some temporary memory allocator.
 /// For example:
-/// `Vec<'_, { x: Str<'_>, y: i32 }>`
+/// `Vec<'_, { x: Str<'_>, y: isize }>`
 /// will get turned into
-/// `std::vec::Vec<{ x: Box<str>, y: i32 }`
+/// `std::vec::Vec<{ x: Box<str>, y: isize }`
 /// Notice how all _inner_ values are also turned into still values,
 /// making this operation more expensive than `to_owned` or `clone`
 ///
@@ -48,7 +49,7 @@ pub trait StillToOwned {
 ///
 /// Take a fully owned value (one whose type does not have a lifetime)
 /// and convert it to a still value, for example
-/// `&std::vec::Vec<{ x: Box<str>, y: i32 }>` gets turned into `Vec<'_, { x: Str<'_>, y: i32 }>`
+/// `&std::vec::Vec<{ x: Box<str>, y: isize }>` gets turned into `Vec<'_, { x: Str<'_>, y: isize }>`
 /// Notice how all _inner_ values are also turned into still values,
 /// making this operation more expensive that simply borrowing.
 ///
@@ -75,7 +76,7 @@ impl<T: Clone> StillToOwned for &T {
     }
 }
 
-pub type Int = i32;
+pub type Int = isize;
 impl OwnedToStill for Int {
     type Still<'a> = Int;
     fn to_still<'a>(&'a self) -> Self::Still<'a> {

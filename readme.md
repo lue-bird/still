@@ -1,11 +1,34 @@
 very small, explicitly boring programming language that compiles to rust, inspired by [elm](https://elm-lang.org/).
 Just experimentation, use with a bucket of caution and salt.
 
-## maybe interesting ideas
+### hello world
 
-- each expression and pattern is always concretely typed, if necessary with an explicit annotation. So things like `(++) appendable -> appendable -> appendable`, `0 : number`, `[] : List any` are all not allowed, and e.g. `str-append \:str:l, :str:r -> :str:`, `0.0`, `:vec int:[]` are used instead.
+```still
+run \:opt {}:_ > :io {}:Standard-out-write "hello, world\n"
+```
 
-  Having concrete types everywhere makes type checking faster, generates better errors and makes transpiling to almost any language very easy (e.g. elm's polymorphic number operations or mutually recursive `let`s are generally hard to infer and represent nicely in other languages)
+### echo in loop
+
+```still
+run \:opt str:state-or-uninitialized >
+  let state
+        case state-or-uninitialized of
+        :opt str:Absent > ""
+        :opt str:Present :str:initialized > initialized
+  :io str:Io-batch
+      [ :io str:Standard-out-write
+          (str-flatten [ ansi-clear-screen, state, "\nType a sentence to echo: " ])
+      , :io str:Standard-in-read-line (\:str:line > line)
+      ]
+
+ansi-clear-screen "\u{001B}c"
+```
+
+## maybe interesting
+
+- each expression and pattern is always concretely typed, if necessary with an explicit annotation. So things like `(++) appendable -> appendable -> appendable`, `0 : number`, `[] : List any` are all not allowed, and e.g. `str-append \:str:l, :str:r > :str:`, `0.0`, `:vec int:[]` are used instead.
+
+  → Faster type checking, good errors, easy compilation to almost any language
 
 - no blocking compile errors. You can always build, even if your record is still missing a field value, your matching is still inexhaustive, some parens are empty, etc.
   You will still see all the errors, though.
@@ -20,74 +43,32 @@ Just experimentation, use with a bucket of caution and salt.
 
 - no `Task`/`async`, detectable mutation, side effects, `|>`, infix operators, currying, modules, lifetime tracking
 
-## hello world
-
-```still
-run \:opt {}:_ -> :io {}:Standard-out-write "hello, world\n"
-```
-
-## echo in loop
-
-```still
-run \:opt str:state-or-uninitialized ->
-  let state
-        case state-or-uninitialized of
-        :opt str:Absent -> ""
-        :opt str:Present :str:initialized -> initialized
-  :io str:Io-batch
-      [ :io str:Standard-out-write
-          (str-flatten [ ansi-clear-screen, state, "\nType a sentence to echo: " ])
-      , :io str:Standard-in-read-line (\:str:line -> line)
-      ]
-
-ansi-clear-screen "\u{001B}c"
-```
-
-## cons-list
-
-```still
-type stack A
-    = Empty
-    | Cons { head A, tail stack A }
-
-stack-map \:\A -> B:element-change, :stack A:stack ->
-    case stack of
-    :stack A:Empty -> :stack B:Empty
-    :stack A:Cons { head :A:head, tail :stack A:tail } ->
-        :stack B:Cons
-            { head element-change head
-            , tail stack-map element-change tail
-            }
-```
-
 ## TODO
-- actually switch to f32 and i32
-- add `alloc: &'a impl Alloc` parameter to all declarations
 - track which variable declaration actually requires an allocator
 - clone local value variables (unless their type suggests `Copy`)
 - generate record structs (derive Clone, [Copy], [Debug], [PartialEq])
 - generate implementations for `StillToOwned` and `OwnedToStill` for all generated types
 - capture context in local function declarations
-- rename `case of` to `if x = ... -> ... = ... -> ...` and remove let destructuring. previous:
+- rename `case of` to `if x = ... > ... = ... > ...` and remove let destructuring. previous:
   ```still
   let :some:Variant member = variant
   result
   #
   case option of
-  :opt int:Absent ->
+  :opt int:Absent >
     0
-  :opt int:Present n ->
+  :opt int:Present n >
     n + 1
   ```
   now
   ```still
-  if variant = :some:Variant member ->
+  if variant = :some:Variant member >
   result
   #
   if option
-  = :opt int:Absent ->
+  = :opt int:Absent >
     0
-  = :opt int:Present n ->
+  = :opt int:Present n >
   n + 1
   ```
   this solves the nesting problem of early exits and "if else"
@@ -95,6 +76,8 @@ stack-map \:\A -> B:element-change, :stack A:stack ->
 - complete small standard library in rust (TODO `order`, `int/dec-add`, `int/dec-multiply`, `dec-power`, `str-compare`, `int-compare`, `dec-compare`, `map`, `set`, `type opt A = Absent | Present A` ...)
 - For recursive variant values, use reference. Also introduce an owned version which uses Box
 - type checking (notably also: check that each function output type only ever uses type variables used in the input type, and similarly: on non-function types, forbid the use of any new variables; in the error say "unknown type variable")
+- introduce `nat` type (`usize`) and require regular ints to be prefixed with `+`/`-`
+- rename `type` to `type-choice` and `type alias` to `type-alias`
 - simple io (`standard-in-read-line`, `standard-out-write`)
 - `case of` exhaustiveness checking
 - unused checking
@@ -104,25 +87,22 @@ stack-map \:\A -> B:element-change, :stack A:stack ->
 - use still lambda parameter names instead of parameter·index
 
 ## considering
-- reintroduce vec matching
-- (leaning slightly towards no as it can be nice to give short type names to common things, but that means increase in complexity) remove type aliases?
 - (leaning towards yes) actually deeply consider limiting reference calls to at most 1 argument just like variant construction.
   That would still not eliminate the need for parens in general (see lambda and case of) but allow e.g. `html-text int-to-str half window-width`
 - adding anonymous choice types. They are not allowed to be recursive. Use `type alias` for these. choice types can then be removed
 - find better function call syntax that makes it easy to unwrap the last argument
 - find better string literal syntax, like zig's `//` or js' `\`\``
 - (leaning no, at least for now) add or pattern `( first | second | third )` (potentially allow `:overall:( A | B | C )` (where the inner variant patterns don't need a type) specifically for variant)
-- introduce `nat` type and require regular ints to be prefixed with `+`/`-`
 - make formatter range independent, and instead cut a line >=100 (is that possible to do when trying to get a maximally fast formatter? Because it seems an intermediate recursive structure is required)
 - output rust on save
-- closed lambda, call and case-of syntax like `\pattern -> expression/`, `call<arg`, `if x ( A -> x | B -> y )`, then remove ::Parenthesized
+- closed lambda, call and case-of syntax like `\pattern > expression/`, `call<arg`, `if x ( A > x | B > y )`, then remove ::Parenthesized
 - (leaning towards no) extend typing model to only specify type variables, so `myFunction<int, str>`, `[]<int>`, `Present<int> 1`, similar to dhall and zig (but worse, because not first class. If it was you could pass types in records etc).
 
   ```still
-  stack-map<A, B> \:\A -> B:element-change, :stack<A>:stack ->
+  stack-map<A, B> \:\A > B:element-change, :stack<A>:stack >
       case stack of
-      Empty<A> -> Empty<B>
-      Cons<A> { head :A:head, tail :stack<A>:tail } ->
+      Empty<A> > Empty<B>
+      Cons<A> { head :A:head, tail :stack<A>:tail } >
           Cons<B>
               { head element-change head
               , tail stack-map<A, B> element-change tail

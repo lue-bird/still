@@ -2755,9 +2755,7 @@ struct StillSyntaxTypeField {
 #[derive(Clone, Debug, PartialEq)]
 enum StillSyntaxPattern {
     Char(Option<char>),
-    Int {
-        value: Result<i64, Box<str>>,
-    },
+    Int(Box<str>),
     String {
         content: String,
         quoting_style: StillSyntaxStringQuotingStyle,
@@ -2817,11 +2815,8 @@ enum StillSyntaxExpression {
         cases: Vec<StillSyntaxExpressionCase>,
     },
     Char(Option<char>),
-    Dec(Result<f64, Box<str>>),
-    Int {
-        // TODO inline
-        value: Result<i64, Box<str>>,
-    },
+    Dec(Box<str>),
+    Int(Box<str>),
     Lambda {
         parameters: Vec<StillSyntaxNode<StillSyntaxPattern>>,
         arrow_key_symbol_range: Option<lsp_types::Range>,
@@ -3724,10 +3719,8 @@ fn still_syntax_pattern_into(
 ) {
     match pattern_node.value {
         StillSyntaxPattern::Char(maybe_char) => still_char_into(so_far, *maybe_char),
-        StillSyntaxPattern::Int {
-            value: value_or_err,
-        } => {
-            still_int_into(so_far, value_or_err);
+        StillSyntaxPattern::Int(representation) => {
+            still_int_into(so_far, representation);
         }
         StillSyntaxPattern::String {
             content,
@@ -3884,10 +3877,10 @@ fn still_unicode_char_escape_into(so_far: &mut String, char: char) {
         let _ = write!(so_far, "\\u{{{:04X}}}", utf16_code);
     }
 }
-fn still_int_into(so_far: &mut String, value_or_err: &Result<i64, Box<str>>) {
-    match value_or_err {
-        Err(value_as_string) => {
-            so_far.push_str(value_as_string);
+fn still_int_into(so_far: &mut String, representation: &str) {
+    match representation.parse::<isize>() {
+        Err(_) => {
+            so_far.push_str(representation);
         }
         Ok(value) => {
             use std::fmt::Write as _;
@@ -4036,19 +4029,17 @@ fn still_syntax_expression_not_parenthesized_into(
         StillSyntaxExpression::Char(maybe_char) => {
             still_char_into(so_far, *maybe_char);
         }
-        StillSyntaxExpression::Dec(value_or_whatever) => match value_or_whatever {
-            Err(whatever) => {
-                so_far.push_str(whatever);
+        StillSyntaxExpression::Dec(representation) => match representation.parse::<f64>() {
+            Err(_) => {
+                so_far.push_str(representation);
             }
             Ok(value) => {
                 use std::fmt::Write as _;
-                let _ = write!(so_far, "{}", *value);
+                let _ = write!(so_far, "{}", value);
             }
         },
-        StillSyntaxExpression::Int {
-            value: value_or_err,
-        } => {
-            still_int_into(so_far, value_or_err);
+        StillSyntaxExpression::Int(representation) => {
+            still_int_into(so_far, representation);
         }
         StillSyntaxExpression::Lambda {
             parameters,
@@ -4080,7 +4071,7 @@ fn still_syntax_expression_not_parenthesized_into(
                 );
                 space_or_linebreak_indented_into(so_far, parameters_line_span, indent);
             }
-            so_far.push_str("->");
+            so_far.push_str(">");
             space_or_linebreak_indented_into(
                 so_far,
                 still_syntax_range_line_span(expression_node.range),
@@ -7447,7 +7438,7 @@ fn parse_still_syntax_function(state: &mut ParseState) -> Option<StillSyntaxNode
             parse_still_whitespace(state);
         }
     }
-    let maybe_arrow_key_symbol_range = parse_symbol_as_range(state, "->");
+    let maybe_arrow_key_symbol_range = parse_symbol_as_range(state, ">");
     parse_still_whitespace(state);
     let maybe_output_type: Option<StillSyntaxNode<StillSyntaxType>> =
         if state.position.character > u32::from(state.indent) {
@@ -7738,26 +7729,22 @@ fn parse_still_syntax_pattern_string(state: &mut ParseState) -> Option<StillSynt
 }
 
 fn parse_still_syntax_pattern_int(state: &mut ParseState) -> Option<StillSyntaxPattern> {
-    parse_still_unsigned_integer_base10_as_i64(state)
-        .map(|value| StillSyntaxPattern::Int { value: value })
-}
-fn parse_still_unsigned_integer_base10_as_i64(
-    state: &mut ParseState,
-) -> Option<Result<i64, Box<str>>> {
     let start_offset_utf8: usize = state.offset_utf8;
     if parse_unsigned_integer_base10(state) {
-        let decimal_str: &str = &state.source[start_offset_utf8..state.offset_utf8];
-        Some(str::parse::<i64>(decimal_str).map_err(|_| Box::from(decimal_str)))
+    } else if parse_symbol(state, "-") || parse_symbol(state, "+") {
+        let _: bool = parse_unsigned_integer_base10(state);
     } else {
-        None
+        return None;
     }
+    let decimal_str: &str = &state.source[start_offset_utf8..state.offset_utf8];
+    Some(StillSyntaxPattern::Int(Box::from(decimal_str)))
 }
 fn parse_still_syntax_expression_number(state: &mut ParseState) -> Option<StillSyntaxExpression> {
     let start_offset_utf8: usize = state.offset_utf8;
-    if !(parse_unsigned_integer_base10(state)
-        || parse_symbol(state, "-")
-        || parse_symbol(state, "+"))
-    {
+    if parse_unsigned_integer_base10(state) {
+    } else if parse_symbol(state, "-") || parse_symbol(state, "+") {
+        let _: bool = parse_unsigned_integer_base10(state);
+    } else {
         return None;
     }
     let has_decimal_point: bool = parse_symbol(state, ".");
@@ -7766,13 +7753,9 @@ fn parse_still_syntax_expression_number(state: &mut ParseState) -> Option<StillS
     }
     let full_chomped_str: &str = &state.source[start_offset_utf8..state.offset_utf8];
     Some(if has_decimal_point {
-        StillSyntaxExpression::Dec(
-            str::parse::<f64>(full_chomped_str).map_err(|_| Box::from(full_chomped_str)),
-        )
+        StillSyntaxExpression::Dec(Box::from(full_chomped_str))
     } else {
-        StillSyntaxExpression::Int {
-            value: str::parse::<i64>(full_chomped_str).map_err(|_| Box::from(full_chomped_str)),
-        }
+        StillSyntaxExpression::Int(Box::from(full_chomped_str))
     })
 }
 fn parse_still_char(state: &mut ParseState) -> Option<Option<char>> {
@@ -8182,7 +8165,7 @@ fn parse_still_syntax_expression_lambda(
             parse_still_whitespace(state);
         }
     }
-    let maybe_arrow_key_symbol_range: Option<lsp_types::Range> = parse_symbol_as_range(state, "->");
+    let maybe_arrow_key_symbol_range: Option<lsp_types::Range> = parse_symbol_as_range(state, ">");
     parse_still_whitespace(state);
     let maybe_result: Option<StillSyntaxNode<StillSyntaxExpression>> =
         if state.position.character > u32::from(state.indent) {
@@ -8278,7 +8261,7 @@ fn parse_still_syntax_expression_case_of(
 fn parse_still_syntax_expression_case(state: &mut ParseState) -> Option<StillSyntaxExpressionCase> {
     let case_pattern_node: StillSyntaxNode<StillSyntaxPattern> = parse_still_syntax_pattern(state)?;
     parse_still_whitespace(state);
-    Some(match parse_symbol_as_range(state, "->") {
+    Some(match parse_symbol_as_range(state, ">") {
         None => StillSyntaxExpressionCase {
             pattern: case_pattern_node,
             arrow_key_symbol_range: None,
@@ -8968,86 +8951,71 @@ As for why no type could be determined, see the following {} errors",
     }
     rust_items.reserve(records_used.len());
     for used_still_record_fields in records_used.into_iter().filter(|fields| !fields.is_empty()) {
-        rust_items.push(syn::Item::Struct(syn::ItemStruct {
-            attrs: vec![syn::Attribute {
-                pound_token: syn::token::Pound(syn_span()),
-                style: syn::AttrStyle::Outer,
-                bracket_token: syn::token::Bracket(syn_span()),
-                meta: syn::Meta::List(syn::MetaList {
-                    path: syn_path_reference(["derive"]),
-                    delimiter: syn::MacroDelimiter::Paren(syn::token::Paren(syn_span())),
-                    // is there really no way to print e.g. Punctuated?
-                    tokens: [
-                        "Copy",
-                        "Clone",
-                        "PartialEq",
-                        "Eq",
-                        "PartialOrd",
-                        "Ord",
-                        "Debug",
-                        "Hash",
-                    ]
-                    .into_iter()
-                    .flat_map(|token| {
-                        [
-                            proc_macro2::TokenTree::Ident(syn_ident(token)),
-                            proc_macro2::TokenTree::Punct(proc_macro2::Punct::new(
-                                ',',
-                                proc_macro2::Spacing::Alone,
-                            )),
-                        ]
-                    })
-                    .collect(),
-                }),
-            }],
-            vis: syn::Visibility::Public(syn::token::Pub(syn_span())),
-            struct_token: syn::token::Struct(syn_span()),
-            ident: syn_ident(&still_field_names_to_rust_record_struct_name(
-                used_still_record_fields.iter().copied(),
-            )),
-            generics: syn::Generics {
-                lt_token: Some(syn::token::Lt(syn_span())),
-                params: used_still_record_fields
-                    .iter()
-                    .map(|field_name| {
-                        syn::GenericParam::Type(syn::TypeParam {
-                            attrs: vec![],
-                            ident: syn_ident(&still_type_variable_to_rust(field_name)),
-                            colon_token: None,
-                            bounds: syn::punctuated::Punctuated::new(),
-                            eq_token: None,
-                            default: None,
-                        })
-                    })
-                    .collect(),
-                gt_token: Some(syn::token::Gt(syn_span())),
-                where_clause: None,
-            },
-            fields: syn::Fields::Named(syn::FieldsNamed {
-                brace_token: syn::token::Brace(syn_span()),
-                named: used_still_record_fields
-                    .into_iter()
-                    .map(|field_name| syn::Field {
-                        attrs: vec![],
-                        vis: syn::Visibility::Public(syn::token::Pub(syn_span())),
-                        mutability: syn::FieldMutability::None,
-                        ident: Some(syn_ident(&still_name_to_lowercase_rust(field_name))),
-                        colon_token: Some(syn::token::Colon(syn_span())),
-                        ty: syn::Type::Path(syn::TypePath {
-                            qself: None,
-                            path: syn_path_reference([&still_type_variable_to_rust(field_name)]),
-                        }),
-                    })
-                    .collect(),
-            }),
-            semi_token: None,
-        }));
+        rust_items.push(still_syntax_record_to_rust(used_still_record_fields));
     }
     syn::File {
         shebang: None,
         attrs: vec![],
         items: rust_items,
     }
+}
+fn still_syntax_record_to_rust(used_still_record_fields: Vec<&str>) -> syn::Item {
+    syn::Item::Struct(syn::ItemStruct {
+        attrs: vec![syn_attribute_derive(
+            [
+                "Copy",
+                "Clone",
+                "PartialEq",
+                "Eq",
+                "PartialOrd",
+                "Ord",
+                "Debug",
+                "Hash",
+            ]
+            .into_iter(),
+        )],
+        vis: syn::Visibility::Public(syn::token::Pub(syn_span())),
+        struct_token: syn::token::Struct(syn_span()),
+        ident: syn_ident(&still_field_names_to_rust_record_struct_name(
+            used_still_record_fields.iter().copied(),
+        )),
+        generics: syn::Generics {
+            lt_token: Some(syn::token::Lt(syn_span())),
+            params: used_still_record_fields
+                .iter()
+                .map(|field_name| {
+                    syn::GenericParam::Type(syn::TypeParam {
+                        attrs: vec![],
+                        ident: syn_ident(&still_type_variable_to_rust(field_name)),
+                        colon_token: None,
+                        bounds: syn::punctuated::Punctuated::new(),
+                        eq_token: None,
+                        default: None,
+                    })
+                })
+                .collect(),
+            gt_token: Some(syn::token::Gt(syn_span())),
+            where_clause: None,
+        },
+        fields: syn::Fields::Named(syn::FieldsNamed {
+            brace_token: syn::token::Brace(syn_span()),
+            named: used_still_record_fields
+                .into_iter()
+                .map(|field_name| syn::Field {
+                    attrs: vec![],
+                    vis: syn::Visibility::Public(syn::token::Pub(syn_span())),
+                    mutability: syn::FieldMutability::None,
+                    ident: Some(syn_ident(&still_name_to_lowercase_rust(field_name))),
+                    colon_token: Some(syn::token::Colon(syn_span())),
+                    ty: syn::Type::Path(syn::TypePath {
+                        qself: None,
+                        path: syn_path_reference([&still_type_variable_to_rust(field_name)]),
+                    }),
+                })
+                .collect(),
+        }),
+        semi_token: None,
+    })
 }
 fn sorted_field_names<'a>(field_names: impl Iterator<Item = &'a str>) -> Vec<&'a str> {
     let mut field_names_vec: Vec<&str> = field_names.collect();
@@ -9546,7 +9514,7 @@ fn choice_type_declaration_to_rust<'a>(
             });
         }
         Some(variant0_name) => {
-            rust_variants.push(syn_variant(
+            rust_variants.push(still_syntax_variant_to_rust(
                 errors,
                 records_used,
                 variant0_name,
@@ -9564,7 +9532,7 @@ fn choice_type_declaration_to_rust<'a>(
                 });
             }
             Some(variant_name) => {
-                rust_variants.push(syn_variant(
+                rust_variants.push(still_syntax_variant_to_rust(
                     errors,
                     records_used,
                     still_syntax_node_as_ref_map(variant_name, StillName::as_ref),
@@ -9573,11 +9541,17 @@ fn choice_type_declaration_to_rust<'a>(
             }
         }
     }
-    // TODO add PartialEq, Clone, add parameters including default lifetime param
     syn::Item::Enum(syn::ItemEnum {
         attrs: maybe_documentation
             .map(syn_attribute_doc)
             .into_iter()
+            .chain(std::iter::once(syn_attribute_derive(
+                [
+                    // TODO only if all variant values are "Copy",
+                    "Clone",
+                ]
+                .into_iter(),
+            )))
             .collect::<Vec<_>>(),
         vis: syn::Visibility::Public(syn::token::Pub(syn_span())),
         enum_token: syn::token::Enum(syn_span()),
@@ -9592,7 +9566,7 @@ fn choice_type_declaration_to_rust<'a>(
         variants: rust_variants,
     })
 }
-fn syn_variant<'a>(
+fn still_syntax_variant_to_rust<'a>(
     errors: &mut Vec<StillErrorNode>,
     records_used: &mut std::collections::HashSet<Vec<&'a str>>,
     variant_name: StillSyntaxNode<&str>,
@@ -9703,8 +9677,6 @@ fn variable_declaration_to_rust<'a>(
     };
     // TODO when contains type contains neither type variables nor lifetime variables and is not a function type,
     // use syn::Item::Static(syn::ItemStatic
-    // TODO consider moving some parameters here if type is function, either generated
-    // or with existing names if expression is lambda
     match maybe_still_type_node
         .as_ref()
         .and_then(|n| still_syntax_type_to_function(type_aliases, still_syntax_node_as_ref(n)))
@@ -10450,7 +10422,7 @@ fn still_syntax_expression_to_rust<'a>(
                 lit: syn::Lit::Char(syn::LitChar::new(char, syn_span())),
             }),
         },
-        StillSyntaxExpression::Dec(dec_or_err) => match dec_or_err {
+        StillSyntaxExpression::Dec(dec_or_err) => match dec_or_err.parse::<f64>() {
             Err(parse_error) => {
                 errors.push(StillErrorNode {
                     range: expression_node.range,
@@ -10463,9 +10435,7 @@ fn still_syntax_expression_to_rust<'a>(
                 lit: syn::Lit::Float(syn::LitFloat::new(&dec.to_string(), syn_span())),
             }),
         },
-        StillSyntaxExpression::Int {
-            value: int_or_value,
-        } => match int_or_value {
+        StillSyntaxExpression::Int(representation) => match representation.parse::<isize>() {
             Err(parse_error) => {
                 errors.push(StillErrorNode {
                     range: expression_node.range,
@@ -10984,17 +10954,18 @@ fn still_syntax_pattern_to_rust<'a>(
                 lit: syn::Lit::Char(syn::LitChar::new(char_value, syn_span())),
             }),
         },
-        StillSyntaxPattern::Int { value } => {
-            let repr: &str = match value {
+        StillSyntaxPattern::Int(representation) => {
+            let repr: &str = match representation.parse::<isize>() {
                 Ok(int) => &int.to_string(),
-                Err(source) => {
+                Err(parse_error) => {
                     errors.push(StillErrorNode {
                         range: pattern_node.range,
-                        message: Box::from(
-                            "invalid int format. Expected base 10 whole numbers like -123 or 0",
-                        ),
+                        message: format!(
+                            "invalid int format. Expected base 10 whole numbers like -123 or 0: {parse_error}"
+                        ).into_boxed_str(),
                     });
-                    source.as_ref()
+                    // a random number that never matches
+                    "493595834980"
                 }
             };
             syn::Pat::Lit(syn::ExprLit {
@@ -11236,6 +11207,29 @@ fn default_parameter_bounds() -> impl Iterator<Item = syn::TypeParamBound> {
         }),
     ]
     .into_iter()
+}
+fn syn_attribute_derive<'a>(trait_macro_names: impl Iterator<Item = &'a str>) -> syn::Attribute {
+    syn::Attribute {
+        pound_token: syn::token::Pound(syn_span()),
+        style: syn::AttrStyle::Outer,
+        bracket_token: syn::token::Bracket(syn_span()),
+        meta: syn::Meta::List(syn::MetaList {
+            path: syn_path_reference(["derive"]),
+            delimiter: syn::MacroDelimiter::Paren(syn::token::Paren(syn_span())),
+            // is there really no way to print e.g. Punctuated?
+            tokens: trait_macro_names
+                .flat_map(|token| {
+                    [
+                        proc_macro2::TokenTree::Ident(syn_ident(token)),
+                        proc_macro2::TokenTree::Punct(proc_macro2::Punct::new(
+                            ',',
+                            proc_macro2::Spacing::Alone,
+                        )),
+                    ]
+                })
+                .collect(),
+        }),
+    }
 }
 const default_allocator_parameter_name: &str = "alloc";
 fn default_allocator_fn_arg() -> syn::FnArg {
