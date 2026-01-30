@@ -3080,8 +3080,7 @@ fn still_syntax_expression_type_with<'a>(
         } => {
             match local_bindings.get(variable_node.value.as_str()) {
                 None => {
-                    // TODO look at core variable declarations
-                    // TODO look at file-scope declarations
+                    // TODO look at project-scope declarations
                     Err(vec![StillErrorNode {
                         range: expression_node.range,
                         message: Box::from("no variable with this name in scope"),
@@ -4071,7 +4070,7 @@ fn still_syntax_expression_not_parenthesized_into(
                 );
                 space_or_linebreak_indented_into(so_far, parameters_line_span, indent);
             }
-            so_far.push_str(">");
+            so_far.push('>');
             space_or_linebreak_indented_into(
                 so_far,
                 still_syntax_range_line_span(expression_node.range),
@@ -8721,7 +8720,6 @@ fn still_project_to_rust(
     errors: &mut Vec<StillErrorNode>,
     StillSyntaxProject { declarations }: &StillSyntaxProject,
 ) -> syn::File {
-    let mut rust_items: Vec<syn::Item> = Vec::with_capacity(declarations.len());
     let mut type_graph: strongly_connected_components::Graph =
         strongly_connected_components::Graph::new();
     let mut type_graph_node_by_name: std::collections::HashMap<
@@ -8732,8 +8730,6 @@ fn still_project_to_rust(
         strongly_connected_components::Node,
         TypeDeclarationInfo,
     > = std::collections::HashMap::new();
-    let mut type_aliases: std::collections::HashMap<&str, TypeAliasInfo> =
-        std::collections::HashMap::new();
 
     let mut variable_graph: strongly_connected_components::Graph =
         strongly_connected_components::Graph::new();
@@ -8822,13 +8818,6 @@ fn still_project_to_rust(
                                     type_: maybe_type.as_ref().map(still_syntax_node_as_ref),
                                 },
                             );
-                            type_aliases.insert(
-                                &name_node.value,
-                                TypeAliasInfo {
-                                    parameters: parameters,
-                                    type_: maybe_type.as_ref().map(still_syntax_node_as_ref),
-                                },
-                            );
                         }
                     },
                     StillSyntaxDeclaration::Variable {
@@ -8866,24 +8855,6 @@ fn still_project_to_rust(
             type_declaration_info,
         );
     }
-    let mut records_used: std::collections::HashSet<Vec<&str>> = std::collections::HashSet::new();
-    for type_declaration_strongly_connected_component in type_graph.find_sccs().iter_sccs() {
-        // TODO collect recursive types and store which variants reference a cycle member
-        // to then use that info to represent as & and when matching in rust deref
-        for type_declaration in type_declaration_strongly_connected_component
-            .iter_nodes()
-            .filter_map(|variable_declaration_graph_node| {
-                type_declaration_by_graph_node.get(&variable_declaration_graph_node)
-            })
-            .copied()
-        {
-            rust_items.extend(type_declaration_to_rust(
-                errors,
-                &mut records_used,
-                type_declaration,
-            ));
-        }
-    }
     for (&variable_declaration_graph_node, &variable_declaration_info) in
         variable_declaration_by_graph_node.iter()
     {
@@ -8896,11 +8867,117 @@ fn still_project_to_rust(
             );
         }
     }
+    still_project_info_to_rust(
+        errors,
+        &type_graph,
+        &type_declaration_by_graph_node,
+        &variable_graph,
+        &variable_declaration_by_graph_node,
+    )
+}
+
+fn still_project_info_to_rust(
+    errors: &mut Vec<StillErrorNode>,
+    type_graph: &strongly_connected_components::Graph,
+    type_declaration_by_graph_node: &std::collections::HashMap<
+        strongly_connected_components::Node,
+        TypeDeclarationInfo,
+    >,
+    variable_graph: &strongly_connected_components::Graph,
+    variable_declaration_by_graph_node: &std::collections::HashMap<
+        strongly_connected_components::Node,
+        VariableDeclarationInfo,
+    >,
+) -> syn::File {
+    let mut rust_items: Vec<syn::Item> =
+        Vec::with_capacity(type_graph.len() * 3 + variable_graph.len());
+    let mut type_aliases: std::collections::HashMap<&str, TypeAliasInfo> =
+        std::collections::HashMap::new();
+    let mut choice_types: std::collections::HashMap<&str, ChoiceTypeInfo> =
+        std::collections::HashMap::new();
+    let mut records_used: std::collections::HashSet<Vec<&str>> = std::collections::HashSet::new();
+    for type_declaration_strongly_connected_component in type_graph.find_sccs().iter_sccs() {
+        // TODO collect recursive types and store which variants reference a cycle member
+        // to then use that info to represent as & and when matching in rust deref
+        for type_declaration_info in type_declaration_strongly_connected_component
+            .iter_nodes()
+            .filter_map(|variable_declaration_graph_node| {
+                type_declaration_by_graph_node.get(&variable_declaration_graph_node)
+            })
+            .copied()
+        {
+            match type_declaration_info {
+                TypeDeclarationInfo::TypeAlias {
+                    range,
+                    documentation: maybe_documentation,
+                    name,
+                    parameters,
+                    type_: maybe_type,
+                } => {
+                    type_aliases.insert(
+                        name,
+                        TypeAliasInfo {
+                            parameters: parameters,
+                            type_: maybe_type,
+                        },
+                    );
+                    rust_items.extend(type_alias_declaration_to_rust(
+                        errors,
+                        &mut records_used,
+                        maybe_documentation.map(|n| n.value),
+                        range,
+                        name,
+                        parameters,
+                        maybe_type,
+                    ));
+                }
+                TypeDeclarationInfo::ChoiceType {
+                    range,
+                    documentation: maybe_documentation,
+                    name,
+                    parameters,
+                    variant0_name: maybe_variant0_name,
+                    variant0_value: maybe_variant0_value,
+                    variant1_up,
+                } => {
+                    let info: ChoiceTypeInfo = ChoiceTypeInfo {
+                        parameters: parameters,
+                        variant0_name: maybe_variant0_name,
+                        variant0_value: maybe_variant0_value,
+                        variant1_up: variant1_up,
+                        is_copy: maybe_variant0_value
+                            .into_iter()
+                            .chain(variant1_up.iter().filter_map(|variant| {
+                                variant.value.as_ref().map(still_syntax_node_as_ref)
+                            }))
+                            .all(|variant_value_node| {
+                                still_syntax_type_is_copy(
+                                    true,
+                                    &type_aliases,
+                                    &choice_types,
+                                    variant_value_node,
+                                )
+                            }),
+                    };
+                    choice_types.insert(name, info);
+                    choice_type_declaration_to_rust_into(
+                        &mut rust_items,
+                        errors,
+                        &mut records_used,
+                        maybe_documentation.map(|n| n.value),
+                        range,
+                        name,
+                        info,
+                    );
+                }
+            }
+        }
+    }
     // TODO populate with core variable declaration types
     let mut variable_declaration_types: std::collections::HashMap<
         &str,
         Option<StillSyntaxNode<StillSyntaxType>>,
-    > = std::collections::HashMap::with_capacity(variable_declaration_by_graph_node.len());
+    > = std::collections::HashMap::with_capacity(variable_graph.len());
     for variable_declaration_strongly_connected_component in variable_graph.find_sccs().iter_sccs()
     {
         let variable_declarations_in_strongly_connected_component: Vec<VariableDeclarationInfo> =
@@ -9786,48 +9863,6 @@ fn still_syntax_expression_connect_variables_in_graph_from(
         }
     }
 }
-fn type_declaration_to_rust<'a>(
-    errors: &mut Vec<StillErrorNode>,
-    records_used: &mut std::collections::HashSet<Vec<&'a str>>,
-    type_declaration_info: TypeDeclarationInfo<'a>,
-) -> Option<syn::Item> {
-    match type_declaration_info {
-        TypeDeclarationInfo::TypeAlias {
-            range,
-            documentation: maybe_documentation,
-            name,
-            parameters,
-            type_: maybe_type,
-        } => type_alias_declaration_to_rust(
-            errors,
-            records_used,
-            maybe_documentation.map(|n| n.value),
-            range,
-            name,
-            parameters,
-            maybe_type,
-        ),
-        TypeDeclarationInfo::ChoiceType {
-            range,
-            documentation: maybe_documentation,
-            name,
-            parameters,
-            variant0_name,
-            variant0_value,
-            variant1_up,
-        } => Some(choice_type_declaration_to_rust(
-            errors,
-            records_used,
-            maybe_documentation.map(|n| n.value),
-            range,
-            name,
-            parameters,
-            variant0_name,
-            variant0_value,
-            variant1_up,
-        )),
-    }
-}
 fn type_alias_declaration_to_rust<'a>(
     errors: &mut Vec<StillErrorNode>,
     records_used: &mut std::collections::HashSet<Vec<&'a str>>,
@@ -9873,29 +9908,27 @@ fn type_alias_declaration_to_rust<'a>(
         semi_token: syn::token::Semi(syn_span()),
     }))
 }
-fn choice_type_declaration_to_rust<'a>(
+fn choice_type_declaration_to_rust_into<'a>(
+    rust_items: &mut Vec<syn::Item>,
     errors: &mut Vec<StillErrorNode>,
     records_used: &mut std::collections::HashSet<Vec<&'a str>>,
     maybe_documentation: Option<&str>,
     range: lsp_types::Range,
     name: &str,
-    parameters: &[StillSyntaxNode<StillName>],
-    maybe_variant0_name: Option<StillSyntaxNode<&str>>,
-    maybe_variant0_value: Option<StillSyntaxNode<&'a StillSyntaxType>>,
-    variant1_up: &'a [StillSyntaxChoiceTypeDeclarationTailingVariant],
-) -> syn::Item {
+    info: ChoiceTypeInfo<'a>,
+) {
     let rust_name: String = still_name_to_uppercase_rust(name);
     let mut rust_parameters: syn::punctuated::Punctuated<syn::GenericParam, syn::token::Comma> =
         syn::punctuated::Punctuated::new();
     rust_parameters.push(syn::GenericParam::Lifetime(syn_default_lifetime_parameter()));
-    for parameter_node in parameters {
+    for parameter_node in info.parameters {
         rust_parameters.push(syn::GenericParam::Type(syn::TypeParam::from(syn_ident(
             &still_type_variable_to_rust(&parameter_node.value),
         ))));
     }
     let mut rust_variants: syn::punctuated::Punctuated<syn::Variant, syn::token::Comma> =
         syn::punctuated::Punctuated::new();
-    match maybe_variant0_name {
+    match info.variant0_name {
         None => {
             // no point in generating a variant since it's never referenced
             errors.push(StillErrorNode {
@@ -9908,11 +9941,11 @@ fn choice_type_declaration_to_rust<'a>(
                 errors,
                 records_used,
                 variant0_name,
-                maybe_variant0_value,
+                info.variant0_value,
             ));
         }
     }
-    for variant in variant1_up {
+    for variant in info.variant1_up {
         match &variant.name {
             None => {
                 // no point in generating a variant since it's never referenced
@@ -9931,16 +9964,12 @@ fn choice_type_declaration_to_rust<'a>(
             }
         }
     }
-    syn::Item::Enum(syn::ItemEnum {
+    rust_items.push(syn::Item::Enum(syn::ItemEnum {
         attrs: maybe_documentation
             .map(syn_attribute_doc)
             .into_iter()
             .chain(std::iter::once(syn_attribute_derive(
-                [
-                    // TODO only if all variant values are "Copy",
-                    "Clone",
-                ]
-                .into_iter(),
+                std::iter::once("Clone").chain(if info.is_copy { Some("Copy") } else { None }),
             )))
             .collect::<Vec<_>>(),
         vis: syn::Visibility::Public(syn::token::Pub(syn_span())),
@@ -9954,7 +9983,7 @@ fn choice_type_declaration_to_rust<'a>(
         },
         brace_token: syn::token::Brace(syn_span()),
         variants: rust_variants,
-    })
+    }));
 }
 fn still_syntax_variant_to_rust<'a>(
     errors: &mut Vec<StillErrorNode>,
@@ -9984,6 +10013,104 @@ fn still_syntax_variant_to_rust<'a>(
             }
         },
         discriminant: None,
+    }
+}
+fn still_syntax_type_is_copy(
+    variables_are_copy: bool,
+    type_aliases: &std::collections::HashMap<&str, TypeAliasInfo>,
+    choice_types: &std::collections::HashMap<&str, ChoiceTypeInfo>,
+    type_node: StillSyntaxNode<&StillSyntaxType>,
+) -> bool {
+    match &type_node.value {
+        StillSyntaxType::Variable(_) => variables_are_copy,
+        StillSyntaxType::Parenthesized(maybe_in_parens) => {
+            maybe_in_parens.as_ref().is_some_and(|in_parens_node| {
+                still_syntax_type_is_copy(
+                    variables_are_copy,
+                    type_aliases,
+                    choice_types,
+                    still_syntax_node_unbox(in_parens_node),
+                )
+            })
+        }
+        StillSyntaxType::WithComment {
+            comment: _,
+            type_: maybe_after_comment,
+        } => maybe_after_comment
+            .as_ref()
+            .is_some_and(|after_comment_node| {
+                still_syntax_type_is_copy(
+                    variables_are_copy,
+                    type_aliases,
+                    choice_types,
+                    still_syntax_node_unbox(after_comment_node),
+                )
+            }),
+        StillSyntaxType::Function {
+            inputs,
+            arrow_key_symbol_range: _,
+            output: maybe_output,
+        } => {
+            inputs.iter().all(|input_node| {
+                still_syntax_type_is_copy(
+                    variables_are_copy,
+                    type_aliases,
+                    choice_types,
+                    still_syntax_node_as_ref(input_node),
+                )
+            }) && maybe_output.as_ref().is_some_and(|output_node| {
+                still_syntax_type_is_copy(
+                    variables_are_copy,
+                    type_aliases,
+                    choice_types,
+                    still_syntax_node_unbox(output_node),
+                )
+            })
+        }
+        StillSyntaxType::Construct {
+            name: name_node,
+            arguments,
+        } => {
+            (match type_aliases.get(name_node.value.as_str()) {
+                None => {
+                    match choice_types.get(name_node.value.as_str()) {
+                        None => {
+                            // not found, therefore from (mutually) recursive type,
+                            // therefore compiled to a reference, therefore Copy
+                            true
+                        }
+                        Some(choice_type_info) => choice_type_info.is_copy,
+                    }
+                }
+                Some(type_alias) => match type_alias.type_ {
+                    None => false,
+                    Some(aliased_type_node) => still_syntax_type_is_copy(
+                        variables_are_copy,
+                        type_aliases,
+                        choice_types,
+                        aliased_type_node,
+                    ),
+                },
+            }) && arguments.iter().all(|input_node| {
+                still_syntax_type_is_copy(
+                    variables_are_copy,
+                    type_aliases,
+                    choice_types,
+                    still_syntax_node_as_ref(input_node),
+                )
+            })
+        }
+        StillSyntaxType::Record(fields) => fields
+            .iter()
+            .filter_map(|field| field.value.as_ref())
+            .all(|field_value_node| {
+                still_syntax_type_is_copy(
+                    variables_are_copy,
+                    type_aliases,
+                    choice_types,
+                    still_syntax_node_as_ref(field_value_node),
+                )
+            }),
     }
 }
 fn variable_declaration_to_rust<'a>(
@@ -10329,6 +10456,14 @@ fn still_syntax_type_to_record(
 struct TypeAliasInfo<'a> {
     parameters: &'a [StillSyntaxNode<StillName>],
     type_: Option<StillSyntaxNode<&'a StillSyntaxType>>,
+}
+#[derive(Clone, Copy)]
+struct ChoiceTypeInfo<'a> {
+    parameters: &'a [StillSyntaxNode<StillName>],
+    variant0_name: Option<StillSyntaxNode<&'a str>>,
+    variant0_value: Option<StillSyntaxNode<&'a StillSyntaxType>>,
+    variant1_up: &'a [StillSyntaxChoiceTypeDeclarationTailingVariant],
+    is_copy: bool,
 }
 /// Keep peeling until the type is not a type alias anymore.
 /// _Inner_ type aliases in a sub-part will not be resolved.
@@ -10842,7 +10977,7 @@ fn still_syntax_expression_to_rust<'a>(
             parameters,
             arrow_key_symbol_range: _,
             result: maybe_result,
-        } => syn::Expr::Closure(syn::ExprClosure {
+        } => syn_expr_call_alloc_method(syn::Expr::Closure(syn::ExprClosure {
             attrs: vec![],
             lifetimes: None,
             constness: None,
@@ -10872,7 +11007,7 @@ fn still_syntax_expression_to_rust<'a>(
                 project_variable_declarations,
                 maybe_result.as_ref().map(still_syntax_node_unbox),
             )),
-        }),
+        })),
         StillSyntaxExpression::Let {
             declaration: maybe_declaration,
             result: maybe_result,
@@ -10981,12 +11116,15 @@ fn still_syntax_expression_to_rust<'a>(
                             attrs: vec![],
                             func: Box::new(rust_variant_reference),
                             paren_token: syn::token::Paren(syn_span()),
-                            args: std::iter::once(still_syntax_expression_to_rust(
-                                errors,
-                                records_used,
-                                project_variable_declarations,
-                                still_syntax_node_unbox(value_node),
-                            ))
+                            args: std::iter::once({
+                                // TODO if variant value is recursive, wrap in reference
+                                still_syntax_expression_to_rust(
+                                    errors,
+                                    records_used,
+                                    project_variable_declarations,
+                                    still_syntax_node_unbox(value_node),
+                                )
+                            })
                             .collect(),
                         }),
                     }
@@ -11009,45 +11147,56 @@ fn still_syntax_expression_to_rust<'a>(
             arguments,
         } => {
             let rust_variable_name: String = still_name_to_lowercase_rust(&variable_node.value);
-            if arguments.is_empty() {
-                match project_variable_declarations.get(variable_node.value.as_str()) {
-                    None => {
-                        // TODO check if local binding actually exists
-                        syn::Expr::Path(syn::ExprPath {
-                            attrs: vec![],
-                            qself: None,
-                            path: syn_path_reference([&rust_variable_name]),
-                        })
-                    }
-                    Some(_) => {
-                        // TODO currently all rust compiled variable declarations are fn(&Alloc)s
+            let rust_arguments = arguments.iter().map(|argument_node| {
+                still_syntax_expression_to_rust(
+                    errors,
+                    records_used,
+                    project_variable_declarations,
+                    still_syntax_node_as_ref(argument_node),
+                )
+            });
+            // TODO invert, first check for local binding, else assume global binding
+            match project_variable_declarations.get(variable_node.value.as_str()) {
+                Some(_) => {
+                    // TODO currently all rust compiled variable declarations are fn(&Alloc)s,
+                    // once some can omit &Alloc, omit argument
+                    // once some can be static, return variable without call
+                    syn::Expr::Call(syn::ExprCall {
+                        attrs: vec![],
+                        func: Box::new(syn_expr_reference([&rust_variable_name])),
+                        paren_token: syn::token::Paren(syn_span()),
+                        args: std::iter::once(syn_expr_reference([
+                            default_allocator_parameter_name,
+                        ]))
+                        .chain(rust_arguments)
+                        .collect(),
+                    })
+                }
+                None => {
+                    let variable_is_copy: bool = {
+                        // TODO check type of local binding
+                        false
+                    };
+                    let rust_variable: syn::Expr = if variable_is_copy {
+                        syn_expr_reference([&rust_variable_name])
+                    } else {
+                        syn_expr_call_clone_method(syn_expr_reference([&rust_variable_name]))
+                    };
+                    if arguments.is_empty() {
+                        rust_variable
+                    } else {
                         syn::Expr::Call(syn::ExprCall {
                             attrs: vec![],
-                            func: Box::new(syn_expr_reference([&rust_variable_name])),
+                            func: Box::new(rust_variable),
                             paren_token: syn::token::Paren(syn_span()),
                             args: std::iter::once(syn_expr_reference([
                                 default_allocator_parameter_name,
                             ]))
+                            .chain(rust_arguments)
                             .collect(),
                         })
                     }
                 }
-            } else {
-                syn::Expr::Call(syn::ExprCall {
-                    attrs: vec![],
-                    func: Box::new(syn_expr_reference([&rust_variable_name])),
-                    paren_token: syn::token::Paren(syn_span()),
-                    args: std::iter::once(syn_expr_reference([default_allocator_parameter_name]))
-                        .chain(arguments.iter().map(|argument_node| {
-                            still_syntax_expression_to_rust(
-                                errors,
-                                records_used,
-                                project_variable_declarations,
-                                still_syntax_node_as_ref(argument_node),
-                            )
-                        }))
-                        .collect(),
-                })
             }
         }
         StillSyntaxExpression::CaseOf {
@@ -11674,6 +11823,28 @@ fn default_allocator_fn_arg() -> syn::FnArg {
                 .collect(),
             })),
         })),
+    })
+}
+fn syn_expr_call_alloc_method(to_allocate: syn::Expr) -> syn::Expr {
+    syn::Expr::MethodCall(syn::ExprMethodCall {
+        attrs: vec![],
+        receiver: Box::new(syn_expr_reference([default_allocator_parameter_name])),
+        dot_token: syn::token::Dot(syn_span()),
+        method: syn_ident("alloc"),
+        turbofish: None,
+        paren_token: syn::token::Paren(syn_span()),
+        args: std::iter::once(to_allocate).collect(),
+    })
+}
+fn syn_expr_call_clone_method(to_clone: syn::Expr) -> syn::Expr {
+    syn::Expr::MethodCall(syn::ExprMethodCall {
+        attrs: vec![],
+        receiver: Box::new(to_clone),
+        dot_token: syn::token::Dot(syn_span()),
+        method: syn_ident("clone"),
+        turbofish: None,
+        paren_token: syn::token::Paren(syn_span()),
+        args: syn::punctuated::Punctuated::new(),
     })
 }
 fn syn_expr_todo() -> syn::Expr {
