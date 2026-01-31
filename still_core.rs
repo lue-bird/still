@@ -182,11 +182,12 @@ impl StillToOwned for &str {
 fn str_byte_count(str: Str) -> Int {
     str.len() as Int
 }
+// TODO fn str_slice_from_byte_index_for_byte_count(start_index, slice_byte_count, str: Str) -> Str
 fn str_chr_at_byte_index(byte_index: Int, str: Str) -> Option<Chr> {
     str.get(str.ceil_char_boundary(byte_index as usize)..)
         .and_then(|chr_sub| chr_sub.chars().next())
 }
-fn str_to_chars(str: Str) -> Vec<Chr> {
+fn str_to_chrs(str: Str) -> Vec<Chr> {
     std::rc::Rc::new(str.chars().collect::<std::vec::Vec<Chr>>())
 }
 fn chrs_to_str<'a>(allocator: &'a impl Alloc, chars: Vec<Chr>) -> Str<'a> {
@@ -216,13 +217,13 @@ impl<A: OwnedToStill> OwnedToStill for std::vec::Vec<A> {
 fn vec_literal<const N: usize, A>(elements: [A; N]) -> Vec<A> {
     std::rc::Rc::new(std::vec::Vec::from(elements))
 }
-fn vec_repeat<A: Clone>(element: A, length: Int) -> Vec<A> {
+fn vec_repeat<A: Clone>(length: Int, element: A) -> Vec<A> {
     std::rc::Rc::new(std::iter::repeat_n(element, length as usize).collect::<std::vec::Vec<A>>())
 }
 fn vec_length<A>(vec: Vec<A>) -> Int {
     vec.len() as Int
 }
-fn vec_get<A: Clone>(index: Int, vec: Vec<A>) -> Opt<A> {
+fn vec_element<A: Clone>(index: Int, vec: Vec<A>) -> Opt<A> {
     vec.get(index as usize).cloned()
 }
 fn vec_take<A: Clone>(taken_length: Int, vec: Vec<A>) -> Vec<A> {

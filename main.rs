@@ -771,13 +771,12 @@ fn respond_to_hover(
                     documentation,
                     maybe_result_node
                         .as_ref()
-                        .and_then(|result_node| {
+                        .map(|result_node| {
                             still_syntax_expression_type(
                                 &still_syntax_project_info(&hovered_project_state.syntax)
                                     .type_aliases,
                                 still_syntax_node_as_ref(result_node),
                             )
-                            .ok()
                         })
                         .as_ref()
                         .map(still_syntax_node_as_ref),
@@ -920,6 +919,16 @@ fn respond_to_hover(
                             result: maybe_result_node,
                         } => {
                             if origin_project_declaration_name_node.value.as_str() == hovered_name {
+                                let maybe_result_type =
+                                    maybe_result_node.as_ref().map(|result_node| {
+                                        still_syntax_expression_type(
+                                            &still_syntax_project_info(
+                                                &hovered_project_state.syntax,
+                                            )
+                                            .type_aliases,
+                                            still_syntax_node_as_ref(result_node),
+                                        )
+                                    });
                                 Some(present_variable_declaration_info_markdown(
                                     still_syntax_node_as_ref_map(
                                         origin_project_declaration_name_node,
@@ -929,20 +938,7 @@ fn respond_to_hover(
                                         .documentation
                                         .as_ref()
                                         .map(|node| node.value.as_ref()),
-                                    maybe_result_node
-                                        .as_ref()
-                                        .and_then(|result_node| {
-                                            still_syntax_expression_type(
-                                                &still_syntax_project_info(
-                                                    &hovered_project_state.syntax,
-                                                )
-                                                .type_aliases,
-                                                still_syntax_node_as_ref(result_node),
-                                            )
-                                            .ok()
-                                        })
-                                        .as_ref()
-                                        .map(still_syntax_node_as_ref),
+                                    maybe_result_type.as_ref().map(still_syntax_node_as_ref),
                                 ))
                             } else {
                                 None
@@ -2220,12 +2216,11 @@ fn variable_declaration_completions_into(
                                 origin_project_declaration_documentation,
                                 maybe_result_node
                                     .as_ref()
-                                    .and_then(|result_node| {
+                                    .map(|result_node| {
                                         still_syntax_expression_type(
                                             &project_info.type_aliases,
                                             still_syntax_node_as_ref(result_node),
                                         )
-                                        .ok()
                                     })
                                     .as_ref()
                                     .map(still_syntax_node_as_ref),
@@ -2968,73 +2963,43 @@ struct StillErrorNode {
 
 fn still_syntax_pattern_type(
     pattern_node: StillSyntaxNode<&StillSyntaxPattern>,
-) -> Result<StillSyntaxNode<StillSyntaxType>, Vec<StillErrorNode>> {
+) -> StillSyntaxNode<StillSyntaxType> {
     match pattern_node.value {
-        StillSyntaxPattern::Char(_) => Ok(still_syntax_node_empty(still_syntax_type_char)),
-        StillSyntaxPattern::Int { .. } => Ok(still_syntax_node_empty(still_syntax_type_int)),
-        StillSyntaxPattern::String { .. } => Ok(still_syntax_node_empty(still_syntax_type_str)),
+        StillSyntaxPattern::Char(_) => still_syntax_node_empty(still_syntax_type_chr),
+        StillSyntaxPattern::Int { .. } => still_syntax_node_empty(still_syntax_type_int),
+        StillSyntaxPattern::String { .. } => still_syntax_node_empty(still_syntax_type_str),
         StillSyntaxPattern::WithComment {
             comment: _,
             pattern: maybe_pattern_after_comment,
         } => match maybe_pattern_after_comment {
-            None => Err(vec![StillErrorNode {
-                range: pattern_node.range,
-                message: Box::from("missing pattern after the comment"),
-            }]),
+            None => still_syntax_node_empty(StillSyntaxType::Parenthesized(None)),
             Some(pattern_node_after_comment) => {
                 still_syntax_pattern_type(still_syntax_node_unbox(pattern_node_after_comment))
             }
         },
         StillSyntaxPattern::Typed {
             type_: maybe_type,
-            pattern: _,
+            pattern: _maybe_in_typed,
         } => {
-            let Some(type_node) = maybe_type else {
-                return Err(vec![StillErrorNode {
-                    range: pattern_node.range,
-                    message: Box::from("missing type between :here:"),
-                }]);
-            };
-            Ok(still_syntax_node_as_ref_map(
-                type_node,
-                StillSyntaxType::clone,
-            ))
-        }
-        StillSyntaxPattern::Record(fields) => {
-            let mut errors: Vec<StillErrorNode> = Vec::new();
-            let mut field_types: Vec<StillSyntaxTypeField> = Vec::with_capacity(fields.len());
-            for field in fields {
-                match &field.value {
-                    None => {
-                        errors.push(StillErrorNode {
-                            range: field.name.range,
-                            message: Box::from(field.name.value.as_str()),
-                        });
-                    }
-                    Some(field_value_node) => {
-                        match still_syntax_pattern_type(still_syntax_node_as_ref(field_value_node))
-                        {
-                            Err(field_value_error) => {
-                                errors.extend(field_value_error);
-                            }
-                            Ok(field_value_type) => {
-                                if errors.is_empty() {
-                                    field_types.push(StillSyntaxTypeField {
-                                        name: field.name.clone(),
-                                        value: Some(field_value_type),
-                                    });
-                                }
-                            }
-                        }
-                    }
+            match maybe_type {
+                Some(type_node) => still_syntax_node_as_ref_map(type_node, StillSyntaxType::clone),
+                None => {
+                    // consider trying regardless for variant
+                    still_syntax_node_empty(StillSyntaxType::Parenthesized(None))
                 }
             }
-            match errors.as_slice() {
-                [] => Ok(still_syntax_node_empty(StillSyntaxType::Record(
-                    field_types,
-                ))),
-                [.., _] => Err(errors),
+        }
+        StillSyntaxPattern::Record(fields) => {
+            let mut field_types: Vec<StillSyntaxTypeField> = Vec::with_capacity(fields.len());
+            for field in fields {
+                field_types.push(StillSyntaxTypeField {
+                    name: field.name.clone(),
+                    value: field.value.as_ref().map(|field_value_node| {
+                        still_syntax_pattern_type(still_syntax_node_as_ref(field_value_node))
+                    }),
+                });
             }
+            still_syntax_node_empty(StillSyntaxType::Record(field_types))
         }
     }
 }
@@ -3043,7 +3008,7 @@ fn still_syntax_pattern_type(
 fn still_syntax_expression_type(
     type_aliases: &std::collections::HashMap<&str, TypeAliasInfo>,
     expression_node: StillSyntaxNode<&StillSyntaxExpression>,
-) -> Result<StillSyntaxNode<StillSyntaxType>, Vec<StillErrorNode>> {
+) -> StillSyntaxNode<StillSyntaxType> {
     still_syntax_expression_type_with(
         type_aliases,
         std::rc::Rc::new(std::collections::HashMap::new()),
@@ -3057,23 +3022,39 @@ fn still_syntax_expression_type_with<'a>(
         std::collections::HashMap<&'a str, Option<StillSyntaxNode<StillSyntaxType>>>,
     >,
     expression_node: StillSyntaxNode<&'a StillSyntaxExpression>,
-) -> Result<StillSyntaxNode<StillSyntaxType>, Vec<StillErrorNode>> {
+) -> StillSyntaxNode<StillSyntaxType> {
     match expression_node.value {
         StillSyntaxExpression::Typed {
             type_: maybe_type,
-            expression: _,
-        } => {
-            let Some(type_node) = maybe_type else {
-                return Err(vec![StillErrorNode {
+            expression: maybe_in_typed,
+        } => match maybe_type {
+            None => match maybe_in_typed {
+                None => StillSyntaxNode {
                     range: expression_node.range,
-                    message: Box::from("type missing between :here:"),
-                }]);
-            };
-            Ok(still_syntax_node_as_ref_map(
-                type_node,
-                StillSyntaxType::clone,
-            ))
-        }
+                    value: StillSyntaxType::Parenthesized(None),
+                },
+                Some(untyped_node) => match &untyped_node.value {
+                    StillSyntaxExpressionUntyped::Variant { .. } => {
+                        // TODO try regardless
+                        StillSyntaxNode {
+                            range: expression_node.range,
+                            value: StillSyntaxType::Parenthesized(None),
+                        }
+                    }
+                    StillSyntaxExpressionUntyped::Other(other_expression) => {
+                        still_syntax_expression_type_with(
+                            type_aliases,
+                            local_bindings,
+                            StillSyntaxNode {
+                                range: untyped_node.range,
+                                value: other_expression,
+                            },
+                        )
+                    }
+                },
+            },
+            Some(type_node) => still_syntax_node_as_ref_map(type_node, StillSyntaxType::clone),
+        },
         StillSyntaxExpression::VariableOrCall {
             variable: variable_node,
             arguments,
@@ -3081,55 +3062,33 @@ fn still_syntax_expression_type_with<'a>(
             match local_bindings.get(variable_node.value.as_str()) {
                 None => {
                     // TODO look at project-scope declarations
-                    Err(vec![StillErrorNode {
+                    StillSyntaxNode {
                         range: expression_node.range,
-                        message: Box::from("no variable with this name in scope"),
-                    }])
+                        value: StillSyntaxType::Parenthesized(None),
+                    }
                 }
                 Some(maybe_variable_type) => {
                     let Some(variable_type_node) = maybe_variable_type.as_ref() else {
-                        // errors are already reported in the patterns themselves
-                        return Err(vec![]);
+                        return StillSyntaxNode {
+                            range: expression_node.range,
+                            value: StillSyntaxType::Parenthesized(None),
+                        };
                     };
                     if arguments.is_empty() {
-                        Ok(variable_type_node.clone())
+                        variable_type_node.clone()
                     } else {
-                        let Some((variable_type_inputs, maybe_variable_type_output)) =
+                        let Some((_inputs, maybe_variable_type_output)) =
                             still_syntax_type_to_function(
                                 type_aliases,
                                 still_syntax_node_as_ref(variable_type_node),
                             )
                         else {
-                            return Err(vec![StillErrorNode {
-                                range: expression_node.range,
-                                message: Box::from("called variable is not a function"),
-                            }]);
+                            return variable_type_node.clone();
                         };
-                        let Some(variable_type_output_node) = maybe_variable_type_output else {
-                            return Err(vec![StillErrorNode {
-                                range: expression_node.range,
-                                message: Box::from(
-                                    "called variable function type does not have an output type",
-                                ),
-                            }]);
-                        };
-                        if arguments.len() == variable_type_inputs.len() {
-                            Ok(variable_type_output_node)
-                        } else {
-                            Err(vec![StillErrorNode {
-                                range: expression_node.range,
-                                message: Box::from(format!(
-                                    "called variable takes {required} {argument_s} but you provided {provided}",
-                                    required = variable_type_inputs.len(),
-                                    argument_s = if variable_type_inputs.len() <= 1 {
-                                        "argument"
-                                    } else {
-                                        "arguments"
-                                    },
-                                    provided = arguments.len(),
-                                )),
-                            }])
-                        }
+                        maybe_variable_type_output.unwrap_or_else(|| StillSyntaxNode {
+                            range: expression_node.range,
+                            value: StillSyntaxType::Parenthesized(None),
+                        })
                     }
                 }
             }
@@ -3138,171 +3097,128 @@ fn still_syntax_expression_type_with<'a>(
             matched: _,
             of_keyword_range: _,
             cases,
-        } => match cases.as_slice() {
-            [] => Err(vec![StillErrorNode {
+        } => match cases.iter().find_map(|case| case.result.as_ref()) {
+            None => StillSyntaxNode {
                 range: expression_node.range,
-                message: Box::from("cases are missing"),
-            }]),
-            [case0, ..] => match &case0.result {
-                None => Err(vec![StillErrorNode {
-                    range: expression_node.range,
-                    message: Box::from("first case result is missing"),
-                }]),
-                Some(case0_result_node) => still_syntax_expression_type_with(
-                    type_aliases,
-                    local_bindings,
-                    still_syntax_node_as_ref(case0_result_node),
-                ),
+                value: StillSyntaxType::Parenthesized(None),
             },
+            Some(case_result) => still_syntax_expression_type_with(
+                type_aliases,
+                local_bindings,
+                still_syntax_node_as_ref(case_result),
+            ),
         },
-        StillSyntaxExpression::Char(_) => Ok(still_syntax_node_empty(still_syntax_type_char)),
-        StillSyntaxExpression::Dec(_) => Ok(still_syntax_node_empty(still_syntax_type_dec)),
-        StillSyntaxExpression::Int { .. } => Ok(still_syntax_node_empty(still_syntax_type_int)),
+        StillSyntaxExpression::Char(_) => still_syntax_node_empty(still_syntax_type_chr),
+        StillSyntaxExpression::Dec(_) => still_syntax_node_empty(still_syntax_type_dec),
+        StillSyntaxExpression::Int { .. } => still_syntax_node_empty(still_syntax_type_int),
         StillSyntaxExpression::Lambda {
             parameters,
             arrow_key_symbol_range: _,
             result: maybe_result,
         } => {
-            let Some(result_node) = maybe_result else {
-                return Err(vec![StillErrorNode {
-                    range: expression_node.range,
-                    message: Box::from("lambda result missing after ->"),
-                }]);
-            };
-            if parameters.is_empty() {
-                return Err(vec![StillErrorNode {
-                    range: expression_node.range,
-                    message: Box::from("lambda parameters missing between \\here ->"),
-                }]);
-            }
-            let mut parameter_errors: Vec<StillErrorNode> = Vec::new();
             let mut input_types: Vec<StillSyntaxNode<StillSyntaxType>> = Vec::new();
             let mut local_bindings: std::collections::HashMap<
                 &str,
                 Option<StillSyntaxNode<StillSyntaxType>>,
             > = std::rc::Rc::unwrap_or_clone(local_bindings);
             for parameter_node in parameters {
-                match still_syntax_pattern_type(still_syntax_node_as_ref(parameter_node)) {
-                    Err(parameter_error) => {
-                        parameter_errors.extend(parameter_error);
-                    }
-                    Ok(input_type) => {
-                        input_types.push(input_type);
-                    }
-                }
+                input_types.push(still_syntax_pattern_type(still_syntax_node_as_ref(
+                    parameter_node,
+                )));
                 still_syntax_pattern_binding_types_into(
                     &mut local_bindings,
-                    &mut parameter_errors,
                     still_syntax_node_as_ref(parameter_node),
                 );
             }
-            if !parameter_errors.is_empty() {
-                return Err(parameter_errors);
-            }
-            let result_type = still_syntax_expression_type_with(
-                type_aliases,
-                std::rc::Rc::new(local_bindings),
-                still_syntax_node_unbox(result_node),
-            )?;
-            Ok(still_syntax_node_empty(StillSyntaxType::Function {
+            still_syntax_node_empty(StillSyntaxType::Function {
                 inputs: input_types,
                 arrow_key_symbol_range: None,
-                output: Some(still_syntax_node_map(result_type, Box::new)),
-            }))
+                output: maybe_result.as_ref().map(|result_node| {
+                    still_syntax_node_box(still_syntax_expression_type_with(
+                        type_aliases,
+                        std::rc::Rc::new(local_bindings),
+                        still_syntax_node_unbox(result_node),
+                    ))
+                }),
+            })
         }
         StillSyntaxExpression::Let {
             declaration: maybe_declaration,
             result: maybe_result,
         } => {
-            let Some(declaration_node) = maybe_declaration else {
-                return Err(vec![StillErrorNode {
-                    range: expression_node.range,
-                    message: Box::from("missing declaration"),
-                }]);
-            };
             let Some(result_node) = maybe_result else {
-                return Err(vec![StillErrorNode {
+                return StillSyntaxNode {
                     range: expression_node.range,
-                    message: Box::from("missing result after the let declaration"),
-                }]);
+                    value: StillSyntaxType::Parenthesized(None),
+                };
             };
-            let mut let_declaration_errors: Vec<StillErrorNode> = Vec::new();
-            let local_bindings_with_let: std::collections::HashMap<
-                &str,
-                Option<StillSyntaxNode<StillSyntaxType>>,
-            > = match &declaration_node.value {
-                StillSyntaxLetDeclaration::VariableDeclaration {
-                    name: name_node,
-                    result: declaration_maybe_result,
-                } => {
-                    let Some(declaration_result_node) = declaration_maybe_result else {
-                        return Err(vec![StillErrorNode {
-                            range: expression_node.range,
-                            message: Box::from("let variable declaration is missing a result"),
-                        }]);
-                    };
-                    let result_type_result = still_syntax_expression_type_with(
-                        type_aliases,
-                        local_bindings.clone(),
-                        still_syntax_node_unbox(declaration_result_node),
-                    );
-                    let mut local_bindings_with_let = std::rc::Rc::unwrap_or_clone(local_bindings);
-                    match result_type_result {
-                        Err(errors) => {
-                            let_declaration_errors.extend(errors);
-                            local_bindings_with_let.insert(&name_node.value, None);
+            let local_bindings_with_let: std::rc::Rc<
+                std::collections::HashMap<&str, Option<StillSyntaxNode<StillSyntaxType>>>,
+            > = match maybe_declaration {
+                None => local_bindings,
+                Some(declaration_node) => {
+                    let local_bindings_without_let: std::rc::Rc<
+                        std::collections::HashMap<&str, Option<StillSyntaxNode<StillSyntaxType>>>,
+                    > = local_bindings.clone();
+                    let mut local_bindings_with_let: std::collections::HashMap<
+                        &str,
+                        Option<StillSyntaxNode<StillSyntaxType>>,
+                    > = (*local_bindings).clone();
+                    match &declaration_node.value {
+                        StillSyntaxLetDeclaration::VariableDeclaration {
+                            name: name_node,
+                            result: declaration_maybe_result,
+                        } => {
+                            local_bindings_with_let.insert(
+                                &name_node.value,
+                                declaration_maybe_result
+                                    .as_ref()
+                                    .map(|declaration_result_node| {
+                                        still_syntax_expression_type_with(
+                                            type_aliases,
+                                            local_bindings_without_let,
+                                            still_syntax_node_unbox(declaration_result_node),
+                                        )
+                                    }),
+                            );
                         }
-                        Ok(result_type_node) => {
-                            local_bindings_with_let
-                                .insert(&name_node.value, Some(result_type_node));
+                        StillSyntaxLetDeclaration::Destructuring {
+                            pattern: pattern_node,
+                            equals_key_symbol_range: _,
+                            expression: _,
+                        } => {
+                            still_syntax_pattern_binding_types_into(
+                                &mut local_bindings_with_let,
+                                still_syntax_node_as_ref(pattern_node),
+                            );
                         }
                     }
-                    local_bindings_with_let
-                }
-                StillSyntaxLetDeclaration::Destructuring {
-                    pattern: pattern_node,
-                    equals_key_symbol_range: _,
-                    expression: _,
-                } => {
-                    let mut local_bindings_with_let = std::rc::Rc::unwrap_or_clone(local_bindings);
-                    still_syntax_pattern_binding_types_into(
-                        &mut local_bindings_with_let,
-                        &mut let_declaration_errors,
-                        still_syntax_node_as_ref(pattern_node),
-                    );
-                    local_bindings_with_let
+                    std::rc::Rc::new(local_bindings_with_let)
                 }
             };
-            if !let_declaration_errors.is_empty() {
-                return Err(let_declaration_errors);
-            }
             still_syntax_expression_type_with(
                 type_aliases,
-                std::rc::Rc::new(local_bindings_with_let),
+                local_bindings_with_let,
                 still_syntax_node_unbox(result_node),
             )
         }
         StillSyntaxExpression::Vec(elements) => match elements.as_slice() {
-            [] => Err(vec![StillErrorNode {
+            [] => still_syntax_node_empty(still_syntax_type_vec(StillSyntaxNode {
                 range: expression_node.range,
-                message: Box::from(
-                    "empty vec missing a concrete type, use for example :vec int:[]",
-                ),
-            }]),
+                value: StillSyntaxType::Parenthesized(None),
+            })),
             [element0_node, ..] => {
-                let element_type: StillSyntaxNode<StillSyntaxType> =
-                    still_syntax_expression_type_with(
-                        type_aliases,
-                        local_bindings,
-                        still_syntax_node_as_ref(element0_node),
-                    )?;
-                Ok(still_syntax_node_empty(still_syntax_type_vec(element_type)))
+                still_syntax_node_empty(still_syntax_type_vec(still_syntax_expression_type_with(
+                    type_aliases,
+                    local_bindings,
+                    still_syntax_node_as_ref(element0_node),
+                )))
             }
         },
-        StillSyntaxExpression::Parenthesized(None) => Err(vec![StillErrorNode {
+        StillSyntaxExpression::Parenthesized(None) => StillSyntaxNode {
             range: expression_node.range,
-            message: Box::from("missing expression inside the parens between (here)"),
-        }]),
+            value: StillSyntaxType::Parenthesized(None),
+        },
         StillSyntaxExpression::Parenthesized(Some(in_parens)) => still_syntax_expression_type_with(
             type_aliases,
             local_bindings,
@@ -3312,10 +3228,10 @@ fn still_syntax_expression_type_with<'a>(
             comment: _,
             expression: maybe_expression_after_comment,
         } => match maybe_expression_after_comment {
-            None => Err(vec![StillErrorNode {
+            None => StillSyntaxNode {
                 range: expression_node.range,
-                message: Box::from("missing expression after the comment"),
-            }]),
+                value: StillSyntaxType::Parenthesized(None),
+            },
             Some(expression_node_after_comment) => still_syntax_expression_type_with(
                 type_aliases,
                 local_bindings,
@@ -3324,84 +3240,59 @@ fn still_syntax_expression_type_with<'a>(
         },
         StillSyntaxExpression::Record(fields) => {
             let mut field_types: Vec<StillSyntaxTypeField> = Vec::new();
-            let mut errors: Vec<StillErrorNode> = Vec::new();
             for field in fields {
-                match &field.value {
-                    None => {
-                        errors.push(StillErrorNode {
-                            range: expression_node.range,
-                            message: Box::from("missing expression after the comment"),
-                        });
-                    }
-                    Some(field_value_node) => {
-                        match still_syntax_expression_type_with(
+                field_types.push(StillSyntaxTypeField {
+                    name: field.name.clone(),
+                    value: field.value.as_ref().map(|field_value_node| {
+                        still_syntax_expression_type_with(
                             type_aliases,
                             local_bindings.clone(),
                             still_syntax_node_as_ref(field_value_node),
-                        ) {
-                            Err(field_value_errors) => {
-                                errors.extend(field_value_errors);
-                            }
-                            Ok(field_value_type_node) => {
-                                if errors.is_empty() {
-                                    field_types.push(StillSyntaxTypeField {
-                                        name: field.name.clone(),
-                                        value: Some(field_value_type_node),
-                                    });
-                                }
-                            }
-                        }
-                    }
-                }
+                        )
+                    }),
+                });
             }
-            if !errors.is_empty() {
-                return Err(errors);
-            }
-            Ok(still_syntax_node_empty(StillSyntaxType::Record(
-                field_types,
-            )))
+            still_syntax_node_empty(StillSyntaxType::Record(field_types))
         }
         StillSyntaxExpression::RecordAccess {
             record: record_node,
             field: maybe_field_name,
         } => {
-            let Some(field_name_node) = maybe_field_name else {
-                return Err(vec![StillErrorNode {
-                    range: expression_node.range,
-                    message: Box::from("missing field name to access"),
-                }]);
-            };
             let record_type_node: StillSyntaxNode<StillSyntaxType> =
                 still_syntax_expression_type_with(
                     type_aliases,
                     local_bindings,
                     still_syntax_node_unbox(record_node),
-                )?;
+                );
+            let Some(field_name_node) = maybe_field_name else {
+                return record_type_node;
+            };
             let Some(record_type_fields) = still_syntax_type_to_record(
                 type_aliases,
                 still_syntax_node_as_ref(&record_type_node),
             ) else {
-                return Err(vec![StillErrorNode {
+                return StillSyntaxNode {
                     range: expression_node.range,
-                    message: Box::from("cannot access field on expression with non-record type"),
-                }]);
+                    value: StillSyntaxType::Parenthesized(None),
+                };
             };
             match record_type_fields
                 .iter()
                 .find(|field| field.name.value == field_name_node.value)
             {
-                None => Err(vec![StillErrorNode {
+                None => StillSyntaxNode {
                     range: expression_node.range,
-                    message: Box::from("the accessed record does not contain this field"),
-                }]),
-                Some(accessed_field) => accessed_field.value.clone().ok_or_else(|| {
-                    vec![StillErrorNode {
-                        range: expression_node.range,
-                        message: Box::from(
-                            "the accessed record contains this field but is missing its value type",
-                        ),
-                    }]
-                }),
+                    value: StillSyntaxType::Parenthesized(None),
+                },
+                Some(accessed_field) => {
+                    accessed_field
+                        .value
+                        .clone()
+                        .unwrap_or_else(|| StillSyntaxNode {
+                            range: expression_node.range,
+                            value: StillSyntaxType::Parenthesized(None),
+                        })
+                }
             }
         }
         StillSyntaxExpression::RecordUpdate {
@@ -3409,22 +3300,22 @@ fn still_syntax_expression_type_with<'a>(
             spread_key_symbol_range: _,
             fields: _,
         } => match maybe_record {
-            None => Err(vec![StillErrorNode {
+            None => StillSyntaxNode {
                 range: expression_node.range,
-                message: Box::from("updated record is missing"),
-            }]),
+                value: StillSyntaxType::Parenthesized(None),
+            },
             Some(record_node) => still_syntax_expression_type_with(
                 type_aliases,
                 local_bindings,
                 still_syntax_node_unbox(record_node),
             ),
         },
-        StillSyntaxExpression::String { .. } => Ok(still_syntax_node_empty(still_syntax_type_str)),
+        StillSyntaxExpression::String { .. } => still_syntax_node_empty(still_syntax_type_str),
     }
 }
 
-const still_syntax_type_char: StillSyntaxType = StillSyntaxType::Construct {
-    name: still_syntax_node_empty(StillName::const_new("char")),
+const still_syntax_type_chr: StillSyntaxType = StillSyntaxType::Construct {
+    name: still_syntax_node_empty(StillName::const_new("chr")),
     arguments: vec![],
 };
 const still_syntax_type_dec: StillSyntaxType = StillSyntaxType::Construct {
@@ -5439,12 +5330,11 @@ fn still_syntax_let_declaration_find_symbol_at_position<'a>(
                     value: StillSyntaxSymbol::LetDeclarationName {
                         name: &name.value,
                         name_range: name.range,
-                        type_type: maybe_result_node.as_ref().and_then(|result_node| {
+                        type_type: maybe_result_node.as_ref().map(|result_node| {
                             still_syntax_expression_type(
                                 type_aliases,
                                 still_syntax_node_unbox(result_node),
                             )
-                            .ok()
                         }),
                         scope_expression: scope_expression,
                     },
@@ -6136,12 +6026,11 @@ fn still_syntax_let_declaration_introduced_bindings_into<'a>(
             bindings_so_far.push(StillLocalBinding {
                 name: &name_node.value,
                 origin: LocalBindingOrigin::LetDeclaredVariable {
-                    type_: maybe_result_node.as_ref().and_then(|result_node| {
+                    type_: maybe_result_node.as_ref().map(|result_node| {
                         still_syntax_expression_type(
                             type_aliases,
                             still_syntax_node_unbox(result_node),
                         )
-                        .ok()
                     }),
                     name_range: name_node.range,
                 },
@@ -6270,7 +6159,6 @@ fn still_syntax_pattern_binding_types_into<'a>(
         &'a str,
         Option<StillSyntaxNode<StillSyntaxType>>,
     >,
-    errors_so_far: &mut Vec<StillErrorNode>,
     still_syntax_pattern_node: StillSyntaxNode<&'a StillSyntaxPattern>,
 ) {
     match still_syntax_pattern_node.value {
@@ -6284,19 +6172,9 @@ fn still_syntax_pattern_binding_types_into<'a>(
             if let Some(pattern_node_in_typed) = maybe_pattern_node_in_typed {
                 match &pattern_node_in_typed.value {
                     StillSyntaxPatternUntyped::Ignored => {}
-                    StillSyntaxPatternUntyped::Variable(variable) => match maybe_type {
-                        None => {
-                            errors_so_far.push(StillErrorNode {
-                                range: still_syntax_pattern_node.range,
-                                message: Box::from("missing type between :here:"),
-                            });
-
-                            bindings_so_far.insert(variable, None);
-                        }
-                        Some(type_node) => {
-                            bindings_so_far.insert(variable, Some(type_node.clone()));
-                        }
-                    },
+                    StillSyntaxPatternUntyped::Variable(variable) => {
+                        bindings_so_far.insert(variable, maybe_type.clone());
+                    }
                     StillSyntaxPatternUntyped::Variant {
                         name: _,
                         value: maybe_value,
@@ -6304,7 +6182,6 @@ fn still_syntax_pattern_binding_types_into<'a>(
                         if let Some(value_node) = maybe_value {
                             still_syntax_pattern_binding_types_into(
                                 bindings_so_far,
-                                errors_so_far,
                                 still_syntax_node_unbox(value_node),
                             );
                         }
@@ -6319,7 +6196,6 @@ fn still_syntax_pattern_binding_types_into<'a>(
             if let Some(pattern_node_after_comment) = maybe_pattern_after_comment {
                 still_syntax_pattern_binding_types_into(
                     bindings_so_far,
-                    errors_so_far,
                     still_syntax_node_unbox(pattern_node_after_comment),
                 );
             }
@@ -6329,7 +6205,6 @@ fn still_syntax_pattern_binding_types_into<'a>(
                 if let Some(field_value_node) = &field.value {
                     still_syntax_pattern_binding_types_into(
                         bindings_so_far,
-                        errors_so_far,
                         still_syntax_node_as_ref(field_value_node),
                     );
                 }
@@ -8691,14 +8566,14 @@ fn parse_still_syntax_project(project_source: &str) -> StillSyntaxProject {
 }
 
 #[derive(Clone, Copy)]
-struct VariableDeclarationInfo<'a> {
+struct StillSyntaxVariableDeclarationInfo<'a> {
     range: lsp_types::Range,
     documentation: Option<StillSyntaxNode<&'a str>>,
     name: &'a str,
     result: Option<StillSyntaxNode<&'a StillSyntaxExpression>>,
 }
 #[derive(Clone, Copy)]
-enum TypeDeclarationInfo<'a> {
+enum StillSyntaxTypeDeclarationInfo<'a> {
     ChoiceType {
         range: lsp_types::Range,
         documentation: Option<StillSyntaxNode<&'a str>>,
@@ -8728,7 +8603,7 @@ fn still_project_to_rust(
     > = std::collections::HashMap::new();
     let mut type_declaration_by_graph_node: std::collections::HashMap<
         strongly_connected_components::Node,
-        TypeDeclarationInfo,
+        StillSyntaxTypeDeclarationInfo,
     > = std::collections::HashMap::new();
 
     let mut variable_graph: strongly_connected_components::Graph =
@@ -8739,7 +8614,7 @@ fn still_project_to_rust(
     > = std::collections::HashMap::with_capacity(declarations.len());
     let mut variable_declaration_by_graph_node: std::collections::HashMap<
         strongly_connected_components::Node,
-        VariableDeclarationInfo,
+        StillSyntaxVariableDeclarationInfo,
     > = std::collections::HashMap::with_capacity(declarations.len());
 
     for declaration_node_or_err in declarations {
@@ -8771,7 +8646,7 @@ fn still_project_to_rust(
                                 .insert(&name_node.value, choice_type_declaration_graph_node);
                             type_declaration_by_graph_node.insert(
                                 choice_type_declaration_graph_node,
-                                TypeDeclarationInfo::ChoiceType {
+                                StillSyntaxTypeDeclarationInfo::ChoiceType {
                                     range: declaration_node.range,
                                     documentation: documented_declaration
                                         .documentation
@@ -8807,7 +8682,7 @@ fn still_project_to_rust(
                                 .insert(&name_node.value, type_alias_declaration_graph_node);
                             type_declaration_by_graph_node.insert(
                                 type_alias_declaration_graph_node,
-                                TypeDeclarationInfo::TypeAlias {
+                                StillSyntaxTypeDeclarationInfo::TypeAlias {
                                     range: declaration_node.range,
                                     documentation: documented_declaration
                                         .documentation
@@ -8830,7 +8705,7 @@ fn still_project_to_rust(
                             .insert(&name_node.value, variable_declaration_graph_node);
                         variable_declaration_by_graph_node.insert(
                             variable_declaration_graph_node,
-                            VariableDeclarationInfo {
+                            StillSyntaxVariableDeclarationInfo {
                                 range: declaration_node.range,
                                 documentation: documented_declaration
                                     .documentation
@@ -8881,12 +8756,12 @@ fn still_project_info_to_rust(
     type_graph: &strongly_connected_components::Graph,
     type_declaration_by_graph_node: &std::collections::HashMap<
         strongly_connected_components::Node,
-        TypeDeclarationInfo,
+        StillSyntaxTypeDeclarationInfo,
     >,
     variable_graph: &strongly_connected_components::Graph,
     variable_declaration_by_graph_node: &std::collections::HashMap<
         strongly_connected_components::Node,
-        VariableDeclarationInfo,
+        StillSyntaxVariableDeclarationInfo,
     >,
 ) -> syn::File {
     let mut rust_items: Vec<syn::Item> =
@@ -8907,7 +8782,7 @@ fn still_project_info_to_rust(
             .copied()
         {
             match type_declaration_info {
-                TypeDeclarationInfo::TypeAlias {
+                StillSyntaxTypeDeclarationInfo::TypeAlias {
                     range,
                     documentation: maybe_documentation,
                     name,
@@ -8931,7 +8806,7 @@ fn still_project_info_to_rust(
                         maybe_type,
                     ));
                 }
-                TypeDeclarationInfo::ChoiceType {
+                StillSyntaxTypeDeclarationInfo::ChoiceType {
                     range,
                     documentation: maybe_documentation,
                     name,
@@ -8973,57 +8848,78 @@ fn still_project_info_to_rust(
             }
         }
     }
-    // TODO populate with core variable declaration types
-    let mut variable_declaration_types: std::collections::HashMap<
+    // TODO populate with "requires allocator"
+    let mut compiled_variable_declaration_info: std::collections::HashMap<
         &str,
-        Option<StillSyntaxNode<StillSyntaxType>>,
-    > = std::collections::HashMap::with_capacity(variable_graph.len());
+        CompiledVariableDeclarationInfo,
+    > = core_variable_declaration_infos();
+    compiled_variable_declaration_info.reserve(variable_graph.len());
     for variable_declaration_strongly_connected_component in variable_graph.find_sccs().iter_sccs()
     {
-        let variable_declarations_in_strongly_connected_component: Vec<VariableDeclarationInfo> =
-            variable_declaration_strongly_connected_component
-                .iter_nodes()
-                .filter_map(|variable_declaration_graph_node| {
-                    variable_declaration_by_graph_node.get(&variable_declaration_graph_node)
-                })
-                .copied()
-                .collect();
-        for variable_declaration_info in &variable_declarations_in_strongly_connected_component {
-            variable_declaration_types.insert(
-                variable_declaration_info.name,
-                match variable_declaration_info.result {
-                    None => {
-                        None
-                    }
-                    Some(result_node) => {
-                        match still_syntax_expression_type(&type_aliases, result_node) {
-                            Err(retrieve_errors) => {
-                                errors.push(StillErrorNode {
-                                    range: variable_declaration_info.range,
-                                    message: format!(
+        let variable_declarations_in_strongly_connected_component: Vec<
+            StillSyntaxVariableDeclarationInfo,
+        > = variable_declaration_strongly_connected_component
+            .iter_nodes()
+            .filter_map(|variable_declaration_graph_node| {
+                variable_declaration_by_graph_node.get(&variable_declaration_graph_node)
+            })
+            .copied()
+            .collect();
+        for variable_declaration in &variable_declarations_in_strongly_connected_component {
+            match variable_declaration.result {
+                None => {
+                    compiled_variable_declaration_info.insert(
+                        variable_declaration.name,
+                        CompiledVariableDeclarationInfo {
+                            has_allocator_parameter: true,
+                            type_: None,
+                        },
+                    );
+                }
+                Some(result_node) => {
+                    match still_syntax_expression_type(&type_aliases, result_node) {
+                        // is there a better way? Maybe do complain when used variables have no known type
+                        StillSyntaxNode {
+                            range: _,
+                            value: StillSyntaxType::Parenthesized(None),
+                        } => {
+                            errors.push(StillErrorNode {
+                                    range: variable_declaration.range,
+                                    message: Box::from(
                                         "recursive variable declarations (and mutually recursive ones) need to have a known type. \
-Please change for example  \\input, patterns -> ...  to  \\input, patterns -> :output: ... \
-As for why no type could be determined, see the following {} errors",
-                                        retrieve_errors.len()
-                                    ).into_boxed_str()
+Please change for example  \\input, patterns -> ...  to  \\input, patterns -> :output: ... "
+                                    )
                                 });
-                                errors.extend(retrieve_errors);
-                                None
-                            }
-                            Ok(type_node) => Some(type_node),
+                        }
+                        type_node => {
+                            compiled_variable_declaration_info.insert(
+                                variable_declaration.name,
+                                CompiledVariableDeclarationInfo {
+                                    has_allocator_parameter: true,
+                                    type_: Some(type_node),
+                                },
+                            );
                         }
                     }
-                },
-            );
+                }
+            }
         }
         for variable_declaration in variable_declarations_in_strongly_connected_component {
-            rust_items.push(variable_declaration_to_rust(
-                errors,
-                &mut records_used,
-                &type_aliases,
-                &variable_declaration_types,
-                variable_declaration,
-            ));
+            let (rust_item_to_add, rust_declaration_has_allocator_parameter) =
+                variable_declaration_to_rust(
+                    errors,
+                    &mut records_used,
+                    &type_aliases,
+                    &compiled_variable_declaration_info,
+                    variable_declaration,
+                );
+            rust_items.push(rust_item_to_add);
+            if !rust_declaration_has_allocator_parameter
+                && let Some(info) =
+                    compiled_variable_declaration_info.get_mut(variable_declaration.name)
+            {
+                info.has_allocator_parameter = false;
+            }
         }
     }
     rust_items.reserve(records_used.len());
@@ -9035,6 +8931,146 @@ As for why no type could be determined, see the following {} errors",
         attrs: vec![],
         items: rust_items,
     }
+}
+#[derive(Clone)]
+struct CompiledVariableDeclarationInfo {
+    has_allocator_parameter: bool,
+    type_: Option<StillSyntaxNode<StillSyntaxType>>,
+}
+fn core_variable_declaration_infos()
+-> std::collections::HashMap<&'static str, CompiledVariableDeclarationInfo> {
+    fn variable(name: &'static str) -> StillSyntaxType {
+        StillSyntaxType::Variable(StillName::from(name))
+    }
+    fn function(
+        inputs: impl IntoIterator<Item = StillSyntaxType>,
+        output: StillSyntaxType,
+    ) -> StillSyntaxType {
+        StillSyntaxType::Function {
+            inputs: inputs
+                .into_iter()
+                .map(still_syntax_node_empty)
+                .collect::<Vec<_>>(),
+            arrow_key_symbol_range: None,
+            output: Some(still_syntax_node_empty(Box::new(output))),
+        }
+    }
+    fn vec(element: StillSyntaxType) -> StillSyntaxType {
+        still_syntax_type_vec(still_syntax_node_empty(element))
+    }
+    fn opt(value: StillSyntaxType) -> StillSyntaxType {
+        StillSyntaxType::Construct {
+            name: still_syntax_node_empty(StillName::const_new("opt")),
+            arguments: vec![still_syntax_node_empty(value)],
+        }
+    }
+    std::collections::HashMap::from(
+        [
+            (
+                "int-to-str",
+                true,
+                function([still_syntax_type_int], still_syntax_type_str),
+            ),
+            (
+                "str-to-int",
+                false,
+                function([still_syntax_type_str], opt(still_syntax_type_int)),
+            ),
+            (
+                "dec-to-str",
+                true,
+                function([still_syntax_type_dec], still_syntax_type_str),
+            ),
+            (
+                "str-to-dec",
+                false,
+                function([still_syntax_type_str], opt(still_syntax_type_dec)),
+            ),
+            (
+                "chr-byte-count",
+                false,
+                function([still_syntax_type_chr], still_syntax_type_int),
+            ),
+            (
+                "chr-to-str",
+                true,
+                function([still_syntax_type_chr], still_syntax_type_str),
+            ),
+            (
+                "str-byte-count",
+                false,
+                function([still_syntax_type_str], still_syntax_type_int),
+            ),
+            (
+                "str-chr-at-byte-index",
+                false,
+                function(
+                    [still_syntax_type_int, still_syntax_type_str],
+                    opt(still_syntax_type_chr),
+                ),
+            ),
+            (
+                "str-to-chrs",
+                true,
+                function([still_syntax_type_str], vec(still_syntax_type_chr)),
+            ),
+            (
+                "chrs-to-str",
+                true,
+                function([vec(still_syntax_type_chr)], still_syntax_type_str),
+            ),
+            (
+                "vec-repeat",
+                true,
+                function([still_syntax_type_int, variable("A")], vec(variable("A"))),
+            ),
+            (
+                "vec-length",
+                false,
+                function([vec(variable("A"))], still_syntax_type_int),
+            ),
+            (
+                "vec-element",
+                false,
+                function(
+                    [still_syntax_type_int, vec(variable("A"))],
+                    opt(variable("A")),
+                ),
+            ),
+            (
+                "vec-take",
+                false,
+                function(
+                    [still_syntax_type_int, vec(variable("A"))],
+                    vec(variable("A")),
+                ),
+            ),
+            (
+                "vec-attach",
+                false,
+                function([vec(variable("A")), vec(variable("A"))], vec(variable("A"))),
+            ),
+            (
+                "vec-flatten",
+                false,
+                function([vec(vec(variable("A")))], vec(variable("A"))),
+            ),
+            (
+                "strs-flatten",
+                true,
+                function([vec(still_syntax_type_str)], still_syntax_type_str),
+            ),
+        ]
+        .map(|(name, has_allocator_parameter, type_)| {
+            (
+                name,
+                CompiledVariableDeclarationInfo {
+                    has_allocator_parameter: has_allocator_parameter,
+                    type_: Some(still_syntax_node_empty(type_)),
+                },
+            )
+        }),
+    )
 }
 fn still_syntax_record_to_rust(used_still_record_fields: &[&str]) -> [syn::Item; 3] {
     let rust_struct_name: String =
@@ -9493,10 +9529,10 @@ fn still_syntax_type_declaration_connect_type_names_in_graph_from(
     type_graph: &mut strongly_connected_components::Graph,
     origin_type_declaration_graph_node: strongly_connected_components::Node,
     type_graph_node_by_name: &std::collections::HashMap<&str, strongly_connected_components::Node>,
-    type_declaration_info: TypeDeclarationInfo,
+    type_declaration_info: StillSyntaxTypeDeclarationInfo,
 ) {
     match type_declaration_info {
-        TypeDeclarationInfo::ChoiceType {
+        StillSyntaxTypeDeclarationInfo::ChoiceType {
             range: _,
             documentation: _,
             name: _,
@@ -9525,7 +9561,7 @@ fn still_syntax_type_declaration_connect_type_names_in_graph_from(
                 );
             }
         }
-        TypeDeclarationInfo::TypeAlias {
+        StillSyntaxTypeDeclarationInfo::TypeAlias {
             range: _,
             documentation: _,
             name: _,
@@ -10113,16 +10149,14 @@ fn still_syntax_type_is_copy(
             }),
     }
 }
+/// second result is `has_allocator_parameter` (TODO make a struct)
 fn variable_declaration_to_rust<'a>(
     errors: &mut Vec<StillErrorNode>,
     records_used: &mut std::collections::HashSet<Vec<&'a str>>,
     type_aliases: &std::collections::HashMap<&str, TypeAliasInfo>,
-    variable_declarations: &std::collections::HashMap<
-        &str,
-        Option<StillSyntaxNode<StillSyntaxType>>,
-    >,
-    variable_declaration_info: VariableDeclarationInfo<'a>,
-) -> syn::Item {
+    variable_declarations: &std::collections::HashMap<&str, CompiledVariableDeclarationInfo>,
+    variable_declaration_info: StillSyntaxVariableDeclarationInfo<'a>,
+) -> (syn::Item, bool) {
     let (rust_type, maybe_still_type_node) = match variable_declaration_info.result {
         None => {
             errors.push(StillErrorNode {
@@ -10137,26 +10171,21 @@ fn variable_declaration_to_rust<'a>(
             )
         }
         Some(result_node) => {
-            match still_syntax_expression_type_with(
+            let type_node = still_syntax_expression_type_with(
                 type_aliases,
                 std::rc::Rc::new(std::collections::HashMap::new()),
                 result_node,
-            ) {
-                Err(retrieve_errors) => {
-                    errors.extend(retrieve_errors);
-                    (syn_type_infer(), None)
-                }
-                Ok(type_node) => (
-                    still_syntax_type_to_rust(
-                        errors,
-                        // TODO this is dumb.
-                        // consider separating out to_rust from collecting records
-                        &mut std::collections::HashSet::new(),
-                        still_syntax_node_as_ref(&type_node),
-                    ),
-                    Some(type_node),
+            );
+            (
+                still_syntax_type_to_rust(
+                    errors,
+                    // TODO this is dumb.
+                    // consider separating out to_rust from collecting records
+                    &mut std::collections::HashSet::new(),
+                    still_syntax_node_as_ref(&type_node),
                 ),
-            }
+                Some(type_node),
+            )
         }
     };
     let mut still_type_parameters: std::collections::HashSet<&str> =
@@ -10192,49 +10221,15 @@ fn variable_declaration_to_rust<'a>(
         gt_token: Some(syn::token::Gt(syn_span())),
         where_clause: None,
     };
+    // TODO actually bubble up wether has_allocator_parameter
     // TODO when contains type contains neither type variables nor lifetime variables and is not a function type,
     // use syn::Item::Static(syn::ItemStatic
     match maybe_still_type_node
         .as_ref()
         .and_then(|n| still_syntax_type_to_function(type_aliases, still_syntax_node_as_ref(n)))
     {
-        None => syn::Item::Fn(syn::ItemFn {
-            attrs: rust_attrs,
-            vis: syn::Visibility::Public(syn::token::Pub(syn_span())),
-            sig: syn::Signature {
-                constness: None,
-                asyncness: None,
-                unsafety: None,
-                abi: None,
-                fn_token: syn::token::Fn(syn_span()),
-                ident: rust_ident,
-                generics: rust_generics,
-                paren_token: syn::token::Paren(syn_span()),
-                inputs: std::iter::once(default_allocator_fn_arg()).collect(),
-                output: syn::ReturnType::Type(syn::token::RArrow(syn_span()), Box::new(rust_type)),
-                variadic: None,
-            },
-            block: Box::new(syn::Block {
-                brace_token: syn::token::Brace(syn_span()),
-                stmts: vec![syn::Stmt::Expr(
-                    match variable_declaration_info.result {
-                        None => syn_expr_todo(),
-                        Some(result_node) => still_syntax_expression_to_rust(
-                            errors,
-                            records_used,
-                            variable_declarations,
-                            result_node,
-                        ),
-                    },
-                    None,
-                )],
-            }),
-        }),
-        Some((inputs, maybe_output)) => match variable_declaration_info
-            .result
-            .and_then(still_syntax_expression_to_lambda)
-        {
-            Some((result_lambda_parameters, result_lambda_result)) => syn::Item::Fn(syn::ItemFn {
+        None => (
+            syn::Item::Fn(syn::ItemFn {
                 attrs: rust_attrs,
                 vis: syn::Visibility::Public(syn::token::Pub(syn_span())),
                 sig: syn::Signature {
@@ -10246,15 +10241,132 @@ fn variable_declaration_to_rust<'a>(
                     ident: rust_ident,
                     generics: rust_generics,
                     paren_token: syn::token::Paren(syn_span()),
-                    inputs: std::iter::once(default_allocator_fn_arg())
-                        .chain(result_lambda_parameters.iter().zip(inputs.iter()).map(
-                            |(parameter_node, input_type_node)| {
+                    inputs: std::iter::once(default_allocator_fn_arg()).collect(),
+                    output: syn::ReturnType::Type(
+                        syn::token::RArrow(syn_span()),
+                        Box::new(rust_type),
+                    ),
+                    variadic: None,
+                },
+                block: Box::new(syn::Block {
+                    brace_token: syn::token::Brace(syn_span()),
+                    stmts: vec![syn::Stmt::Expr(
+                        match variable_declaration_info.result {
+                            None => syn_expr_todo(),
+                            Some(result_node) => still_syntax_expression_to_rust(
+                                errors,
+                                records_used,
+                                variable_declarations,
+                                result_node,
+                            ),
+                        },
+                        None,
+                    )],
+                }),
+            }),
+            true,
+        ),
+        Some((inputs, maybe_output)) => match variable_declaration_info
+            .result
+            .and_then(still_syntax_expression_to_lambda)
+        {
+            Some((result_lambda_parameters, result_lambda_result)) => (
+                syn::Item::Fn(syn::ItemFn {
+                    attrs: rust_attrs,
+                    vis: syn::Visibility::Public(syn::token::Pub(syn_span())),
+                    sig: syn::Signature {
+                        constness: None,
+                        asyncness: None,
+                        unsafety: None,
+                        abi: None,
+                        fn_token: syn::token::Fn(syn_span()),
+                        ident: rust_ident,
+                        generics: rust_generics,
+                        paren_token: syn::token::Paren(syn_span()),
+                        inputs: std::iter::once(default_allocator_fn_arg())
+                            .chain(result_lambda_parameters.iter().zip(inputs.iter()).map(
+                                |(parameter_node, input_type_node)| {
+                                    syn::FnArg::Typed(syn::PatType {
+                                        pat: Box::new(still_syntax_pattern_to_rust(
+                                            errors,
+                                            records_used,
+                                            still_syntax_node_as_ref(parameter_node),
+                                        )),
+                                        attrs: vec![],
+                                        colon_token: syn::token::Colon(syn_span()),
+                                        ty: Box::new(still_syntax_type_to_rust(
+                                            errors,
+                                            // TODO this is dumb.
+                                            // consider separating out to_rust from collecting records
+                                            &mut std::collections::HashSet::new(),
+                                            still_syntax_node_as_ref(input_type_node),
+                                        )),
+                                    })
+                                },
+                            ))
+                            .collect(),
+                        output: syn::ReturnType::Type(
+                            syn::token::RArrow(syn_span()),
+                            Box::new(maybe_still_syntax_type_to_rust(
+                                errors,
+                                || StillErrorNode {
+                                    range: variable_declaration_info.range,
+                                    message: Box::from(
+                                        "missing function result type \\..parameters.. -> here",
+                                    ),
+                                },
+                                // TODO this is dumb.
+                                // consider separating out to_rust from collecting records
+                                &mut std::collections::HashSet::new(),
+                                maybe_output.as_ref().map(still_syntax_node_as_ref),
+                            )),
+                        ),
+                        variadic: None,
+                    },
+                    block: Box::new(syn::Block {
+                        brace_token: syn::token::Brace(syn_span()),
+                        stmts: vec![syn::Stmt::Expr(
+                            maybe_still_syntax_expression_to_rust(
+                                errors,
+                                || StillErrorNode {
+                                    range: variable_declaration_info.range,
+                                    message: Box::from(
+                                        "missing lambda result expression after \\..parameters.. -> here",
+                                    ),
+                                },
+                                records_used,
+                                variable_declarations,
+                                result_lambda_result,
+                            ),
+                            None,
+                        )],
+                    }),
+                }),
+                true,
+            ),
+            None => (
+                syn::Item::Fn(syn::ItemFn {
+                    attrs: rust_attrs,
+                    vis: syn::Visibility::Public(syn::token::Pub(syn_span())),
+                    sig: syn::Signature {
+                        constness: None,
+                        asyncness: None,
+                        unsafety: None,
+                        abi: None,
+                        fn_token: syn::token::Fn(syn_span()),
+                        ident: rust_ident,
+                        generics: rust_generics,
+                        paren_token: syn::token::Paren(syn_span()),
+                        inputs: std::iter::once(default_allocator_fn_arg())
+                            .chain(inputs.iter().enumerate().map(|(i, input_type_node)| {
                                 syn::FnArg::Typed(syn::PatType {
-                                    pat: Box::new(still_syntax_pattern_to_rust(
-                                        errors,
-                                        records_used,
-                                        still_syntax_node_as_ref(parameter_node),
-                                    )),
+                                    pat: Box::new(syn::Pat::Path(syn::ExprPath {
+                                        attrs: vec![],
+                                        qself: None,
+                                        path: syn_path_reference([
+                                            &rust_generated_fn_parameter_name(i),
+                                        ]),
+                                    })),
                                     attrs: vec![],
                                     colon_token: syn::token::Colon(syn_span()),
                                     ty: Box::new(still_syntax_type_to_rust(
@@ -10265,131 +10377,61 @@ fn variable_declaration_to_rust<'a>(
                                         still_syntax_node_as_ref(input_type_node),
                                     )),
                                 })
-                            },
-                        ))
-                        .collect(),
-                    output: syn::ReturnType::Type(
-                        syn::token::RArrow(syn_span()),
-                        Box::new(maybe_still_syntax_type_to_rust(
-                            errors,
-                            || StillErrorNode {
-                                range: variable_declaration_info.range,
-                                message: Box::from(
-                                    "missing function result type \\..parameters.. -> here",
-                                ),
-                            },
-                            // TODO this is dumb.
-                            // consider separating out to_rust from collecting records
-                            &mut std::collections::HashSet::new(),
-                            maybe_output.as_ref().map(still_syntax_node_as_ref),
-                        )),
-                    ),
-                    variadic: None,
-                },
-                block: Box::new(syn::Block {
-                    brace_token: syn::token::Brace(syn_span()),
-                    stmts: vec![syn::Stmt::Expr(
-                        maybe_still_syntax_expression_to_rust(
-                            errors,
-                            || StillErrorNode {
-                                range: variable_declaration_info.range,
-                                message: Box::from(
-                                    "missing lambda result expression after \\..parameters.. -> here",
-                                ),
-                            },
-                            records_used,
-                            variable_declarations,
-                            result_lambda_result,
+                            }))
+                            .collect(),
+                        output: syn::ReturnType::Type(
+                            syn::token::RArrow(syn_span()),
+                            Box::new(maybe_still_syntax_type_to_rust(
+                                errors,
+                                || StillErrorNode {
+                                    range: variable_declaration_info.range,
+                                    message: Box::from(
+                                        "missing function result type \\..parameters.. -> here",
+                                    ),
+                                },
+                                // TODO this is dumb.
+                                // consider separating out to_rust from collecting records
+                                &mut std::collections::HashSet::new(),
+                                maybe_output.as_ref().map(still_syntax_node_as_ref),
+                            )),
                         ),
-                        None,
-                    )],
-                }),
-            }),
-            None => syn::Item::Fn(syn::ItemFn {
-                attrs: rust_attrs,
-                vis: syn::Visibility::Public(syn::token::Pub(syn_span())),
-                sig: syn::Signature {
-                    constness: None,
-                    asyncness: None,
-                    unsafety: None,
-                    abi: None,
-                    fn_token: syn::token::Fn(syn_span()),
-                    ident: rust_ident,
-                    generics: rust_generics,
-                    paren_token: syn::token::Paren(syn_span()),
-                    inputs: std::iter::once(default_allocator_fn_arg())
-                        .chain(inputs.iter().enumerate().map(|(i, input_type_node)| {
-                            syn::FnArg::Typed(syn::PatType {
-                                pat: Box::new(syn::Pat::Path(syn::ExprPath {
-                                    attrs: vec![],
-                                    qself: None,
-                                    path: syn_path_reference([&rust_generated_fn_parameter_name(
-                                        i,
-                                    )]),
-                                })),
+                        variadic: None,
+                    },
+                    block: Box::new(syn::Block {
+                        brace_token: syn::token::Brace(syn_span()),
+                        stmts: vec![syn::Stmt::Expr(
+                            syn::Expr::Call(syn::ExprCall {
                                 attrs: vec![],
-                                colon_token: syn::token::Colon(syn_span()),
-                                ty: Box::new(still_syntax_type_to_rust(
-                                    errors,
-                                    // TODO this is dumb.
-                                    // consider separating out to_rust from collecting records
-                                    &mut std::collections::HashSet::new(),
-                                    still_syntax_node_as_ref(input_type_node),
-                                )),
-                            })
-                        }))
-                        .collect(),
-                    output: syn::ReturnType::Type(
-                        syn::token::RArrow(syn_span()),
-                        Box::new(maybe_still_syntax_type_to_rust(
-                            errors,
-                            || StillErrorNode {
-                                range: variable_declaration_info.range,
-                                message: Box::from(
-                                    "missing function result type \\..parameters.. -> here",
-                                ),
-                            },
-                            // TODO this is dumb.
-                            // consider separating out to_rust from collecting records
-                            &mut std::collections::HashSet::new(),
-                            maybe_output.as_ref().map(still_syntax_node_as_ref),
-                        )),
-                    ),
-                    variadic: None,
-                },
-                block: Box::new(syn::Block {
-                    brace_token: syn::token::Brace(syn_span()),
-                    stmts: vec![syn::Stmt::Expr(
-                        syn::Expr::Call(syn::ExprCall {
-                            attrs: vec![],
-                            func: Box::new(match variable_declaration_info.result {
-                                None => syn_expr_todo(),
-                                Some(result_node) => still_syntax_expression_to_rust(
-                                    errors,
-                                    records_used,
-                                    variable_declarations,
-                                    result_node,
-                                ),
-                            }),
-                            paren_token: syn::token::Paren(syn_span()),
-                            args: inputs
-                                .iter()
-                                .enumerate()
-                                .map(|(i, _)| {
-                                    syn::Expr::Path(syn::ExprPath {
-                                        attrs: vec![],
-                                        qself: None,
-                                        path: syn_path_reference([
-                                            &rust_generated_fn_parameter_name(i),
-                                        ]),
+                                func: Box::new(match variable_declaration_info.result {
+                                    None => syn_expr_todo(),
+                                    Some(result_node) => still_syntax_expression_to_rust(
+                                        errors,
+                                        records_used,
+                                        variable_declarations,
+                                        result_node,
+                                    ),
+                                }),
+                                paren_token: syn::token::Paren(syn_span()),
+                                args: inputs
+                                    .iter()
+                                    .enumerate()
+                                    .map(|(i, _)| {
+                                        syn::Expr::Path(syn::ExprPath {
+                                            attrs: vec![],
+                                            qself: None,
+                                            path: syn_path_reference([
+                                                &rust_generated_fn_parameter_name(i),
+                                            ]),
+                                        })
                                     })
-                                })
-                                .collect(),
-                        }),
-                        None,
-                    )],
+                                    .collect(),
+                            }),
+                            None,
+                        )],
+                    }),
                 }),
-            }),
+                true,
+            ),
         },
     }
 }
@@ -10900,7 +10942,7 @@ fn maybe_still_syntax_expression_to_rust<'a>(
     records_used: &mut std::collections::HashSet<Vec<&'a str>>,
     project_variable_declarations: &std::collections::HashMap<
         &str,
-        Option<StillSyntaxNode<StillSyntaxType>>,
+        CompiledVariableDeclarationInfo,
     >,
     maybe_expression: Option<StillSyntaxNode<&'a StillSyntaxExpression>>,
 ) -> syn::Expr {
@@ -10922,7 +10964,7 @@ fn still_syntax_expression_to_rust<'a>(
     records_used: &mut std::collections::HashSet<Vec<&'a str>>,
     project_variable_declarations: &std::collections::HashMap<
         &str,
-        Option<StillSyntaxNode<StillSyntaxType>>,
+        CompiledVariableDeclarationInfo,
     >,
     expression_node: StillSyntaxNode<&'a StillSyntaxExpression>,
 ) -> syn::Expr {
@@ -11155,19 +11197,21 @@ fn still_syntax_expression_to_rust<'a>(
                     still_syntax_node_as_ref(argument_node),
                 )
             });
-            // TODO invert, first check for local binding, else assume global binding
+            let rust_reference: syn::Expr = syn_expr_reference([&rust_variable_name]);
             match project_variable_declarations.get(variable_node.value.as_str()) {
-                Some(_) => {
+                Some(compiled_origin_variable_declaration) => {
                     // TODO currently all rust compiled variable declarations are fn(&Alloc)s,
-                    // once some can omit &Alloc, omit argument
                     // once some can be static, return variable without call
                     syn::Expr::Call(syn::ExprCall {
                         attrs: vec![],
-                        func: Box::new(syn_expr_reference([&rust_variable_name])),
+                        func: Box::new(rust_reference),
                         paren_token: syn::token::Paren(syn_span()),
-                        args: std::iter::once(syn_expr_reference([
-                            default_allocator_parameter_name,
-                        ]))
+                        args: if compiled_origin_variable_declaration.has_allocator_parameter {
+                            Some(syn_expr_reference([default_allocator_parameter_name]))
+                        } else {
+                            None
+                        }
+                        .into_iter()
                         .chain(rust_arguments)
                         .collect(),
                     })
@@ -11178,9 +11222,9 @@ fn still_syntax_expression_to_rust<'a>(
                         false
                     };
                     let rust_variable: syn::Expr = if variable_is_copy {
-                        syn_expr_reference([&rust_variable_name])
+                        rust_reference
                     } else {
-                        syn_expr_call_clone_method(syn_expr_reference([&rust_variable_name]))
+                        syn_expr_call_clone_method(rust_reference)
                     };
                     if arguments.is_empty() {
                         rust_variable
@@ -11189,11 +11233,7 @@ fn still_syntax_expression_to_rust<'a>(
                             attrs: vec![],
                             func: Box::new(rust_variable),
                             paren_token: syn::token::Paren(syn_span()),
-                            args: std::iter::once(syn_expr_reference([
-                                default_allocator_parameter_name,
-                            ]))
-                            .chain(rust_arguments)
-                            .collect(),
+                            args: rust_arguments.collect(),
                         })
                     }
                 }
@@ -11386,7 +11426,7 @@ fn still_syntax_let_declaration_to_rust<'a>(
     records_used: &mut std::collections::HashSet<Vec<&'a str>>,
     project_variable_declarations: &std::collections::HashMap<
         &str,
-        Option<StillSyntaxNode<StillSyntaxType>>,
+        CompiledVariableDeclarationInfo,
     >,
     declaration_node: StillSyntaxNode<&'a StillSyntaxLetDeclaration>,
 ) -> syn::Local {
