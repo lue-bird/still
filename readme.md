@@ -51,7 +51,6 @@ run \:opt str:state-or-uninitialized >
 - no `Task`/`async`, detectable mutation, side effects, `|>`, infix operators, currying, modules, lifetime tracking
 
 ## TODO
-- do not clone local value variables whose type is `Copy`
 - generate implementations for `StillToOwned` and `OwnedToStill` for generated choice types
 - rename `case of` to `if x = ... > ... = ... > ...` and remove let destructuring. previous:
   ```still
