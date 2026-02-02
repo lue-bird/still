@@ -13,6 +13,7 @@ struct ProjectState {
     syntax: StillSyntaxProject,
     type_aliases: std::collections::HashMap<StillName, TypeAliasInfo>,
     choice_types: std::collections::HashMap<StillName, ChoiceTypeInfo>,
+    variable_declarations: std::collections::HashMap<StillName, CompiledVariableDeclarationInfo>,
     errors: Vec<StillErrorNode>,
 }
 
@@ -652,6 +653,7 @@ fn uninitialized_project_state() -> ProjectState {
         },
         type_aliases: std::collections::HashMap::new(),
         choice_types: std::collections::HashMap::new(),
+        variable_declarations: std::collections::HashMap::new(),
         errors: vec![],
     }
 }
@@ -680,6 +682,7 @@ fn initialize_project_state_from_source(
         syntax: parsed_project,
         type_aliases: compiled_project.type_aliases,
         choice_types: compiled_project.choice_types,
+        variable_declarations: compiled_project.variable_declarations,
         errors: errors,
     }
 }
@@ -770,10 +773,7 @@ fn respond_to_hover(
                     name: origin_project_declaration_name_node,
                     result: maybe_result_node,
                 } => present_variable_declaration_info_markdown(
-                    still_syntax_node_as_ref_map(
-                        origin_project_declaration_name_node,
-                        StillName::as_str,
-                    ),
+                    origin_project_declaration_name_node.value.as_str(),
                     documentation,
                     maybe_result_node
                         .as_ref()
@@ -832,92 +832,71 @@ fn respond_to_hover(
                     range: Some(hovered_symbol_node.range),
                 });
             }
-            let origin_declaration_info_markdown: String = hovered_project_state
-                .syntax
-                .declarations
-                .iter()
-                .find_map(|origin_project_declaration_or_err| {
-                    let origin_project_declaration =
-                        origin_project_declaration_or_err.as_ref().ok()?;
-                    let origin_project_declaration_node =
-                        origin_project_declaration.declaration.as_ref()?;
-                    match &origin_project_declaration_node.value {
-                        StillSyntaxDeclaration::ChoiceType {
-                            name: origin_project_declaration_name,
-                            parameters: origin_project_declaration_parameters,
-                            equals_key_symbol_range: _,
-                            variant0_name: origin_project_declaration_variant0_name_node,
-                            variant0_value: origin_project_declaration_variant0_maybe_value,
-                            variant1_up: origin_project_declaration_variant1_up,
-                        } => {
+            let origin_declaration_info_markdown: String =
+                if let Some(origin_compiled_variable_declaration_info) = hovered_project_state
+                    .variable_declarations
+                    .get(hovered_name)
+                {
+                    present_variable_declaration_info_markdown(
+                        hovered_name,
+                        origin_compiled_variable_declaration_info
+                            .documentation
+                            .as_deref(),
+                        origin_compiled_variable_declaration_info
+                            .type_
+                            .as_ref()
+                            .map(still_syntax_node_as_ref),
+                    )
+                } else {
+                    hovered_project_state.choice_types.iter().find_map(
+                        |(
+                            origin_project_choice_type_declaration_name,
+                            origin_project_choice_type_declaration,
+                        )| {
                             let any_declared_name_matches_hovered: bool =
-                                (origin_project_declaration_variant0_name_node
+                                (origin_project_choice_type_declaration
+                                    .variant0_name
                                     .as_ref()
                                     .is_some_and(|name_node| {
                                         name_node.value.as_str() == hovered_name
                                     }))
-                                    || (origin_project_declaration_variant1_up.iter().any(
-                                        |variant| {
+                                    || (origin_project_choice_type_declaration
+                                        .variant1_up
+                                        .iter()
+                                        .any(|variant| {
                                             variant.name.as_ref().is_some_and(|name_node| {
                                                 name_node.value.as_str() == hovered_name
                                             })
-                                        },
-                                    ));
-                            if any_declared_name_matches_hovered {
+                                        }));
+                            if !any_declared_name_matches_hovered {
+                                None
+                            } else {
                                 Some(format!(
                                     "variant in\n{}",
                                     &present_choice_type_declaration_info_markdown(
-                                        origin_project_declaration_name
-                                            .as_ref()
-                                            .map(|n| n.value.as_str()),
-                                        origin_project_declaration
+                                        Some(origin_project_choice_type_declaration_name.as_str()),
+                                        origin_project_choice_type_declaration
                                             .documentation
+                                            .as_deref(),
+                                        &origin_project_choice_type_declaration.parameters,
+                                        origin_project_choice_type_declaration
+                                            .variant0_name
                                             .as_ref()
-                                            .map(|node| node.value.as_ref()),
-                                        origin_project_declaration_parameters,
-                                        origin_project_declaration_variant0_name_node.as_ref().map(
-                                            |n| still_syntax_node_as_ref_map(n, StillName::as_str)
-                                        ),
-                                        origin_project_declaration_variant0_maybe_value
+                                            .map(|n| still_syntax_node_as_ref_map(
+                                                n,
+                                                StillName::as_str
+                                            )),
+                                        origin_project_choice_type_declaration
+                                            .variant0_value
                                             .as_ref()
                                             .map(still_syntax_node_as_ref),
-                                        origin_project_declaration_variant1_up,
+                                        &origin_project_choice_type_declaration.variant1_up,
                                     )
                                 ))
-                            } else {
-                                None
                             }
-                        }
-                        StillSyntaxDeclaration::TypeAlias { .. } => None,
-                        StillSyntaxDeclaration::Variable {
-                            name: origin_project_declaration_name_node,
-                            result: maybe_result_node,
-                        } => {
-                            if origin_project_declaration_name_node.value.as_str() == hovered_name {
-                                let maybe_result_type: Option<StillSyntaxNode<StillSyntaxType>> =
-                                    maybe_result_node.as_ref().map(|result_node| {
-                                        still_syntax_expression_type(
-                                            &hovered_project_state.type_aliases,
-                                            still_syntax_node_as_ref(result_node),
-                                        )
-                                    });
-                                Some(present_variable_declaration_info_markdown(
-                                    still_syntax_node_as_ref_map(
-                                        origin_project_declaration_name_node,
-                                        StillName::as_str,
-                                    ),
-                                    origin_project_declaration
-                                        .documentation
-                                        .as_ref()
-                                        .map(|node| node.value.as_ref()),
-                                    maybe_result_type.as_ref().map(still_syntax_node_as_ref),
-                                ))
-                            } else {
-                                None
-                            }
-                        }
-                    }
-                })?;
+                        },
+                    )?
+                };
             Some(lsp_types::Hover {
                 contents: lsp_types::HoverContents::Markup(lsp_types::MarkupContent {
                     kind: lsp_types::MarkupKind::Markdown,
@@ -1825,15 +1804,15 @@ fn semantic_token_type_to_id(semantic_token: &lsp_types::SemanticTokenType) -> u
 }
 
 fn present_variable_declaration_info_markdown(
-    name_node: StillSyntaxNode<&str>,
+    name: &str,
     maybe_documentation: Option<&str>,
     retrieved_type_result: Option<StillSyntaxNode<&StillSyntaxType>>,
 ) -> String {
     let description: String = match retrieved_type_result {
         Some(retrieved_type) => {
             format!(
-                "```still\n{} :{}{}\n```\n",
-                name_node.value,
+                "```still\n{}{}:{}:\n```\n",
+                name,
                 match still_syntax_range_line_span(retrieved_type.range) {
                     LineSpan::Single => " ",
                     LineSpan::Multiple => "\n    ",
@@ -1841,7 +1820,7 @@ fn present_variable_declaration_info_markdown(
                 &still_syntax_type_to_string(retrieved_type, 4)
             )
         }
-        None => format!("```still\n{}\n```\n", &name_node.value),
+        None => format!("```still\n{}\n```\n", name),
     };
     match maybe_documentation {
         None => description,
@@ -1873,7 +1852,7 @@ fn present_type_alias_declaration_info_markdown(
 }
 
 fn present_choice_type_declaration_info_markdown(
-    maybe_name: Option<&str>,
+    maybe_name: Option<&str>, // TODO take &str
     maybe_documentation: Option<&str>,
     parameters: &[StillSyntaxNode<StillName>],
     variant0_name: Option<StillSyntaxNode<&str>>,
@@ -2048,7 +2027,7 @@ fn variable_declaration_completions_into(
                         lsp_types::MarkupContent {
                             kind: lsp_types::MarkupKind::Markdown,
                             value: present_variable_declaration_info_markdown(
-                                still_syntax_node_as_ref_map(name_node, StillName::as_str),
+                                name_node.value.as_str(),
                                 origin_project_declaration_documentation,
                                 maybe_result_node
                                     .as_ref()
@@ -3330,24 +3309,29 @@ fn still_syntax_type_function_into(
     maybe_output: Option<StillSyntaxNode<&StillSyntaxType>>,
 ) {
     so_far.push('\\');
+    if line_span == LineSpan::Multiple {
+        so_far.push(' ');
+    }
     if let Some((input0_node, input1_up)) = inputs.split_first() {
         still_syntax_type_not_parenthesized_into(
             so_far,
-            indent_for_input + 1,
+            indent_for_input + 2,
             still_syntax_node_as_ref(input0_node),
         );
         for input_node in input1_up {
-            space_or_linebreak_indented_into(so_far, line_span, indent_for_input);
-            so_far.push(',');
+            if line_span == LineSpan::Multiple {
+                linebreak_indented_into(so_far, indent_for_input);
+            }
+            so_far.push_str(", ");
             still_syntax_type_not_parenthesized_into(
                 so_far,
-                indent_for_input + 1,
+                indent_for_input + 2,
                 still_syntax_node_as_ref(input_node),
             );
         }
     }
     space_or_linebreak_indented_into(so_far, line_span, indent_for_input);
-    so_far.push_str("-> ");
+    so_far.push_str("> ");
     if let Some(output_node) = maybe_output {
         still_syntax_type_not_parenthesized_into(
             so_far,
@@ -8430,8 +8414,8 @@ fn parse_still_syntax_project(project_source: &str) -> StillSyntaxProject {
 #[derive(Clone, Copy)]
 struct StillSyntaxVariableDeclarationInfo<'a> {
     range: lsp_types::Range,
-    documentation: Option<StillSyntaxNode<&'a str>>,
-    name: &'a str,
+    documentation: Option<&'a StillSyntaxNode<Box<str>>>,
+    name: &'a StillName,
     result: Option<StillSyntaxNode<&'a StillSyntaxExpression>>,
 }
 #[derive(Clone, Copy)]
@@ -8560,10 +8544,7 @@ fn still_project_to_rust(
                             variable_declaration_graph_node,
                             StillSyntaxVariableDeclarationInfo {
                                 range: declaration_node.range,
-                                documentation: documented_declaration
-                                    .documentation
-                                    .as_ref()
-                                    .map(still_syntax_node_unbox),
+                                documentation: documented_declaration.documentation.as_ref(),
                                 name: &name_node.value,
                                 result: maybe_result.as_ref().map(still_syntax_node_as_ref),
                             },
@@ -8607,6 +8588,7 @@ struct CompiledProject {
     rust: syn::File,
     type_aliases: std::collections::HashMap<StillName, TypeAliasInfo>,
     choice_types: std::collections::HashMap<StillName, ChoiceTypeInfo>,
+    variable_declarations: std::collections::HashMap<StillName, CompiledVariableDeclarationInfo>,
 }
 fn still_project_info_to_rust(
     errors: &mut Vec<StillErrorNode>,
@@ -8721,7 +8703,7 @@ fn still_project_info_to_rust(
         }
     }
     let mut compiled_variable_declaration_info: std::collections::HashMap<
-        &str,
+        StillName,
         CompiledVariableDeclarationInfo,
     > = core_variable_declaration_infos();
     compiled_variable_declaration_info.reserve(variable_graph.len());
@@ -8740,10 +8722,13 @@ fn still_project_info_to_rust(
             match variable_declaration.result {
                 None => {
                     compiled_variable_declaration_info.insert(
-                        variable_declaration.name,
+                        variable_declaration.name.clone(),
                         CompiledVariableDeclarationInfo {
-                            has_allocator_parameter: true,
+                            documentation: variable_declaration
+                                .documentation
+                                .map(|n| n.value.clone()),
                             type_: None,
+                            has_allocator_parameter: true,
                         },
                     );
                 }
@@ -8764,10 +8749,13 @@ Please change for example  \\input, patterns -> ...  to  \\input, patterns -> :o
                         }
                         type_node => {
                             compiled_variable_declaration_info.insert(
-                                variable_declaration.name,
+                                variable_declaration.name.clone(),
                                 CompiledVariableDeclarationInfo {
-                                    has_allocator_parameter: true,
+                                    documentation: variable_declaration
+                                        .documentation
+                                        .map(|n| n.value.clone()),
                                     type_: Some(type_node),
+                                    has_allocator_parameter: true,
                                 },
                             );
                         }
@@ -8806,15 +8794,17 @@ Please change for example  \\input, patterns -> ...  to  \\input, patterns -> :o
         },
         type_aliases: type_aliases,
         choice_types: choice_types,
+        variable_declarations: compiled_variable_declaration_info,
     }
 }
 #[derive(Clone)]
 struct CompiledVariableDeclarationInfo {
-    has_allocator_parameter: bool,
+    documentation: Option<Box<str>>,
     type_: Option<StillSyntaxNode<StillSyntaxType>>,
+    has_allocator_parameter: bool,
 }
 fn core_variable_declaration_infos()
--> std::collections::HashMap<&'static str, CompiledVariableDeclarationInfo> {
+-> std::collections::HashMap<StillName, CompiledVariableDeclarationInfo> {
     fn variable(name: &'static str) -> StillSyntaxType {
         StillSyntaxType::Variable(StillName::from(name))
     }
@@ -8843,106 +8833,124 @@ fn core_variable_declaration_infos()
     std::collections::HashMap::from(
         [
             (
-                "int-to-str",
+                StillName::from("int-to-str"),
                 true,
                 function([still_syntax_type_int], still_syntax_type_str),
+                "Convert `int` to `str`",
             ),
             (
-                "str-to-int",
+                StillName::from("str-to-int"),
                 false,
                 function([still_syntax_type_str], opt(still_syntax_type_int)),
+                "Parse a complete `str` into an `int`, returning :opt int:Absent otherwise",
             ),
             (
-                "dec-to-str",
+                StillName::from("dec-to-str"),
                 true,
                 function([still_syntax_type_dec], still_syntax_type_str),
+                "Convert `dec` to `str`",
             ),
             (
-                "str-to-dec",
+                StillName::from("str-to-dec"),
                 false,
                 function([still_syntax_type_str], opt(still_syntax_type_dec)),
+                "Parse a complete `str` into an `dec`, returning :opt dec:Absent otherwise",
             ),
             (
-                "chr-byte-count",
+                StillName::from("chr-byte-count"),
                 false,
                 function([still_syntax_type_chr], still_syntax_type_int),
+                "Encoded as UTF-8, how many bytes the `chr` spans, between 1 and 4",
             ),
             (
-                "chr-to-str",
+                StillName::from("chr-to-str"),
                 true,
                 function([still_syntax_type_chr], still_syntax_type_str),
+                "Convert `chr` to `str`",
             ),
             (
-                "str-byte-count",
+                StillName::from("str-byte-count"),
                 false,
                 function([still_syntax_type_str], still_syntax_type_int),
+                "Encoded as UTF-8, how many bytes the `str` spans",
             ),
             (
-                "str-chr-at-byte-index",
+                StillName::from("str-chr-at-byte-index"),
                 false,
                 function(
                     [still_syntax_type_int, still_syntax_type_str],
                     opt(still_syntax_type_chr),
                 ),
+                "The `chr` at the floor char boundary of a given UTF-8 index. If it lands out of bounds, results in :option Element:Absent",
             ),
             (
-                "str-to-chrs",
+                StillName::from("str-to-chrs"),
                 true,
                 function([still_syntax_type_str], vec(still_syntax_type_chr)),
+                "Split the `str` into a `vec` of `chr`s",
             ),
             (
-                "chrs-to-str",
+                StillName::from("chrs-to-str"),
                 true,
                 function([vec(still_syntax_type_chr)], still_syntax_type_str),
+                "Concatenate a `vec` of `chr`s into one `str`",
             ),
             (
-                "vec-repeat",
+                StillName::from("vec-repeat"),
                 true,
                 function([still_syntax_type_int, variable("A")], vec(variable("A"))),
+                "Build a `vec` with a given length and an element at each index",
             ),
             (
-                "vec-length",
+                StillName::from("vec-length"),
                 false,
                 function([vec(variable("A"))], still_syntax_type_int),
+                "Count of its elements",
             ),
             (
-                "vec-element",
+                StillName::from("vec-element"),
                 false,
                 function(
                     [still_syntax_type_int, vec(variable("A"))],
                     opt(variable("A")),
                 ),
+                "The element at a given index. If it lands out of bounds, results in :option Element:Absent",
             ),
             (
-                "vec-take",
+                StillName::from("vec-take"),
                 false,
                 function(
                     [still_syntax_type_int, vec(variable("A"))],
                     vec(variable("A")),
                 ),
+                "Truncate to at most a given length",
             ),
             (
-                "vec-attach",
+                StillName::from("vec-attach"),
                 false,
                 function([vec(variable("A")), vec(variable("A"))], vec(variable("A"))),
+                "Glue the elements in a second `vec` after the first `vec`",
             ),
             (
-                "vec-flatten",
+                StillName::from("vec-flatten"),
                 false,
                 function([vec(vec(variable("A")))], vec(variable("A"))),
+                "Concatenate all the elements nested inside the inner `vec`s",
             ),
             (
-                "strs-flatten",
+                StillName::from("strs-flatten"),
                 true,
                 function([vec(still_syntax_type_str)], still_syntax_type_str),
+                "Concatenate all the string elements",
             ),
         ]
-        .map(|(name, has_allocator_parameter, type_)| {
+        .map(|(name, has_allocator_parameter, type_, documentation)| {
             (
                 name,
                 CompiledVariableDeclarationInfo {
-                    has_allocator_parameter: has_allocator_parameter,
+                    documentation: Some(Box::from(documentation)),
                     type_: Some(still_syntax_node_empty(type_)),
+                    has_allocator_parameter: has_allocator_parameter,
                 },
             )
         }),
@@ -10442,7 +10450,7 @@ fn variable_declaration_to_rust<'a>(
     records_used: &mut std::collections::HashSet<Vec<&'a str>>,
     type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
     choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
-    variable_declarations: &std::collections::HashMap<&str, CompiledVariableDeclarationInfo>,
+    variable_declarations: &std::collections::HashMap<StillName, CompiledVariableDeclarationInfo>,
     variable_declaration_info: StillSyntaxVariableDeclarationInfo<'a>,
 ) -> (syn::Item, bool) {
     let (rust_type, maybe_still_type_node) = match variable_declaration_info.result {
@@ -10488,7 +10496,7 @@ fn variable_declaration_to_rust<'a>(
     }
     let rust_attrs: Vec<syn::Attribute> = variable_declaration_info
         .documentation
-        .map(|n| syn_attribute_doc(n.value))
+        .map(|n| syn_attribute_doc(&n.value))
         .into_iter()
         .collect::<Vec<_>>();
     let rust_ident: syn::Ident = syn_ident(&still_name_to_lowercase_rust(
@@ -11367,7 +11375,7 @@ fn maybe_still_syntax_expression_to_rust<'a>(
     type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
     choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
     project_variable_declarations: &std::collections::HashMap<
-        &str,
+        StillName,
         CompiledVariableDeclarationInfo,
     >,
     local_bindings: std::rc::Rc<
@@ -11400,7 +11408,7 @@ fn still_syntax_expression_to_rust<'a>(
     type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
     choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
     project_variable_declarations: &std::collections::HashMap<
-        &str,
+        StillName,
         CompiledVariableDeclarationInfo,
     >,
     local_bindings: std::rc::Rc<
@@ -12178,7 +12186,7 @@ fn still_syntax_let_declaration_to_rust_into<'a>(
     type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
     choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
     project_variable_declarations: &std::collections::HashMap<
-        &str,
+        StillName,
         CompiledVariableDeclarationInfo,
     >,
     local_bindings: std::rc::Rc<
