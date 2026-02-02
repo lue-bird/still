@@ -1,5 +1,5 @@
 very small, explicitly boring programming language that compiles to rust, inspired by [elm](https://elm-lang.org/).
-> ⚠️ Just experimentation, use with a bucket of caution and salt.
+> ⚠️ Experimental, everything subject to change, use with a bowl of caution and salt.
 
 ### hello world
 
@@ -87,6 +87,7 @@ run \:opt str:state-or-uninitialized >
 - unused checking
 - name collision checking
 - name shadowing checking
+- provide hover info for core choice types and variables
 
 ## considering
 - (leaning towards yes) actually deeply consider limiting reference calls to at most 1 argument just like variant construction.

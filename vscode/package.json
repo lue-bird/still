@@ -56,31 +56,7 @@
         "title": "restart still",
         "category": "still"
       }
-    ],
-    "configuration": {
-      "type": "object",
-      "title": "still",
-      "properties": {
-        "still.stillPath": {
-          "scope": "window",
-          "type": "string",
-          "default": "",
-          "description": "compiler executable, default still. Should be empty by default."
-        },
-        "still.stillTestPath": {
-          "scope": "window",
-          "type": "string",
-          "default": "",
-          "description": "test runner executable, default still-test. Should be empty by default."
-        },
-        "still.stillFormatPath": {
-          "scope": "window",
-          "type": "string",
-          "default": "",
-          "description": "formatter executable, default still-format. \"builtin\" is a fast rust formatter that is mostly but not fully compatible. Should be empty by default."
-        }
-      }
-    }
+    ]
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1"

@@ -1,13 +1,24 @@
-type tree = Leaf int | Branch vec tree
 
-tree-size \:tree: tree >
+
+type tree
+    = Leaf int
+    | Branch vec tree
+
+tree-size \:tree:tree >
     case tree of
-        :tree:Leaf :int:int > int
-        :tree:Branch :vec tree:subs > vec-length subs
+        :tree:Leaf :int:int >
+            int
+        :tree:Branch :vec tree:subs >
+            vec-length subs
 
 greet \{ name :str:name } >
-    let list [1,2,3]
-    let another vec-attach list list
+    let list
+            [ 1, 2, 3 ]
+    let another
+            vec-attach list list
     case name of
-        "me" > "Hello, you!"
-        :str:_ > strs-flatten [ "Hello, ", name, "!" ]
+        "me" >
+            "Hello, you!"
+        :str:_ >
+            strs-flatten [ "Hello, ", name, "!" ]
+
