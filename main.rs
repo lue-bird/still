@@ -3303,9 +3303,10 @@ const still_syntax_type_str: StillSyntaxType = StillSyntaxType::Construct {
     name: still_syntax_node_empty(StillName::const_new("str")),
     arguments: vec![],
 };
+const still_type_vec_name: &str = "vec";
 fn still_syntax_type_vec(element_type: StillSyntaxNode<StillSyntaxType>) -> StillSyntaxType {
     StillSyntaxType::Construct {
-        name: still_syntax_node_empty(StillName::const_new("vec")),
+        name: still_syntax_node_empty(StillName::new(still_type_vec_name)),
         arguments: vec![element_type],
     }
 }
@@ -8116,7 +8117,8 @@ fn parse_still_syntax_expression_case(state: &mut ParseState) -> Option<StillSyn
         },
         Some(arrow_key_symbol_range) => {
             parse_still_whitespace(state);
-            let maybe_result = parse_still_syntax_expression_space_separated(state);
+            let maybe_result: Option<StillSyntaxNode<StillSyntaxExpression>> =
+                parse_still_syntax_expression_space_separated(state);
             StillSyntaxExpressionCase {
                 pattern: case_pattern_node,
                 arrow_key_symbol_range: Some(arrow_key_symbol_range),
@@ -9125,7 +9127,7 @@ fn core_choice_type_infos() -> std::collections::HashMap<StillName, ChoiceTypeIn
             },
         ),
         (
-            StillName::from("vec"),
+            StillName::from(still_type_vec_name),
             ChoiceTypeInfo {
                 parameters: vec![still_syntax_node_empty(StillName::from("A"))],
                 variant0_name: None,
@@ -10203,9 +10205,10 @@ fn still_syntax_variant_to_rust<'a>(
 ) -> CompiledVariant {
     let value_constructs_recursive_type: bool = match variant_value {
         None => false,
-        Some(variant_value_node) => {
-            still_syntax_type_constructs_any_in(scc_type_declaration_names, variant_value_node)
-        }
+        Some(variant_value_node) => still_syntax_constructs_recursive_type_in(
+            scc_type_declaration_names,
+            variant_value_node,
+        ),
     };
     CompiledVariant {
         value_constructs_recursive_type,
@@ -10288,18 +10291,18 @@ fn still_syntax_type_is_copy(
             name: name_node,
             arguments,
         } => {
-            (match type_aliases.get(name_node.value.as_str()) {
+            (match choice_types.get(name_node.value.as_str()) {
                 None => {
-                    match choice_types.get(name_node.value.as_str()) {
+                    match type_aliases.get(name_node.value.as_str()) {
                         None => {
                             // not found, therefore from (mutually) recursive type,
                             // therefore compiled to a reference, therefore Copy
                             true
                         }
-                        Some(choice_type_info) => choice_type_info.is_copy,
+                        Some(compile_type_alias_info) => compile_type_alias_info.is_copy,
                     }
                 }
-                Some(compile_type_alias_info) => compile_type_alias_info.is_copy,
+                Some(choice_type_info) => choice_type_info.is_copy,
             }) && arguments.iter().all(|input_node| {
                 still_syntax_type_is_copy(
                     variables_are_copy,
@@ -10410,7 +10413,7 @@ fn still_syntax_type_uses_lifetime(
             }),
     }
 }
-fn still_syntax_type_constructs_any_in(
+fn still_syntax_constructs_recursive_type_in(
     scc_type_declaration_names: &std::collections::HashSet<&str>,
     type_node: StillSyntaxNode<&StillSyntaxType>,
 ) -> bool {
@@ -10418,7 +10421,7 @@ fn still_syntax_type_constructs_any_in(
         StillSyntaxType::Variable(_) => false,
         StillSyntaxType::Parenthesized(maybe_in_parens) => {
             maybe_in_parens.as_ref().is_some_and(|in_parens_node| {
-                still_syntax_type_constructs_any_in(
+                still_syntax_constructs_recursive_type_in(
                     scc_type_declaration_names,
                     still_syntax_node_unbox(in_parens_node),
                 )
@@ -10430,7 +10433,7 @@ fn still_syntax_type_constructs_any_in(
         } => maybe_after_comment
             .as_ref()
             .is_some_and(|after_comment_node| {
-                still_syntax_type_constructs_any_in(
+                still_syntax_constructs_recursive_type_in(
                     scc_type_declaration_names,
                     still_syntax_node_unbox(after_comment_node),
                 )
@@ -10441,12 +10444,12 @@ fn still_syntax_type_constructs_any_in(
             output: maybe_output,
         } => {
             maybe_output.as_ref().is_some_and(|output_node| {
-                still_syntax_type_constructs_any_in(
+                still_syntax_constructs_recursive_type_in(
                     scc_type_declaration_names,
                     still_syntax_node_unbox(output_node),
                 )
             }) || (inputs.iter().any(|input_node| {
-                still_syntax_type_constructs_any_in(
+                still_syntax_constructs_recursive_type_in(
                     scc_type_declaration_names,
                     still_syntax_node_as_ref(input_node),
                 )
@@ -10456,9 +10459,18 @@ fn still_syntax_type_constructs_any_in(
             name: name_node,
             arguments,
         } => {
+            // skipped for now as recursive types are currently assumed to always contain a lifetime
+            // if name_node.value == still_type_vec_name {
+            //     // is already behind a reference
+            //     false
+            // } else
+            //
+            // more precise would be expanding type aliases here and checking the result
+            // (to cover e.g. type alias list A = vec A).
+            // skipped for now for performance
             scc_type_declaration_names.contains(name_node.value.as_str())
                 || (arguments.iter().any(|argument_node| {
-                    still_syntax_type_constructs_any_in(
+                    still_syntax_constructs_recursive_type_in(
                         scc_type_declaration_names,
                         still_syntax_node_as_ref(argument_node),
                     )
@@ -10468,7 +10480,7 @@ fn still_syntax_type_constructs_any_in(
             .iter()
             .filter_map(|field| field.value.as_ref())
             .any(|field_value| {
-                still_syntax_type_constructs_any_in(
+                still_syntax_constructs_recursive_type_in(
                     scc_type_declaration_names,
                     still_syntax_node_as_ref(field_value),
                 )
@@ -10637,6 +10649,44 @@ fn variable_declaration_to_rust<'a>(
                         std::rc::Rc::new(local_bindings),
                         result_lambda_result,
                     );
+                let mut bindings_to_clone: Vec<BindingToClone> = Vec::new();
+                let rust_parameters: syn::punctuated::Punctuated<syn::FnArg, syn::token::Comma> =
+                    (if compiled_result_lambda_result.uses_allocator {
+                        Some(default_allocator_fn_arg())
+                    } else {
+                        None
+                    })
+                    .into_iter()
+                    .chain(result_lambda_parameters.iter().zip(inputs.iter()).map(
+                        |(parameter_node, input_type_node)| {
+                            syn::FnArg::Typed(syn::PatType {
+                                pat: Box::new(still_syntax_pattern_to_rust(
+                                    errors,
+                                    records_used,
+                                    &mut bindings_to_clone,
+                                    type_aliases,
+                                    choice_types,
+                                    false,
+                                    still_syntax_node_as_ref(parameter_node),
+                                )),
+                                attrs: vec![],
+                                colon_token: syn::token::Colon(syn_span()),
+                                ty: Box::new(still_syntax_type_to_rust(
+                                    errors,
+                                    // TODO this is dumb.
+                                    // consider separating out to_rust from collecting records
+                                    &mut std::collections::HashSet::new(),
+                                    type_aliases,
+                                    choice_types,
+                                    still_syntax_node_as_ref(input_type_node),
+                                )),
+                            })
+                        },
+                    ))
+                    .collect();
+                let mut rust_stmts: Vec<syn::Stmt> = Vec::new();
+                bindings_to_clone_to_rust_into(&mut rust_stmts, bindings_to_clone);
+                rust_stmts.push(syn::Stmt::Expr(compiled_result_lambda_result.rust, None));
                 (
                     syn::Item::Fn(syn::ItemFn {
                         attrs: rust_attrs,
@@ -10650,35 +10700,7 @@ fn variable_declaration_to_rust<'a>(
                             ident: rust_ident,
                             generics: rust_generics,
                             paren_token: syn::token::Paren(syn_span()),
-                            inputs: (if compiled_result_lambda_result.uses_allocator {
-                                Some(default_allocator_fn_arg())
-                            } else {
-                                None
-                            })
-                            .into_iter()
-                            .chain(result_lambda_parameters.iter().zip(inputs.iter()).map(
-                                |(parameter_node, input_type_node)| {
-                                    syn::FnArg::Typed(syn::PatType {
-                                        pat: Box::new(still_syntax_pattern_to_rust(
-                                            errors,
-                                            records_used,
-                                            still_syntax_node_as_ref(parameter_node),
-                                        )),
-                                        attrs: vec![],
-                                        colon_token: syn::token::Colon(syn_span()),
-                                        ty: Box::new(still_syntax_type_to_rust(
-                                            errors,
-                                            // TODO this is dumb.
-                                            // consider separating out to_rust from collecting records
-                                            &mut std::collections::HashSet::new(),
-                                            type_aliases,
-                                            choice_types,
-                                            still_syntax_node_as_ref(input_type_node),
-                                        )),
-                                    })
-                                },
-                            ))
-                            .collect(),
+                            inputs: rust_parameters,
                             output: syn::ReturnType::Type(
                                 syn::token::RArrow(syn_span()),
                                 Box::new(maybe_still_syntax_type_to_rust(
@@ -10701,7 +10723,7 @@ fn variable_declaration_to_rust<'a>(
                         },
                         block: Box::new(syn::Block {
                             brace_token: syn::token::Brace(syn_span()),
-                            stmts: vec![syn::Stmt::Expr(compiled_result_lambda_result.rust, None)],
+                            stmts: rust_stmts,
                         }),
                     }),
                     compiled_result_lambda_result.uses_allocator,
@@ -10874,6 +10896,33 @@ fn still_syntax_type_to_record(
                 still_syntax_type_to_record(type_aliases, still_syntax_node_as_ref(&resolved))
             }
         },
+    }
+}
+fn still_syntax_type_to_choice_type(
+    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
+    still_type_node: StillSyntaxNode<&StillSyntaxType>,
+) -> Option<Box<str>> {
+    match still_type_node.value {
+        StillSyntaxType::WithComment {
+            comment: _,
+            type_: Some(after_comment_node),
+        } => still_syntax_type_to_choice_type(
+            type_aliases,
+            still_syntax_node_unbox(after_comment_node),
+        ),
+        StillSyntaxType::Parenthesized(Some(in_parens_node)) => {
+            still_syntax_type_to_choice_type(type_aliases, still_syntax_node_unbox(in_parens_node))
+        }
+        StillSyntaxType::Construct {
+            name: name_node,
+            arguments: _,
+        } => match still_syntax_type_resolve_while_type_alias(type_aliases, still_type_node) {
+            None => Some(Box::from(name_node.value.as_str())),
+            Some(resolved) => {
+                still_syntax_type_to_choice_type(type_aliases, still_syntax_node_as_ref(&resolved))
+            }
+        },
+        _ => None,
     }
 }
 #[derive(Clone)]
@@ -11491,6 +11540,37 @@ fn still_syntax_expression_to_rust<'a>(
                     still_syntax_node_as_ref(parameter_node),
                 );
             }
+            let mut bindings_to_clone: Vec<BindingToClone> = Vec::new();
+            let rust_patterns = parameters
+                .iter()
+                .map(|pattern_node| {
+                    still_syntax_pattern_to_rust(
+                        errors,
+                        records_used,
+                        &mut bindings_to_clone,
+                        type_aliases,
+                        choice_types,
+                        false,
+                        still_syntax_node_as_ref(pattern_node),
+                    )
+                })
+                .collect();
+            let mut rust_stmts: Vec<syn::Stmt> = Vec::new();
+            bindings_to_clone_to_rust_into(&mut rust_stmts, bindings_to_clone);
+            let rust_result: syn::Expr = maybe_still_syntax_expression_to_rust(
+                errors,
+                || StillErrorNode {
+                    range: expression_node.range,
+                    message: Box::from("missing lambda result after \\..parameters.. -> here"),
+                },
+                records_used,
+                type_aliases,
+                choice_types,
+                project_variable_declarations,
+                std::rc::Rc::new(local_bindings),
+                maybe_result.as_ref().map(still_syntax_node_unbox),
+            )
+            .rust;
             CompiledStillExpression {
                 uses_allocator: true,
                 rust: syn_expr_call_alloc_method(syn::Expr::Closure(syn::ExprClosure {
@@ -11501,36 +11581,22 @@ fn still_syntax_expression_to_rust<'a>(
                     asyncness: None,
                     capture: Some(syn::token::Move(syn_span())),
                     or1_token: syn::token::Or(syn_span()),
-                    inputs: parameters
-                        .iter()
-                        .map(|pattern_node| {
-                            still_syntax_pattern_to_rust(
-                                errors,
-                                records_used,
-                                still_syntax_node_as_ref(pattern_node),
-                            )
-                        })
-                        .collect(),
+                    inputs: rust_patterns,
                     or2_token: syn::token::Or(syn_span()),
                     output: syn::ReturnType::Default,
-                    body: Box::new(
-                        maybe_still_syntax_expression_to_rust(
-                            errors,
-                            || StillErrorNode {
-                                range: expression_node.range,
-                                message: Box::from(
-                                    "missing lambda result after \\..parameters.. -> here",
-                                ),
+                    body: Box::new(if rust_stmts.is_empty() {
+                        rust_result
+                    } else {
+                        rust_stmts.push(syn::Stmt::Expr(rust_result, None));
+                        syn::Expr::Block(syn::ExprBlock {
+                            attrs: vec![],
+                            label: None,
+                            block: syn::Block {
+                                brace_token: syn::token::Brace(syn_span()),
+                                stmts: rust_stmts,
                             },
-                            records_used,
-                            type_aliases,
-                            choice_types,
-                            project_variable_declarations,
-                            std::rc::Rc::new(local_bindings),
-                            maybe_result.as_ref().map(still_syntax_node_unbox),
-                        )
-                        .rust,
-                    ),
+                        })
+                    }),
                 })),
             }
         }
@@ -11593,8 +11659,10 @@ fn still_syntax_expression_to_rust<'a>(
                 let local_bindings_with_let: std::rc::Rc<
                     std::collections::HashMap<&str, Option<StillSyntaxNode<StillSyntaxType>>>,
                 > = std::rc::Rc::new(local_bindings_with_let);
-                let let_declaration_compiled: CompiledStillLetDeclaration =
-                    still_syntax_let_declaration_to_rust(
+                let mut rust_stmts: Vec<syn::Stmt> = Vec::new();
+                let let_declaration_compiled: CompiledStillLetDeclarationInfo =
+                    still_syntax_let_declaration_to_rust_into(
+                        &mut rust_stmts,
                         errors,
                         records_used,
                         type_aliases,
@@ -11624,29 +11692,27 @@ fn still_syntax_expression_to_rust<'a>(
                         || maybe_result_compiled.uses_allocator,
                     rust: match maybe_result_compiled.rust {
                         syn::Expr::Block(rust_let_result_block) => {
-                            let mut stmts: Vec<syn::Stmt> =
-                                vec![syn::Stmt::Local(let_declaration_compiled.rust)];
-                            stmts.extend(rust_let_result_block.block.stmts);
+                            rust_stmts.extend(rust_let_result_block.block.stmts);
                             syn::Expr::Block(syn::ExprBlock {
                                 label: rust_let_result_block.label,
                                 attrs: rust_let_result_block.attrs,
                                 block: syn::Block {
                                     brace_token: syn::token::Brace(syn_span()),
-                                    stmts: stmts,
+                                    stmts: rust_stmts,
                                 },
                             })
                         }
-                        _ => syn::Expr::Block(syn::ExprBlock {
-                            label: None,
-                            attrs: vec![],
-                            block: syn::Block {
-                                brace_token: syn::token::Brace(syn_span()),
-                                stmts: vec![
-                                    syn::Stmt::Local(let_declaration_compiled.rust),
-                                    syn::Stmt::Expr(maybe_result_compiled.rust, None),
-                                ],
-                            },
-                        }),
+                        _ => {
+                            rust_stmts.push(syn::Stmt::Expr(maybe_result_compiled.rust, None));
+                            syn::Expr::Block(syn::ExprBlock {
+                                label: None,
+                                attrs: vec![],
+                                block: syn::Block {
+                                    brace_token: syn::token::Brace(syn_span()),
+                                    stmts: rust_stmts,
+                                },
+                            })
+                        }
                     },
                 }
             }
@@ -11934,13 +12000,22 @@ fn still_syntax_expression_to_rust<'a>(
                             );
                         arms_use_allocator =
                             arms_use_allocator || compiled_case_result.uses_allocator;
+                        let mut bindings_to_clone: Vec<BindingToClone> = Vec::new();
+                        let rust_pattern: syn::Pat = still_syntax_pattern_to_rust(
+                            errors,
+                            records_used,
+                            &mut bindings_to_clone,
+                            type_aliases,
+                            choice_types,
+                            false,
+                            still_syntax_node_as_ref(&case.pattern),
+                        );
+                        let mut rust_stmts: Vec<syn::Stmt> = Vec::with_capacity(1);
+                        bindings_to_clone_to_rust_into(&mut rust_stmts, bindings_to_clone);
+                        rust_stmts.push(syn::Stmt::Expr(compiled_case_result.rust, None));
                         syn::Arm {
                             attrs: vec![],
-                            pat: still_syntax_pattern_to_rust(
-                                errors,
-                                records_used,
-                                still_syntax_node_as_ref(&case.pattern),
-                            ),
+                            pat: rust_pattern,
                             guard: None,
                             fat_arrow_token: syn::token::FatArrow(syn_span()),
                             body: Box::new(syn::Expr::Block(syn::ExprBlock {
@@ -11948,7 +12023,7 @@ fn still_syntax_expression_to_rust<'a>(
                                 label: None,
                                 block: syn::Block {
                                     brace_token: syn::token::Brace(syn_span()),
-                                    stmts: vec![syn::Stmt::Expr(compiled_case_result.rust, None)],
+                                    stmts: rust_stmts,
                                 },
                             })),
                             comma: None,
@@ -12142,11 +12217,11 @@ fn still_syntax_expression_to_rust<'a>(
         },
     }
 }
-struct CompiledStillLetDeclaration {
-    rust: syn::Local,
+struct CompiledStillLetDeclarationInfo {
     uses_allocator: bool,
 }
-fn still_syntax_let_declaration_to_rust<'a>(
+fn still_syntax_let_declaration_to_rust_into<'a>(
+    rust_stmts: &mut Vec<syn::Stmt>,
     errors: &mut Vec<StillErrorNode>,
     records_used: &mut std::collections::HashSet<Vec<&'a str>>,
     type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
@@ -12159,7 +12234,7 @@ fn still_syntax_let_declaration_to_rust<'a>(
         std::collections::HashMap<&'a str, Option<StillSyntaxNode<StillSyntaxType>>>,
     >,
     declaration_node: StillSyntaxNode<&'a StillSyntaxLetDeclaration>,
-) -> CompiledStillLetDeclaration {
+) -> CompiledStillLetDeclarationInfo {
     match &declaration_node.value {
         StillSyntaxLetDeclaration::Destructuring {
             pattern: pattern_node,
@@ -12182,23 +12257,30 @@ fn still_syntax_let_declaration_to_rust<'a>(
                         .as_ref()
                         .map(still_syntax_node_unbox),
                 );
-            CompiledStillLetDeclaration {
+            let mut bindings_to_clone: Vec<BindingToClone> = Vec::new();
+            let rust_pattern: syn::Pat = still_syntax_pattern_to_rust(
+                errors,
+                records_used,
+                &mut bindings_to_clone,
+                type_aliases,
+                choice_types,
+                false,
+                still_syntax_node_as_ref(pattern_node),
+            );
+            bindings_to_clone_to_rust_into(rust_stmts, bindings_to_clone);
+            rust_stmts.push(syn::Stmt::Local(syn::Local {
+                attrs: vec![],
+                let_token: syn::token::Let(syn_span()),
+                pat: rust_pattern,
+                init: Some(syn::LocalInit {
+                    eq_token: syn::token::Eq(syn_span()),
+                    expr: Box::new(compiled_destructured.rust),
+                    diverge: None,
+                }),
+                semi_token: syn::token::Semi(syn_span()),
+            }));
+            CompiledStillLetDeclarationInfo {
                 uses_allocator: compiled_destructured.uses_allocator,
-                rust: syn::Local {
-                    attrs: vec![],
-                    let_token: syn::token::Let(syn_span()),
-                    pat: still_syntax_pattern_to_rust(
-                        errors,
-                        records_used,
-                        still_syntax_node_as_ref(pattern_node),
-                    ),
-                    init: Some(syn::LocalInit {
-                        eq_token: syn::token::Eq(syn_span()),
-                        expr: Box::new(compiled_destructured.rust),
-                        diverge: None,
-                    }),
-                    semi_token: syn::token::Semi(syn_span()),
-                },
             }
         }
         StillSyntaxLetDeclaration::VariableDeclaration {
@@ -12220,25 +12302,25 @@ fn still_syntax_let_declaration_to_rust<'a>(
                 local_bindings,
                 maybe_result.as_ref().map(still_syntax_node_unbox),
             );
-            CompiledStillLetDeclaration {
-                uses_allocator: compiled_result.uses_allocator,
-                rust: syn::Local {
+            rust_stmts.push(syn::Stmt::Local(syn::Local {
+                attrs: vec![],
+                let_token: syn::token::Let(syn_span()),
+                pat: syn::Pat::Ident(syn::PatIdent {
                     attrs: vec![],
-                    let_token: syn::token::Let(syn_span()),
-                    pat: syn::Pat::Ident(syn::PatIdent {
-                        attrs: vec![],
-                        by_ref: None,
-                        mutability: None,
-                        ident: syn_ident(&still_name_to_lowercase_rust(&name_node.value)),
-                        subpat: None,
-                    }),
-                    init: Some(syn::LocalInit {
-                        eq_token: syn::token::Eq(syn_span()),
-                        expr: Box::new(compiled_result.rust),
-                        diverge: None,
-                    }),
-                    semi_token: syn::token::Semi(syn_span()),
-                },
+                    by_ref: None,
+                    mutability: None,
+                    ident: syn_ident(&still_name_to_lowercase_rust(&name_node.value)),
+                    subpat: None,
+                }),
+                init: Some(syn::LocalInit {
+                    eq_token: syn::token::Eq(syn_span()),
+                    expr: Box::new(compiled_result.rust),
+                    diverge: None,
+                }),
+                semi_token: syn::token::Semi(syn_span()),
+            }));
+            CompiledStillLetDeclarationInfo {
+                uses_allocator: compiled_result.uses_allocator,
             }
         }
     }
@@ -12247,6 +12329,10 @@ fn maybe_still_syntax_pattern_to_rust<'a>(
     errors: &mut Vec<StillErrorNode>,
     error_on_none: impl FnOnce() -> StillErrorNode,
     records_used: &mut std::collections::HashSet<Vec<&'a str>>,
+    bindings_to_clone: &mut Vec<BindingToClone<'a>>,
+    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
+    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
+    is_reference: bool,
     maybe_pattern_node: Option<StillSyntaxNode<&'a StillSyntaxPattern>>,
 ) -> syn::Pat {
     match maybe_pattern_node {
@@ -12254,12 +12340,28 @@ fn maybe_still_syntax_pattern_to_rust<'a>(
             errors.push(error_on_none());
             syn_pat_wild()
         }
-        Some(pattern_node) => still_syntax_pattern_to_rust(errors, records_used, pattern_node),
+        Some(pattern_node) => still_syntax_pattern_to_rust(
+            errors,
+            records_used,
+            bindings_to_clone,
+            type_aliases,
+            choice_types,
+            is_reference,
+            pattern_node,
+        ),
     }
+}
+struct BindingToClone<'a> {
+    name: &'a str,
+    is_copy: bool,
 }
 fn still_syntax_pattern_to_rust<'a>(
     errors: &mut Vec<StillErrorNode>,
     records_used: &mut std::collections::HashSet<Vec<&'a str>>,
+    bindings_to_clone: &mut Vec<BindingToClone<'a>>,
+    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
+    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
+    is_reference: bool,
     pattern_node: StillSyntaxNode<&'a StillSyntaxPattern>,
 ) -> syn::Pat {
     match &pattern_node.value {
@@ -12318,10 +12420,14 @@ fn still_syntax_pattern_to_rust<'a>(
                 message: Box::from("missing pattern after comment # ...\\n here"),
             },
             records_used,
+            bindings_to_clone,
+            type_aliases,
+            choice_types,
+            is_reference,
             maybe_after_comment.as_ref().map(still_syntax_node_unbox),
         ),
         StillSyntaxPattern::Typed {
-            type_: _,
+            type_: maybe_type,
             pattern: maybe_in_typed,
         } => match maybe_in_typed {
             None => {
@@ -12335,33 +12441,98 @@ fn still_syntax_pattern_to_rust<'a>(
                 })
             }
             Some(untyped_pattern_node) => match &untyped_pattern_node.value {
-                StillSyntaxPatternUntyped::Variable(name) => syn::Pat::Ident(syn::PatIdent {
-                    attrs: vec![],
-                    by_ref: None,
-                    mutability: None,
-                    ident: syn_ident(&still_name_to_lowercase_rust(name)),
-                    subpat: None,
-                }),
+                StillSyntaxPatternUntyped::Variable(name) => {
+                    if is_reference {
+                        bindings_to_clone.push(BindingToClone {
+                            name: name,
+                            is_copy: maybe_type.as_ref().is_some_and(|type_node| {
+                                still_syntax_type_is_copy(
+                                    false,
+                                    type_aliases,
+                                    choice_types,
+                                    still_syntax_node_as_ref(type_node),
+                                )
+                            }),
+                        });
+                    }
+                    syn::Pat::Ident(syn::PatIdent {
+                        attrs: vec![],
+                        by_ref: None,
+                        mutability: None,
+                        ident: syn_ident(&still_name_to_lowercase_rust(name)),
+                        subpat: None,
+                    })
+                }
                 StillSyntaxPatternUntyped::Ignored => syn_pat_wild(),
                 StillSyntaxPatternUntyped::Variant {
                     name: name_node,
                     value: maybe_value,
-                } => syn::Pat::TupleStruct(syn::PatTupleStruct {
-                    attrs: vec![],
-                    qself: None,
-                    path: syn_path_reference([&still_name_to_uppercase_rust(&name_node.value)]),
-                    paren_token: syn::token::Paren(syn_span()),
-                    elems: maybe_value
-                        .iter()
-                        .map(|value_node| {
-                            still_syntax_pattern_to_rust(
-                                errors,
-                                records_used,
-                                still_syntax_node_unbox(value_node),
-                            )
-                        })
-                        .collect(),
-                }),
+                } => {
+                    let Some(origin_choice_type_name) = (match maybe_type {
+                        None => None,
+                        Some(type_node) => still_syntax_type_to_choice_type(
+                            type_aliases,
+                            still_syntax_node_as_ref(type_node),
+                        ),
+                    }) else {
+                        return syn_pat_wild();
+                    };
+                    let variant_value_is_reference: bool = is_reference
+                        || ('variant_value_is_reference: {
+                            let Some(origin_choice_type) =
+                                choice_types.get(origin_choice_type_name.as_ref())
+                            else {
+                                break 'variant_value_is_reference false;
+                            };
+                            let Some(variant_index_in_origin_choice_type) =
+                                std::iter::once(origin_choice_type.variant0_name.as_ref())
+                                    .chain(
+                                        origin_choice_type
+                                            .variant1_up
+                                            .iter()
+                                            .map(|variant| variant.name.as_ref()),
+                                    )
+                                    .enumerate()
+                                    .find(|(_, origin_choice_type_variant_maybe_name)| {
+                                        origin_choice_type_variant_maybe_name.is_some_and(
+                                            |origin_choice_type_variant_name_node| {
+                                                origin_choice_type_variant_name_node.value
+                                                    == name_node.value
+                                            },
+                                        )
+                                    })
+                                    .map(|(i, _)| i)
+                            else {
+                                break 'variant_value_is_reference false;
+                            };
+                            origin_choice_type
+                                .recursive_variant_value_variant_indexes
+                                .contains(&variant_index_in_origin_choice_type)
+                        });
+                    syn::Pat::TupleStruct(syn::PatTupleStruct {
+                        attrs: vec![],
+                        qself: None,
+                        path: syn_path_reference([
+                            &still_name_to_uppercase_rust(&origin_choice_type_name),
+                            &still_name_to_uppercase_rust(&name_node.value),
+                        ]),
+                        paren_token: syn::token::Paren(syn_span()),
+                        elems: maybe_value
+                            .iter()
+                            .map(|value_node| {
+                                still_syntax_pattern_to_rust(
+                                    errors,
+                                    records_used,
+                                    bindings_to_clone,
+                                    type_aliases,
+                                    choice_types,
+                                    variant_value_is_reference,
+                                    still_syntax_node_unbox(value_node),
+                                )
+                            })
+                            .collect(),
+                    })
+                }
             },
         },
         StillSyntaxPattern::Record(fields) => {
@@ -12390,6 +12561,10 @@ fn still_syntax_pattern_to_rust<'a>(
                                 message: Box::from("missing field value after this name"),
                             },
                             records_used,
+                            bindings_to_clone,
+                            type_aliases,
+                            choice_types,
+                            is_reference,
                             field.value.as_ref().map(still_syntax_node_as_ref),
                         )),
                     })
@@ -12398,6 +12573,39 @@ fn still_syntax_pattern_to_rust<'a>(
             })
         }
     }
+}
+fn bindings_to_clone_to_rust_into(
+    rust_stmts: &mut Vec<syn::Stmt>,
+    bindings_to_clone: Vec<BindingToClone>,
+) {
+    rust_stmts.extend(bindings_to_clone.into_iter().map(|binding_to_clone| {
+        let rust_expr_binding_reference: syn::Expr = syn_expr_reference([binding_to_clone.name]);
+        syn::Stmt::Local(syn::Local {
+            attrs: vec![],
+            let_token: syn::token::Let(syn_span()),
+            pat: syn::Pat::Ident(syn::PatIdent {
+                attrs: vec![],
+                by_ref: None,
+                mutability: None,
+                ident: syn_ident(binding_to_clone.name),
+                subpat: None,
+            }),
+            init: Some(syn::LocalInit {
+                eq_token: syn::token::Eq(syn_span()),
+                expr: Box::new(if binding_to_clone.is_copy {
+                    syn::Expr::Unary(syn::ExprUnary {
+                        attrs: vec![],
+                        op: syn::UnOp::Deref(syn::token::Star(syn_span())),
+                        expr: Box::new(rust_expr_binding_reference),
+                    })
+                } else {
+                    syn_expr_call_clone_method(rust_expr_binding_reference)
+                }),
+                diverge: None,
+            }),
+            semi_token: syn::token::Semi(syn_span()),
+        })
+    }));
 }
 fn still_name_to_uppercase_rust(name: &str) -> String {
     let mut sanitized: String = name.replace("-", "_");
