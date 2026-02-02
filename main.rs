@@ -820,7 +820,7 @@ fn respond_to_hover(
             name: hovered_name,
             local_bindings,
         } => {
-            if let Some((hovered_local_binding_origin, _)) =
+            if let Some(hovered_local_binding_info) =
                 find_local_binding_scope_expression(&local_bindings, hovered_name)
             {
                 return Some(lsp_types::Hover {
@@ -828,7 +828,8 @@ fn respond_to_hover(
                         kind: lsp_types::MarkupKind::Markdown,
                         value: local_binding_info_markdown(
                             hovered_name,
-                            hovered_local_binding_origin,
+                            hovered_local_binding_info.type_,
+                            hovered_local_binding_info.origin,
                         ),
                     }),
                     range: Some(hovered_symbol_node.range),
@@ -927,7 +928,7 @@ fn respond_to_hover(
                             result: maybe_result_node,
                         } => {
                             if origin_project_declaration_name_node.value.as_str() == hovered_name {
-                                let maybe_result_type =
+                                let maybe_result_type: Option<StillSyntaxNode<StillSyntaxType>> =
                                     maybe_result_node.as_ref().map(|result_node| {
                                         still_syntax_expression_type(
                                             &hovered_project_state.type_aliases,
@@ -1048,18 +1049,22 @@ fn respond_to_hover(
     }
 }
 
-fn local_binding_info_markdown(binding_name: &str, binding_origin: LocalBindingOrigin) -> String {
-    match binding_origin {
-        LocalBindingOrigin::PatternVariable(_) => "variable introduced in pattern".to_string(),
-        LocalBindingOrigin::LetDeclaredVariable {
-            type_: maybe_type,
-            name_range,
-        } => let_declaration_info_markdown(
+fn local_binding_info_markdown(
+    name: &str,
+    maybe_type: Option<StillSyntaxNode<&StillSyntaxType>>,
+    origin: LocalBindingOrigin,
+) -> String {
+    match origin {
+        LocalBindingOrigin::PatternVariable(_) => {
+            // TODO show type
+            "variable introduced in pattern".to_string()
+        }
+        LocalBindingOrigin::LetDeclaredVariable { name_range } => let_declaration_info_markdown(
             StillSyntaxNode {
-                value: binding_name,
+                value: name,
                 range: name_range,
             },
-            maybe_type.as_ref().map(still_syntax_node_as_ref),
+            maybe_type,
         ),
     }
 }
@@ -1170,7 +1175,7 @@ fn respond_to_goto_definition(
             name: goto_name,
             local_bindings,
         } => {
-            if let Some((goto_local_binding_origin, _)) =
+            if let Some(goto_local_binding_info) =
                 find_local_binding_scope_expression(&local_bindings, goto_name)
             {
                 return Some(lsp_types::GotoDefinitionResponse::Scalar(
@@ -1179,12 +1184,9 @@ fn respond_to_goto_definition(
                             .text_document_position_params
                             .text_document
                             .uri,
-                        range: match goto_local_binding_origin {
+                        range: match goto_local_binding_info.origin {
                             LocalBindingOrigin::PatternVariable(range) => range,
-                            LocalBindingOrigin::LetDeclaredVariable {
-                                type_: _,
-                                name_range,
-                            } => name_range,
+                            LocalBindingOrigin::LetDeclaredVariable { name_range } => name_range,
                         },
                     },
                 ));
@@ -1495,13 +1497,11 @@ fn respond_to_rename(
             name: to_rename_name,
             local_bindings,
         } => {
-            if let Some((
-                to_rename_local_binding_origin,
-                local_binding_to_rename_scope_expression,
-            )) = find_local_binding_scope_expression(&local_bindings, to_rename_name)
+            if let Some(to_rename_local_binding_info) =
+                find_local_binding_scope_expression(&local_bindings, to_rename_name)
             {
                 let mut all_uses_of_local_binding_to_rename: Vec<lsp_types::Range> = Vec::new();
-                match to_rename_local_binding_origin {
+                match to_rename_local_binding_info.origin {
                     LocalBindingOrigin::PatternVariable(range) => {
                         all_uses_of_local_binding_to_rename.push(range);
                     }
@@ -1512,7 +1512,7 @@ fn respond_to_rename(
                 still_syntax_expression_uses_of_symbol_into(
                     &mut all_uses_of_local_binding_to_rename,
                     &[to_rename_name],
-                    local_binding_to_rename_scope_expression,
+                    to_rename_local_binding_info.scope_expression,
                     StillSymbolToReference::LocalBinding {
                         name: to_rename_name,
                         including_let_declaration_name: true,
@@ -1720,12 +1720,12 @@ fn respond_to_references(
             name: to_find_name,
             local_bindings,
         } => {
-            if let Some((to_find_local_binding_origin, local_binding_to_find_scope_expression)) =
+            if let Some(to_find_local_binding_info) =
                 find_local_binding_scope_expression(&local_bindings, to_find_name)
             {
                 let mut all_uses_of_found_local_binding: Vec<lsp_types::Range> = Vec::new();
                 if references_arguments.context.include_declaration {
-                    match to_find_local_binding_origin {
+                    match to_find_local_binding_info.origin {
                         LocalBindingOrigin::PatternVariable(range) => {
                             all_uses_of_found_local_binding.push(range);
                         }
@@ -1737,7 +1737,7 @@ fn respond_to_references(
                 still_syntax_expression_uses_of_symbol_into(
                     &mut all_uses_of_found_local_binding,
                     &[to_find_name],
-                    local_binding_to_find_scope_expression,
+                    to_find_local_binding_info.scope_expression,
                     StillSymbolToReference::LocalBinding {
                         name: to_find_name,
                         including_let_declaration_name: references_arguments
@@ -2025,6 +2025,7 @@ fn respond_to_completion(
                             kind: lsp_types::MarkupKind::Markdown,
                             value: local_binding_info_markdown(
                                 local_binding.name,
+                                local_binding.type_.as_ref().map(still_syntax_node_as_ref),
                                 local_binding.origin,
                             ),
                         },
@@ -2965,8 +2966,6 @@ fn still_syntax_pattern_type(
         }
     }
 }
-/// TODO go through uses and switch to `still_syntax_expression_type_with`
-/// where necessary
 fn still_syntax_expression_type(
     type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
     expression_node: StillSyntaxNode<&StillSyntaxExpression>,
@@ -3059,16 +3058,30 @@ fn still_syntax_expression_type_with<'a>(
             matched: _,
             of_keyword_range: _,
             cases,
-        } => match cases.iter().find_map(|case| case.result.as_ref()) {
+        } => match cases.iter().find_map(|case| {
+            case.result
+                .as_ref()
+                .map(|result_node| (&case.pattern, result_node))
+        }) {
             None => StillSyntaxNode {
                 range: expression_node.range,
                 value: StillSyntaxType::Parenthesized(None),
             },
-            Some(case_result) => still_syntax_expression_type_with(
-                type_aliases,
-                local_bindings,
-                still_syntax_node_as_ref(case_result),
-            ),
+            Some((case_pattern, case_result)) => {
+                let mut local_bindings: std::collections::HashMap<
+                    &str,
+                    Option<StillSyntaxNode<StillSyntaxType>>,
+                > = std::rc::Rc::unwrap_or_clone(local_bindings);
+                still_syntax_pattern_binding_types_into(
+                    &mut local_bindings,
+                    still_syntax_node_as_ref(case_pattern),
+                );
+                still_syntax_expression_type_with(
+                    type_aliases,
+                    std::rc::Rc::new(local_bindings),
+                    still_syntax_node_as_ref(case_result),
+                )
+            }
         },
         StillSyntaxExpression::Char(_) => still_syntax_node_empty(still_syntax_type_chr),
         StillSyntaxExpression::Dec(_) => still_syntax_node_empty(still_syntax_type_dec),
@@ -4541,19 +4554,26 @@ type StillLocalBindings<'a> = Vec<(
     StillSyntaxNode<&'a StillSyntaxExpression>,
     Vec<StillLocalBinding<'a>>,
 )>;
+#[derive(Clone, Copy)]
+struct StillLocalBindingInfo<'a> {
+    type_: Option<StillSyntaxNode<&'a StillSyntaxType>>,
+    origin: LocalBindingOrigin,
+    scope_expression: StillSyntaxNode<&'a StillSyntaxExpression>,
+}
 fn find_local_binding_scope_expression<'a>(
-    local_bindings: &StillLocalBindings<'a>,
+    local_bindings: &'a StillLocalBindings<'a>,
     to_find: &str,
-) -> Option<(
-    LocalBindingOrigin,
-    StillSyntaxNode<&'a StillSyntaxExpression>,
-)> {
+) -> Option<StillLocalBindingInfo<'a>> {
     local_bindings
         .iter()
         .find_map(|(scope_expression, local_bindings)| {
             local_bindings.iter().find_map(|local_binding| {
                 if local_binding.name == to_find {
-                    Some((local_binding.origin.clone(), *scope_expression))
+                    Some(StillLocalBindingInfo {
+                        origin: local_binding.origin,
+                        type_: local_binding.type_.as_ref().map(still_syntax_node_as_ref),
+                        scope_expression: *scope_expression,
+                    })
                 } else {
                     None
                 }
@@ -4919,18 +4939,15 @@ fn still_syntax_type_find_symbol_at_position<'a>(
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Copy)]
 enum LocalBindingOrigin {
-    // consider separately tracking parameter names (let or otherwise), including their origin declaration name and annotation type when available
     PatternVariable(lsp_types::Range),
-    LetDeclaredVariable {
-        type_: Option<StillSyntaxNode<StillSyntaxType>>,
-        name_range: lsp_types::Range,
-    },
+    LetDeclaredVariable { name_range: lsp_types::Range },
 }
 #[derive(Clone, Debug)]
 struct StillLocalBinding<'a> {
     name: &'a str,
+    type_: Option<StillSyntaxNode<StillSyntaxType>>,
     origin: LocalBindingOrigin,
 }
 
@@ -5989,14 +6006,21 @@ fn still_syntax_let_declaration_introduced_bindings_into<'a>(
             bindings_so_far.push(StillLocalBinding {
                 name: &name_node.value,
                 origin: LocalBindingOrigin::LetDeclaredVariable {
-                    type_: maybe_result_node.as_ref().map(|result_node| {
-                        still_syntax_expression_type(
-                            type_aliases,
-                            still_syntax_node_unbox(result_node),
-                        )
-                    }),
                     name_range: name_node.range,
                 },
+                type_: maybe_result_node.as_ref().map(|result_node| {
+                    still_syntax_expression_type_with(
+                        type_aliases,
+                        // this is inefficient to do for every let variable
+                        std::rc::Rc::new(
+                            bindings_so_far
+                                .iter()
+                                .map(|binding| (binding.name, binding.type_.clone()))
+                                .collect::<std::collections::HashMap<_, _>>(),
+                        ),
+                        still_syntax_node_unbox(result_node),
+                    )
+                }),
             });
         }
     }
@@ -6023,6 +6047,16 @@ fn still_syntax_pattern_bindings_into<'a>(
                                 pattern_node_in_typed.range,
                             ),
                             name: variable,
+                            type_: bindings_so_far
+                                .iter()
+                                .find_map(|introduced_binding| {
+                                    if introduced_binding.name == variable {
+                                        Some(introduced_binding.type_.clone())
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .flatten(),
                         });
                     }
                     StillSyntaxPatternUntyped::Variant {

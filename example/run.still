@@ -1,6 +1,6 @@
 type tree = Leaf int | Branch vec tree
 
-tree-size \:tree: tree > :int:
+tree-size \:tree: tree >
     case tree of
         :tree:Leaf :int:int > int
         :tree:Branch :vec tree:subs > vec-length subs
