@@ -1,4 +1,4 @@
-type Person = Me | Unknown str
+type tree = Leaf int | Branch vec tree
 
 greet \{ name :str:name } >
     let list [1,2,3]

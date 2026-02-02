@@ -76,17 +76,17 @@ run \:opt str:state-or-uninitialized >
   ```
   this solves the nesting problem of early exits and "if else"
 - complete small standard library in rust (TODO `order`, `int/dec-add`, `int/dec-multiply`, `dec-power`, `str-compare`, `int-compare`, `dec-compare`, `map`, `set`, `type opt A = Absent | Present A` ...)
-- For recursive variant values, use reference. Also introduce an owned version which uses Box
-- type checking (notably also: check that each function output type only ever uses type variables used in the input type, and similarly: on non-function types, forbid the use of any new variables; in the error say "unknown type variable")
-- introduce `nat` type (`usize`) and require regular ints to be prefixed with `+`/`-`
+- For choice type with recursive variant values, introduce an owned version which uses Box
+- type checking (vec elements equal, case results equal, function arguments equal to parameters, typed, variant value) (notably also: check that each function output type only ever uses type variables used in the input type, and similarly: on non-function types, forbid the use of any new variables; in the error say "unknown type variable")
 - rename `type` to `type-choice` and `type alias` to `type-alias`
+- replace `&'a dyn Fn(_) -> _` in function parameters by `impl Fn(_) -> _ + Clone + 'a`
+  and likewise remove `alloc.alloc(|_| _)` when used as direct function parameter: `|_| _`
+- introduce `nat` type (`usize`) and require regular ints to be prefixed with `+`/`-`
 - simple io (`standard-in-read-line`, `standard-out-write`)
 - `case of` exhaustiveness checking
 - unused checking
 - name collision checking
 - name shadowing checking
-- show errors and warning in lsp
-- use still lambda parameter names instead of parameter·index
 
 ## considering
 - (leaning towards yes) actually deeply consider limiting reference calls to at most 1 argument just like variant construction.
@@ -113,7 +113,7 @@ run \:opt str:state-or-uninitialized >
   This generally removes some verbosity, is consistent with choice type/ type alias construction,
   allows non-called generic functions, would allow the removal of all "::Typed" patterns and expressions (except recursion? but maybe there is a better solution for that).
 - infer constness of generated variable/fn items
-- find better record access syntax, maybe closer to `:field:
+- find better record access syntax, like `:field-value:.field record`
 
 To use, [install rust](https://rust-lang.org/tools/install/) and
 ```bash
