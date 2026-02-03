@@ -1,15 +1,15 @@
 
 
-type tree
-    = Leaf int
-    | Branch vec tree
+type tree A
+    = Leaf A
+    | Branch vec (tree A)
 
-tree-size \:tree:tree >
+tree-size \:tree A:tree >
     case tree of
-        :tree:Leaf :int:int >
-            int
-        :tree:Branch :vec tree:subs >
+        :tree:Branch :vec (tree A):subs >
             vec-length subs
+        :tree A:Leaf :A:_ >
+            1
 
 greet \{ name :str:name } >
     let list
@@ -21,4 +21,7 @@ greet \{ name :str:name } >
             "Hello, you!"
         :str:_ >
             strs-flatten [ "Hello, ", name, "!" ]
+
+unfinished
+    [ int-to-str 3 ]
 
