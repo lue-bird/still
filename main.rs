@@ -10093,15 +10093,6 @@ fn choice_type_declaration_to_rust_into<'a>(
     maybe_variant0_value: Option<StillSyntaxNode<&'a StillSyntaxType>>,
     variant1_up: &'a [StillSyntaxChoiceTypeDeclarationTailingVariant],
 ) -> CompiledRustChoiceTypeInfo {
-    let rust_name: String = still_name_to_uppercase_rust(name);
-    let mut rust_parameters: syn::punctuated::Punctuated<syn::GenericParam, syn::token::Comma> =
-        syn::punctuated::Punctuated::new();
-    rust_parameters.push(syn::GenericParam::Lifetime(syn_default_lifetime_parameter()));
-    for parameter_node in parameters {
-        rust_parameters.push(syn::GenericParam::Type(syn::TypeParam::from(syn_ident(
-            &still_type_variable_to_rust(&parameter_node.value),
-        ))));
-    }
     let mut rust_variants: syn::punctuated::Punctuated<syn::Variant, syn::token::Comma> =
         syn::punctuated::Punctuated::new();
     let mut recursive_variant_value_variant_indexes: Vec<usize> = Vec::new();
@@ -10176,10 +10167,20 @@ fn choice_type_declaration_to_rust_into<'a>(
         )
         .enumerate()
         .filter_map(|(variant_index, variant_value)| variant_value.map(|v| (variant_index, v)))
-        .all(|(variant_index, variant_value_node)| {
+        .any(|(variant_index, variant_value_node)| {
             recursive_variant_value_variant_indexes.contains(&variant_index)
                 || still_syntax_type_uses_lifetime(type_aliases, choice_types, variant_value_node)
         });
+    let mut rust_parameters: syn::punctuated::Punctuated<syn::GenericParam, syn::token::Comma> =
+        syn::punctuated::Punctuated::new();
+    if has_lifetime_parameter {
+        rust_parameters.push(syn::GenericParam::Lifetime(syn_default_lifetime_parameter()));
+    }
+    for parameter_node in parameters {
+        rust_parameters.push(syn::GenericParam::Type(syn::TypeParam::from(syn_ident(
+            &still_type_variable_to_rust(&parameter_node.value),
+        ))));
+    }
     rust_items.push(syn::Item::Enum(syn::ItemEnum {
         attrs: maybe_documentation
             .map(syn_attribute_doc)
@@ -10190,7 +10191,7 @@ fn choice_type_declaration_to_rust_into<'a>(
             .collect::<Vec<_>>(),
         vis: syn::Visibility::Public(syn::token::Pub(syn_span())),
         enum_token: syn::token::Enum(syn_span()),
-        ident: syn_ident(&rust_name),
+        ident: syn_ident(&still_name_to_uppercase_rust(name)),
         generics: syn::Generics {
             lt_token: Some(syn::token::Lt(syn_span())),
             params: rust_parameters,
