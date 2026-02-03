@@ -3888,19 +3888,15 @@ fn still_syntax_expression_not_parenthesized_into(
                     1,
                     still_syntax_node_as_ref(type_node),
                 );
-                space_or_linebreak_indented_into(
-                    so_far,
-                    still_syntax_range_line_span(type_node.range),
-                    indent,
-                );
+                if still_syntax_range_line_span(type_node.range) == LineSpan::Multiple {
+                    linebreak_indented_into(so_far, indent);
+                }
             }
             so_far.push(':');
             if let Some(expression_node_in_typed) = maybe_expression {
-                space_or_linebreak_indented_into(
-                    so_far,
-                    still_syntax_range_line_span(expression_node.range),
-                    indent,
-                );
+                if still_syntax_range_line_span(expression_node.range) == LineSpan::Multiple {
+                    linebreak_indented_into(so_far, indent);
+                }
                 match &expression_node_in_typed.value {
                     StillSyntaxExpressionUntyped::Variant {
                         name: name_node,
@@ -3909,7 +3905,7 @@ fn still_syntax_expression_not_parenthesized_into(
                         so_far.push_str(&name_node.value);
                         if let Some(value_node) = maybe_value {
                             let line_span: LineSpan =
-                                still_syntax_range_line_span(expression_node.range);
+                                still_syntax_range_line_span(expression_node_in_typed.range);
                             space_or_linebreak_indented_into(
                                 so_far,
                                 line_span,
@@ -11968,7 +11964,7 @@ fn still_syntax_expression_to_rust<'a>(
             }
         },
         StillSyntaxExpression::Typed {
-            type_: _,
+            type_: maybe_type,
             expression: maybe_in_typed,
         } => match maybe_in_typed {
             None => {
@@ -11983,11 +11979,56 @@ fn still_syntax_expression_to_rust<'a>(
             }
             Some(untyped_node) => match &untyped_node.value {
                 StillSyntaxExpressionUntyped::Variant {
-                    name,
+                    name: name_node,
                     value: maybe_value,
                 } => {
-                    let rust_variant_reference: syn::Expr =
-                        syn_expr_reference([&still_name_to_uppercase_rust(&name.value)]);
+                    let Some((origin_choice_type_name, _)) = (match maybe_type {
+                        None => None,
+                        Some(type_node) => still_syntax_type_to_choice_type(
+                            type_aliases,
+                            still_syntax_node_as_ref(type_node),
+                        ),
+                    }) else {
+                        return CompiledStillExpression {
+                            uses_allocator: false,
+                            rust: syn_expr_todo(),
+                        };
+                    };
+                    let variant_value_needs_to_be_reference: bool = 'variant_value_is_reference: {
+                        let Some(origin_choice_type) =
+                            choice_types.get(origin_choice_type_name.as_ref())
+                        else {
+                            break 'variant_value_is_reference false;
+                        };
+                        let Some(variant_index_in_origin_choice_type) =
+                            std::iter::once(origin_choice_type.variant0_name.as_ref())
+                                .chain(
+                                    origin_choice_type
+                                        .variant1_up
+                                        .iter()
+                                        .map(|variant| variant.name.as_ref()),
+                                )
+                                .enumerate()
+                                .find(|(_, origin_choice_type_variant_maybe_name)| {
+                                    origin_choice_type_variant_maybe_name.is_some_and(
+                                        |origin_choice_type_variant_name_node| {
+                                            origin_choice_type_variant_name_node.value
+                                                == name_node.value
+                                        },
+                                    )
+                                })
+                                .map(|(i, _)| i)
+                        else {
+                            break 'variant_value_is_reference false;
+                        };
+                        origin_choice_type
+                            .recursive_variant_value_variant_indexes
+                            .contains(&variant_index_in_origin_choice_type)
+                    };
+                    let rust_variant_reference: syn::Expr = syn_expr_reference([
+                        &still_name_to_uppercase_rust(&origin_choice_type_name),
+                        &still_name_to_uppercase_rust(&name_node.value),
+                    ]);
                     match maybe_value {
                         None => CompiledStillExpression {
                             uses_allocator: false,
@@ -12005,14 +12046,18 @@ fn still_syntax_expression_to_rust<'a>(
                                     still_syntax_node_unbox(value_node),
                                 );
                             CompiledStillExpression {
-                                uses_allocator: value_compiled.uses_allocator,
+                                uses_allocator: variant_value_needs_to_be_reference
+                                    || value_compiled.uses_allocator,
                                 rust: syn::Expr::Call(syn::ExprCall {
                                     attrs: vec![],
                                     func: Box::new(rust_variant_reference),
                                     paren_token: syn::token::Paren(syn_span()),
                                     args: std::iter::once({
-                                        // TODO if variant value is recursive, wrap in alloc.alloc
-                                        value_compiled.rust
+                                        if variant_value_needs_to_be_reference {
+                                            syn_expr_call_alloc_method(value_compiled.rust)
+                                        } else {
+                                            value_compiled.rust
+                                        }
                                     })
                                     .collect(),
                                 }),
@@ -12585,7 +12630,7 @@ fn still_syntax_pattern_to_rust<'a>(
             None => {
                 errors.push(StillErrorNode {
                     range: pattern_node.range,
-                    message: Box::from("missing pattern after type :...: here"),
+                    message: Box::from("missing pattern after type :...: here. To ignore he incoming value, use _, or give it a lowercase name or specify a variant"),
                 });
                 syn::Pat::Wild(syn::PatWild {
                     attrs: vec![],

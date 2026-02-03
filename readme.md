@@ -52,7 +52,7 @@ run \:opt str:state-or-uninitialized >
 
 ## TODO
 - generate implementations for `StillToOwned` and `OwnedToStill` for generated choice types
-- rename `case of` to `if x = ... > ... = ... > ...` and remove let destructuring. previous:
+- rename `case x of ... > ...` to `x | ... > ...` and remove let destructuring. previous:
   ```still
   let :some:Variant member = variant
   result
@@ -62,19 +62,28 @@ run \:opt str:state-or-uninitialized >
     0
   :opt int:Present n >
     n + 1
+  #
+  second-function second-argument
+      # notice he nesting
+      (first-function first-argument subject)
   ```
   now
   ```still
-  if variant = :some:Variant member >
+  variant
+  | :some:Variant member >
   result
   #
-  if option
-  = :opt int:Absent >
+  option
+  | :opt int:Absent >
     0
-  = :opt int:Present n >
+  | :opt int:Present n >
   n + 1
+  #
+  first-function first-argument argument
+  | :first-result:first-result >
+  second-function second-argument first-result
   ```
-  this solves the nesting problem of early exits and "if else"
+  this solves the nesting problem of early exits, "if else" and pipelines
 - complete small standard library in rust (TODO `order`, `int/dec-add`, `int/dec-multiply`, `dec-power`, `str-compare`, `int-compare`, `dec-compare`, `map`, `set`, `type opt A = Absent | Present A` ...)
 - For choice type with recursive variant values, introduce an owned version which uses Box
 - type checking (vec elements equal, case results equal, function arguments equal to parameters, typed, variant value) (notably also: check that each function output type only ever uses type variables used in the input type, and similarly: on non-function types, forbid the use of any new variables; in the error say "unknown type variable")

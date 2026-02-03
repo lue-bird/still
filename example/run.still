@@ -6,7 +6,7 @@ type tree A
 
 tree-size \:tree A:tree >
     case tree of
-        :tree:Branch :vec (tree A):subs >
+        :tree A:Branch :vec (tree A):subs >
             vec-length subs
         :tree A:Leaf :A:_ >
             1
@@ -24,4 +24,11 @@ greet \{ name :str:name } >
 
 unfinished
     [ int-to-str 3 ]
+
+build-tree \:int:n >
+    case n of
+        0 >
+            :tree {}:Leaf {}
+        :int:not-0 >
+            :tree A:Branch [ build-tree 0 ]
 
