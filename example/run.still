@@ -11,7 +11,8 @@ tree-size \:tree A:tree >
         :tree A:Leaf :A:_ >
             1
 
-(#My docs#)
+(# My docs
+#)
 greet \{ name :str:name } >
     let list
             [ 1, 2, 3 ]
@@ -30,5 +31,5 @@ build-tree \:int:n >
     case n of
         0 > :tree {}:Leaf {}
         :int:not-0 >
-            :tree A:Branch [ build-tree 0 ]
+            :tree A:Branch [ build-tree (int-add not-0 -1) ]
 

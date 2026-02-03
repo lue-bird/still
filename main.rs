@@ -8860,6 +8860,36 @@ fn core_variable_declaration_infos()
     std::collections::HashMap::from(
         [
             (
+                StillName::from("int-negate"),
+                false,
+                function([still_syntax_type_int], still_syntax_type_int),
+                "Flip its sign",
+            ),
+            (
+                StillName::from("int-absolute"),
+                false,
+                function([still_syntax_type_int], still_syntax_type_int),
+                "If negative, negate",
+            ),
+            (
+                StillName::from("int-add"),
+                false,
+                function([still_syntax_type_int,still_syntax_type_int], still_syntax_type_int),
+                "`+` plus operation",
+            ),
+            (
+                StillName::from("int-mul"),
+                false,
+                function([still_syntax_type_int,still_syntax_type_int], still_syntax_type_int),
+                "`*` times operation",
+            ),
+            (
+                StillName::from("int-div"),
+                false,
+                function([still_syntax_type_int,still_syntax_type_int], still_syntax_type_int),
+                "`/` integer divide operation, discarding any remainder",
+            ),
+            (
                 StillName::from("int-to-str"),
                 true,
                 function([still_syntax_type_int], still_syntax_type_str),
@@ -8870,6 +8900,36 @@ fn core_variable_declaration_infos()
                 false,
                 function([still_syntax_type_str], opt(still_syntax_type_int)),
                 "Parse a complete `str` into an `int`, returning :opt int:Absent otherwise",
+            ),
+            (
+                StillName::from("dec-negate"),
+                false,
+                function([still_syntax_type_dec], still_syntax_type_dec),
+                "Flip its sign",
+            ),
+            (
+                StillName::from("dec-absolute"),
+                false,
+                function([still_syntax_type_dec], still_syntax_type_dec),
+                "If negative, negate",
+            ),
+            (
+                StillName::from("dec-add"),
+                false,
+                function([still_syntax_type_dec,still_syntax_type_dec], still_syntax_type_dec),
+                "`+` plus operation",
+            ),
+            (
+                StillName::from("dec-mul"),
+                false,
+                function([still_syntax_type_dec,still_syntax_type_dec], still_syntax_type_dec),
+                "`*` times operation",
+            ),
+            (
+                StillName::from("dec-div"),
+                false,
+                function([still_syntax_type_dec,still_syntax_type_dec], still_syntax_type_dec),
+                "`/` divide operation",
             ),
             (
                 StillName::from("dec-to-str"),

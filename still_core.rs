@@ -95,6 +95,21 @@ impl StillToOwned for Int {
     }
 }
 
+fn int_negate(int: Int) -> Int {
+    -int
+}
+fn int_absolute(a: Int) -> Int {
+    Int::abs(a)
+}
+fn int_add(a: Int, b: Int) -> Int {
+    a + b
+}
+fn int_mul(a: Int, b: Int) -> Int {
+    a * b
+}
+fn int_div(to_divide: Int, to_divide_by: Int) -> Int {
+    to_divide / to_divide_by
+}
 fn int_to_str(allocator: &impl Alloc, int: Int) -> Str<'_> {
     allocator.alloc(std::format!("{}", int))
 }
@@ -119,6 +134,21 @@ impl StillToOwned for Dec {
     }
 }
 
+fn dec_negate(dec: Dec) -> Dec {
+    -dec
+}
+fn dec_absolute(a: Dec) -> Dec {
+    Dec::abs(a)
+}
+fn dec_add(a: Dec, b: Dec) -> Dec {
+    a + b
+}
+fn dec_mul(a: Dec, b: Dec) -> Dec {
+    a * b
+}
+fn dec_div(to_divide: Dec, to_divide_by: Dec) -> Dec {
+    to_divide / to_divide_by
+}
 fn dec_to_str(allocator: &impl Alloc, dec: Dec) -> Str<'_> {
     allocator.alloc(std::format!("{}", dec))
 }
