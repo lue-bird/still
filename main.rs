@@ -14,7 +14,6 @@ struct ProjectState {
     type_aliases: std::collections::HashMap<StillName, TypeAliasInfo>,
     choice_types: std::collections::HashMap<StillName, ChoiceTypeInfo>,
     variable_declarations: std::collections::HashMap<StillName, CompiledVariableDeclarationInfo>,
-    errors: Vec<StillErrorNode>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -658,7 +657,6 @@ fn uninitialized_project_state() -> ProjectState {
         type_aliases: std::collections::HashMap::new(),
         choice_types: std::collections::HashMap::new(),
         variable_declarations: std::collections::HashMap::new(),
-        errors: vec![],
     }
 }
 fn initialize_project_state_from_source(
@@ -688,7 +686,6 @@ fn initialize_project_state_from_source(
         type_aliases: compiled_project.type_aliases,
         choice_types: compiled_project.choice_types,
         variable_declarations: compiled_project.variable_declarations,
-        errors: errors,
     }
 }
 
