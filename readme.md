@@ -46,12 +46,11 @@ run \:opt str:state-or-uninitialized >
   After that step, the updated state is cloned into a loop-global variable and the allocator containing all the memory allocated in this step is reset.
   See [`example/`](/example/)
 
-  Requiring clones of the state alone disqualifies this memory model for performance-critical programs. It should however be competitive for regular applications which tend to have simple state but a bunch of memory waste at each frame/update/...
+  Requiring diffing of the state and deep conversions alone disqualifies this memory model for performance-critical programs. It should however be competitive for regular applications which tend to have simple state but a bunch of memory waste at each frame/update/...
 
-- no `Task`/`async`, detectable mutation, side effects, `|>`, infix operators, currying, modules, lifetime tracking
+- no `Task`/`async`, visible mutation, side effects, infix operators, currying, modules, lifetime tracking
 
 ## TODO
-- optimization: in `StillIntoOwned`, add `into_owned_overwriting` to reuse memory
 - rename `case x of ... > ...` to `x | ... > ...` and remove let destructuring. previous:
   ```still
   let :some:Variant member = variant
@@ -96,18 +95,14 @@ run \:opt str:state-or-uninitialized >
 - unused checking
 - name collision checking
 - name shadowing checking
-- provide hover info for core choice types and variables
+- implement `StillIntoOwned::into_owned_overwriting` for generated structs and enums
 
 ## considering
-- (leaning towards yes) actually deeply consider limiting reference calls to at most 1 argument just like variant construction.
-  That would still not eliminate the need for parens in general (see lambda and case of) but allow e.g. `html-text int-to-str half window-width`
-- adding anonymous choice types. They are not allowed to be recursive. Use `type alias` for these. choice types can then be removed
-- find better function call syntax that makes it easy to unwrap the last argument
+- adding anonymous choice types. They are not allowed to be recursive. Use `type alias` for these. choice types can then be removed. Should be fairly easy to implement but potentially not that nice for FFI, similar to record structs currently
 - find better string literal syntax, like zig's `//` or js' `\`\``
 - (leaning no, at least for now) add or pattern `( first | second | third )` (potentially allow `:overall:( A | B | C )` (where the inner variant patterns don't need a type) specifically for variant)
-- make formatter range independent, and instead cut a line >=100 (is that possible to do when trying to get a maximally fast formatter? Because it seems an intermediate recursive structure is required)
-- output rust on save
-- closed lambda, call and case-of syntax like `\pattern > expression/`, `call<arg`, `if x ( A > x | B > y )`, then remove ::Parenthesized
+- make formatter range-independent, and instead cut a line >=100 (is that possible to do when trying to get a maximally fast formatter? Because it seems an intermediate recursive structure is required)
+- output rust in realtime. Really cool since the compiled code is always up to date, need to check if file io is fast enough
 - (leaning towards no) extend typing model to only specify type variables, so `myFunction<int, str>`, `[]<int>`, `Present<int> 1`, similar to dhall and zig (but worse, because not first class. If it was you could pass types in records etc).
 
   ```still
@@ -122,8 +117,7 @@ run \:opt str:state-or-uninitialized >
   ```
   This generally removes some verbosity, is consistent with choice type/ type alias construction,
   allows non-called generic functions, would allow the removal of all "::Typed" patterns and expressions (except recursion? but maybe there is a better solution for that).
-- infer constness of generated variable/fn items
-- find better record access syntax, like `:field-value:.field record`
+- (seems completely useless) infer constness of generated variable/fn items
 
 To use, [install rust](https://rust-lang.org/tools/install/) and
 ```bash

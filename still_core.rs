@@ -34,21 +34,26 @@ pub trait Alloc {
 /// making this operation more expensive than `into_owned` or `clone`
 ///
 /// ```
-/// let mut still_state: Some_still_type::StillIntoOwned = ...;
+/// let mut still_state: Some_still_type::Owned = StillIntoOwned::into_owned(...);
 /// let mut allocator = ...;
 /// ..some_event_loop.. {
 ///     let old_state_still: Some_still_type = OwnedToStill::to_still(still_state);
 ///     let updated_state_still: Some_still_type =
 ///         some_still_fn(&allocator, old_state_still);
-///     still_state = StillIntoOwned::into_owned(updated_state_still);
+///     StillIntoOwned::into_owned_overwriting(updated_state_still, &mut still_state);
 ///     allocator.reset();
 ///  }
 /// ```
 ///
 /// See also `OwnedToStill`
-pub trait StillIntoOwned {
+pub trait StillIntoOwned: std::marker::Sized {
     type Owned: Clone;
     fn into_owned(self) -> Self::Owned;
+    /// `still.into_owned_overwriting(&mut owned)` is functionally equivalent to `owned = still.into_owned()`
+    /// but can be overridden to reuse the allocations of `owned`.
+    fn into_owned_overwriting(self, allocation_to_reuse: &mut Self::Owned) {
+        *allocation_to_reuse = Self::into_owned(self);
+    }
 }
 /// _Provided for any still value, for users of the generated code._
 ///
@@ -79,6 +84,7 @@ impl<T: StillIntoOwned + Clone> StillIntoOwned for &T {
     fn into_owned(self) -> Self::Owned {
         std::boxed::Box::new(T::into_owned(self.clone()))
     }
+    // TODO once std::boxed::Box::map becomes stable, use that to optimize into_owned_overwriting
 }
 
 pub type Int = isize;
@@ -169,6 +175,16 @@ impl<A: StillIntoOwned + Clone> StillIntoOwned for Opt<A> {
         match self {
             Opt::Absent => Opt::Absent,
             Opt::Present(value) => Opt::Present(A::into_owned(value)),
+        }
+    }
+    fn into_owned_overwriting(self, allocation_to_reuse: &mut Self::Owned) {
+        match (self, allocation_to_reuse) {
+            (Opt::Present(value), Opt::Present(value_allocation_to_reuse)) => {
+                A::into_owned_overwriting(value, value_allocation_to_reuse);
+            }
+            (self_, allocation_to_reuse) => {
+                *allocation_to_reuse = Self::into_owned(self_);
+            }
         }
     }
 }
@@ -281,6 +297,43 @@ impl<A: StillIntoOwned + Clone> StillIntoOwned for Vec<A> {
                 std::iter::Iterator::cloned(rc.iter()),
                 A::into_owned,
             )),
+        }
+    }
+    fn into_owned_overwriting(self, vec_allocation_to_reuse: &mut Self::Owned) {
+        vec_allocation_to_reuse.clear();
+        let vec_allocation_to_reuse_len: usize = vec_allocation_to_reuse.len();
+        match std::rc::Rc::try_unwrap(self) {
+            std::result::Result::Ok(mut owned) => {
+                vec_allocation_to_reuse.truncate(owned.len());
+                for (element_allocation_to_reuse, element) in std::iter::Iterator::zip(
+                    vec_allocation_to_reuse.iter_mut(),
+                    std::vec::Vec::drain(&mut owned, 0..vec_allocation_to_reuse_len),
+                ) {
+                    A::into_owned_overwriting(element, element_allocation_to_reuse);
+                }
+                std::iter::Extend::extend(
+                    vec_allocation_to_reuse,
+                    std::iter::Iterator::map(
+                        std::iter::IntoIterator::into_iter(owned),
+                        A::into_owned,
+                    ),
+                );
+            }
+            std::result::Result::Err(rc) => {
+                vec_allocation_to_reuse.truncate(rc.len());
+                for (element_allocation_to_reuse, element) in
+                    std::iter::Iterator::zip(vec_allocation_to_reuse.iter_mut(), rc.iter())
+                {
+                    A::into_owned_overwriting(element.clone(), element_allocation_to_reuse);
+                }
+                std::iter::Extend::extend(
+                    vec_allocation_to_reuse,
+                    std::iter::Iterator::map(
+                        std::iter::Iterator::skip(rc.iter(), vec_allocation_to_reuse.len()),
+                        |element| A::into_owned(element.clone()),
+                    ),
+                );
+            }
         }
     }
 }
