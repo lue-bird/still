@@ -11,6 +11,10 @@ tree-size \:tree A:tree >
         :tree A:Leaf :A:_ >
             1
 
+type int-cons-list
+    = Empty
+    | Cons { head int, tail int-cons-list }
+
 (# My docs
 #)
 greet \{ name :str:name } >

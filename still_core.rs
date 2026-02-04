@@ -1,4 +1,4 @@
-#![allow(dead_code, non_shorthand_field_patterns)]
+#![allow(dead_code, non_shorthand_field_patterns, non_camel_case_types)]
 #![allow(clippy::needless_pass_by_value, clippy::wrong_self_convention)]
 #![no_implicit_prelude]
 extern crate std;
@@ -47,7 +47,7 @@ pub trait Alloc {
 ///
 /// See also `OwnedToStill`
 pub trait StillToOwned {
-    type Owned;
+    type Owned: Clone;
     fn to_owned(self) -> Self::Owned;
 }
 /// _Provided for any still value, for users of the generated code._
@@ -63,28 +63,28 @@ pub trait OwnedToStill {
     type Still<'a>
     where
         Self: 'a;
-    fn to_still<'a>(&'a self) -> Self::Still<'a>;
+    fn to_still<'a>(&'a self, allocator: &'a impl Alloc) -> Self::Still<'a>;
 }
-impl<T: ?std::marker::Sized> OwnedToStill for std::boxed::Box<T> {
+impl<T: ?std::marker::Sized + OwnedToStill> OwnedToStill for std::boxed::Box<T> {
     type Still<'a>
-        = &'a T
+        = &'a T::Still<'a>
     where
         T: 'a;
-    fn to_still<'a>(&'a self) -> Self::Still<'a> {
-        self
+    fn to_still<'a>(&'a self, allocator: &'a impl Alloc) -> Self::Still<'a> {
+        allocator.alloc(T::to_still(self, allocator))
     }
 }
-impl<T: Clone> StillToOwned for &T {
-    type Owned = std::boxed::Box<T>;
+impl<T: StillToOwned + Clone> StillToOwned for &T {
+    type Owned = std::boxed::Box<T::Owned>;
     fn to_owned(self) -> Self::Owned {
-        std::boxed::Box::new(self.clone())
+        std::boxed::Box::new(T::to_owned(self.clone()))
     }
 }
 
 pub type Int = isize;
 impl OwnedToStill for Int {
     type Still<'a> = Int;
-    fn to_still<'a>(&'a self) -> Self::Still<'a> {
+    fn to_still<'a>(&'a self, _: &'a impl Alloc) -> Self::Still<'a> {
         *self
     }
 }
@@ -123,7 +123,7 @@ fn str_to_int(str: Str) -> Opt<Int> {
 pub type Dec = f32;
 impl OwnedToStill for Dec {
     type Still<'a> = Dec;
-    fn to_still<'a>(&'a self) -> Self::Still<'a> {
+    fn to_still<'a>(&'a self, _: &'a impl Alloc) -> Self::Still<'a> {
         *self
     }
 }
@@ -158,12 +158,12 @@ fn str_to_dec(str: Str) -> Opt<Dec> {
         std::result::Result::Ok(dec) => Opt::Present(dec),
     }
 }
-
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum Opt<A> {
     Present(A),
     Absent,
 }
-impl<A: StillToOwned> StillToOwned for Opt<A> {
+impl<A: StillToOwned + Clone> StillToOwned for Opt<A> {
     type Owned = Opt<A::Owned>;
     fn to_owned(self) -> Self::Owned {
         match self {
@@ -177,10 +177,10 @@ impl<A: OwnedToStill> OwnedToStill for Opt<A> {
         = Opt<A::Still<'a>>
     where
         A: 'a;
-    fn to_still<'a>(&'a self) -> Self::Still<'a> {
+    fn to_still<'a>(&'a self, allocator: &'a impl Alloc) -> Self::Still<'a> {
         match self {
             Opt::Absent => Opt::Absent,
-            Opt::Present(value) => Opt::Present(A::to_still(value)),
+            Opt::Present(value) => Opt::Present(A::to_still(value, allocator)),
         }
     }
 }
@@ -209,7 +209,7 @@ impl StillToOwned for Blank {
 }
 impl OwnedToStill for Blank {
     type Still<'a> = Blank;
-    fn to_still<'a>(&'a self) -> Self::Still<'a> {
+    fn to_still<'a>(&'a self, _: &'a impl Alloc) -> Self::Still<'a> {
         *self
     }
 }
@@ -217,7 +217,7 @@ impl OwnedToStill for Blank {
 pub type Chr = char;
 impl OwnedToStill for Chr {
     type Still<'a> = Chr;
-    fn to_still<'a>(&'a self) -> Self::Still<'a> {
+    fn to_still<'a>(&'a self, _: &'a impl Alloc) -> Self::Still<'a> {
         *self
     }
 }
@@ -236,10 +236,16 @@ fn chr_to_str(allocator: &impl Alloc, chr: Chr) -> Str<'_> {
 }
 
 pub type Str<'a> = &'a str;
-impl StillToOwned for &str {
+impl<'a> StillToOwned for Str<'a> {
     type Owned = std::boxed::Box<str>;
     fn to_owned(self) -> Self::Owned {
         std::convert::Into::<std::boxed::Box<str>>::into(self)
+    }
+}
+impl OwnedToStill for std::boxed::Box<str> {
+    type Still<'a> = Str<'a>;
+    fn to_still<'a>(&'a self, _: &'a impl Alloc) -> Self::Still<'a> {
+        self
     }
 }
 
@@ -262,9 +268,9 @@ fn chrs_to_str<'a>(allocator: &'a impl Alloc, chars: Vec<Chr>) -> Str<'a> {
     allocator.alloc(string)
 }
 
-/// Do not call `_.to_vec()` on it. Prefer `Rc::unwrap_or_clone` or `StillToOwned::to_owned`
+/// Do not call `_.to_vec()` on it. Prefer `Rc::unwrap_or_clone`
 pub type Vec<A> = std::rc::Rc<std::vec::Vec<A>>;
-impl<A: Clone + StillToOwned> StillToOwned for Vec<A> {
+impl<A: StillToOwned + Clone> StillToOwned for Vec<A> {
     type Owned = std::vec::Vec<A::Owned>;
     fn to_owned(self) -> Self::Owned {
         match std::rc::Rc::try_unwrap(self) {
@@ -283,10 +289,10 @@ impl<A: OwnedToStill> OwnedToStill for std::vec::Vec<A> {
         = Vec<A::Still<'a>>
     where
         A: 'a;
-    fn to_still<'a>(&'a self) -> Self::Still<'a> {
+    fn to_still<'a>(&'a self, allocator: &'a impl Alloc) -> Self::Still<'a> {
         std::rc::Rc::new(std::iter::Iterator::collect(std::iter::Iterator::map(
             self.iter(),
-            A::to_still,
+            |element_owned_ref| A::to_still(element_owned_ref, allocator),
         )))
     }
 }
