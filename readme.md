@@ -35,7 +35,7 @@ run \:opt str:state-or-uninitialized >
 
 - each expression and pattern is always concretely typed, if necessary with an explicit annotation. So things like `(++) appendable -> appendable -> appendable`, `0 : number`, `[] : List any` are all not allowed, and e.g. `str-append \:str:l, :str:r > :str:`, `0.0`, `:vec int:[]` are used instead.
 
-  → Faster type checking, precise errors, easy compilation to almost any language
+  → Faster type checking, clear errors, easy compilation to almost any language
 
 - no blocking compile errors. You can always build, even if your record is still missing a field value, your matching is still inexhaustive, some parens are empty, etc.
   You will still see all the errors, though.
@@ -51,6 +51,8 @@ run \:opt str:state-or-uninitialized >
 - no `Task`/`async`, visible mutation, side effects, infix operators, currying, modules, lifetime tracking
 
 ## TODO
+- avoid unnecessary lifetimes in type aliases
+- type checking (vec elements equal, case results equal, function arguments equal to parameters, typed, variant value) (notably also: check that each function output type only ever uses type variables used in the input type, and similarly: on non-function types, forbid the use of any new variables; in the error say "unknown type variable")
 - rename `case x of ... > ...` to `x | ... > ...` and remove let destructuring. previous:
   ```still
   let :some:Variant member = variant
@@ -84,8 +86,6 @@ run \:opt str:state-or-uninitialized >
   ```
   this solves the nesting problem of early exits, "if else" and pipelines
 - complete small standard library in rust (TODO `order`, `int/dec-add`, `int/dec-multiply`, `dec-power`, `str-compare`, `int-compare`, `dec-compare`, `map`, `set`, `type opt A = Absent | Present A` ...)
-- For choice type with recursive variant values, introduce an owned version which uses Box
-- type checking (vec elements equal, case results equal, function arguments equal to parameters, typed, variant value) (notably also: check that each function output type only ever uses type variables used in the input type, and similarly: on non-function types, forbid the use of any new variables; in the error say "unknown type variable")
 - rename `type` to `type-choice` and `type alias` to `type`
 - replace `&'a dyn Fn(_) -> _` in function parameters by `impl Fn(_) -> _ + Clone + 'a`
   and likewise remove `alloc.alloc(|_| _)` when used as direct function parameter: `|_| _`

@@ -847,7 +847,7 @@ fn respond_to_hover(
                             .documentation
                             .as_deref(),
                         origin_compiled_variable_declaration_info
-                            .type_
+                            .type_syntax
                             .as_ref()
                             .map(still_syntax_node_as_ref),
                     )
@@ -935,7 +935,7 @@ fn respond_to_hover(
                     origin_type_alias_info.documentation.as_deref(),
                     &origin_type_alias_info.parameters,
                     origin_type_alias_info
-                        .type_
+                        .type_syntax
                         .as_ref()
                         .map(still_syntax_node_as_ref),
                 )
@@ -1932,7 +1932,7 @@ fn variable_declaration_or_variant_completions_into(
                         value: present_variable_declaration_info_markdown(
                             variable_declaration_info.documentation.as_deref(),
                             variable_declaration_info
-                                .type_
+                                .type_syntax
                                 .as_ref()
                                 .map(still_syntax_node_as_ref),
                         ),
@@ -2033,7 +2033,10 @@ fn type_declaration_completions_into(
                             Some(type_alias_name),
                             type_alias_info.documentation.as_deref(),
                             &type_alias_info.parameters,
-                            type_alias_info.type_.as_ref().map(still_syntax_node_as_ref),
+                            type_alias_info
+                                .type_syntax
+                                .as_ref()
+                                .map(still_syntax_node_as_ref),
                         ),
                     },
                 )),
@@ -2462,6 +2465,26 @@ struct StillSyntaxTypeField {
     name: StillSyntaxNode<StillName>,
     value: Option<StillSyntaxNode<StillSyntaxType>>,
 }
+/// Fully validated type
+#[derive(Clone, Debug, PartialEq)]
+enum StillType {
+    Variable(StillName),
+    Function {
+        inputs: Vec<StillType>,
+        output: Box<StillType>,
+    },
+    Construct {
+        name: StillName,
+        arguments: Vec<StillType>,
+    },
+    // TODO strongly consider std::collections::HashMap<StillName, StillType>
+    Record(Vec<StillTypeField>),
+}
+#[derive(Clone, Debug, PartialEq)]
+struct StillTypeField {
+    name: StillName,
+    value: StillType,
+}
 
 #[derive(Clone, Debug, PartialEq)]
 enum StillSyntaxPattern {
@@ -2545,6 +2568,7 @@ enum StillSyntaxExpression {
     },
     Typed {
         type_: Option<StillSyntaxNode<StillSyntaxType>>,
+        // TODO add second colon range
         expression: Option<StillSyntaxNode<StillSyntaxExpressionUntyped>>,
     },
     Record(Vec<StillSyntaxExpressionField>),
@@ -2777,73 +2801,6 @@ fn still_syntax_expression_type_with<'a>(
             variable: variable_node,
             arguments,
         } => match local_bindings.get(variable_node.value.as_str()) {
-            None => match variable_declarations.get(variable_node.value.as_str()) {
-                None => StillSyntaxNode {
-                    range: expression_node.range,
-                    value: StillSyntaxType::Parenthesized(None),
-                },
-                Some(maybe_project_variable_info) => {
-                    let Some(project_variable_type_node) = &maybe_project_variable_info.type_
-                    else {
-                        return StillSyntaxNode {
-                            range: expression_node.range,
-                            value: StillSyntaxType::Parenthesized(None),
-                        };
-                    };
-                    if arguments.is_empty() {
-                        project_variable_type_node.clone()
-                    } else {
-                        let Some((inputs, maybe_variable_type_output)) =
-                            still_syntax_type_to_function(
-                                type_aliases,
-                                still_syntax_node_as_ref(project_variable_type_node),
-                            )
-                        else {
-                            return project_variable_type_node.clone();
-                        };
-                        let Some(variable_type_output) = maybe_variable_type_output else {
-                            return StillSyntaxNode {
-                                range: expression_node.range,
-                                value: StillSyntaxType::Parenthesized(None),
-                            };
-                        };
-                        // optimization possibility: when output contains no type variables,
-                        // just return it
-                        let mut type_parameter_replacements: std::collections::HashMap<
-                            Box<str>,
-                            StillSyntaxNode<StillSyntaxType>,
-                        > = std::collections::HashMap::new();
-                        let argument_types = arguments
-                            .iter()
-                            .map(|argument_node| {
-                                still_syntax_expression_type(
-                                    type_aliases,
-                                    variable_declarations,
-                                    still_syntax_node_as_ref(argument_node),
-                                )
-                            })
-                            .collect::<Vec<_>>();
-                        for (parameter_type_node, argument_type_node) in
-                            inputs.iter().zip(argument_types.iter())
-                        {
-                            still_syntax_type_collect_variables_that_are_concrete_into(
-                                &mut type_parameter_replacements,
-                                type_aliases,
-                                still_syntax_node_as_ref(parameter_type_node),
-                                still_syntax_node_as_ref(argument_type_node),
-                            );
-                        }
-                        still_syntax_type_replace_variables(
-                            // seems inefficient, a function would be better
-                            &type_parameter_replacements
-                                .iter()
-                                .map(|(k, v)| (k.as_ref(), still_syntax_node_as_ref(v)))
-                                .collect::<std::collections::HashMap<_, _>>(),
-                            still_syntax_node_as_ref(&variable_type_output),
-                        )
-                    }
-                }
-            },
             Some(maybe_variable_type) => {
                 let Some(variable_type_node) = maybe_variable_type.as_ref() else {
                     return StillSyntaxNode {
@@ -2864,6 +2821,73 @@ fn still_syntax_expression_type_with<'a>(
                         range: expression_node.range,
                         value: StillSyntaxType::Parenthesized(None),
                     })
+                }
+            }
+            None => {
+                let Some(maybe_project_variable_info) =
+                    variable_declarations.get(variable_node.value.as_str())
+                else {
+                    return StillSyntaxNode {
+                        range: expression_node.range,
+                        value: StillSyntaxType::Parenthesized(None),
+                    };
+                };
+                let Some(project_variable_type_node) = &maybe_project_variable_info.type_syntax
+                else {
+                    return StillSyntaxNode {
+                        range: expression_node.range,
+                        value: StillSyntaxType::Parenthesized(None),
+                    };
+                };
+                if arguments.is_empty() {
+                    project_variable_type_node.clone()
+                } else {
+                    let Some((inputs, maybe_variable_type_output)) = still_syntax_type_to_function(
+                        type_aliases,
+                        still_syntax_node_as_ref(project_variable_type_node),
+                    ) else {
+                        return project_variable_type_node.clone();
+                    };
+                    let Some(variable_type_output) = maybe_variable_type_output else {
+                        return StillSyntaxNode {
+                            range: expression_node.range,
+                            value: StillSyntaxType::Parenthesized(None),
+                        };
+                    };
+                    // optimization possibility: when output contains no type variables,
+                    // just return it
+                    let mut type_parameter_replacements: std::collections::HashMap<
+                        Box<str>,
+                        StillSyntaxNode<StillSyntaxType>,
+                    > = std::collections::HashMap::new();
+                    let argument_types = arguments
+                        .iter()
+                        .map(|argument_node| {
+                            still_syntax_expression_type(
+                                type_aliases,
+                                variable_declarations,
+                                still_syntax_node_as_ref(argument_node),
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                    for (parameter_type_node, argument_type_node) in
+                        inputs.iter().zip(argument_types.iter())
+                    {
+                        still_syntax_type_collect_variables_that_are_concrete_into(
+                            &mut type_parameter_replacements,
+                            type_aliases,
+                            still_syntax_node_as_ref(parameter_type_node),
+                            still_syntax_node_as_ref(argument_type_node),
+                        );
+                    }
+                    still_syntax_type_replace_variables(
+                        // seems inefficient, a function would be better
+                        &type_parameter_replacements
+                            .iter()
+                            .map(|(k, v)| (k.as_ref(), still_syntax_node_as_ref(v)))
+                            .collect::<std::collections::HashMap<_, _>>(),
+                        still_syntax_node_as_ref(&variable_type_output),
+                    )
                 }
             }
         },
@@ -3111,24 +3135,49 @@ fn still_syntax_expression_type_with<'a>(
         StillSyntaxExpression::String { .. } => still_syntax_node_empty(still_syntax_type_str),
     }
 }
-
+const still_type_chr_name: &str = "chr";
+const still_type_chr: StillType = StillType::Construct {
+    name: StillName::const_new(still_type_chr_name),
+    arguments: vec![],
+};
 const still_syntax_type_chr: StillSyntaxType = StillSyntaxType::Construct {
-    name: still_syntax_node_empty(StillName::const_new("chr")),
+    name: still_syntax_node_empty(StillName::const_new(still_type_chr_name)),
+    arguments: vec![],
+};
+const still_type_dec_name: &str = "dec";
+const still_type_dec: StillType = StillType::Construct {
+    name: StillName::const_new(still_type_dec_name),
     arguments: vec![],
 };
 const still_syntax_type_dec: StillSyntaxType = StillSyntaxType::Construct {
-    name: still_syntax_node_empty(StillName::const_new("dec")),
+    name: still_syntax_node_empty(StillName::const_new(still_type_dec_name)),
+    arguments: vec![],
+};
+const still_type_int_name: &str = "int";
+const still_type_int: StillType = StillType::Construct {
+    name: StillName::const_new(still_type_int_name),
     arguments: vec![],
 };
 const still_syntax_type_int: StillSyntaxType = StillSyntaxType::Construct {
-    name: still_syntax_node_empty(StillName::const_new("int")),
+    name: still_syntax_node_empty(StillName::const_new(still_type_int_name)),
+    arguments: vec![],
+};
+const still_type_str_name: &str = "str";
+const still_type_str: StillType = StillType::Construct {
+    name: StillName::const_new(still_type_str_name),
     arguments: vec![],
 };
 const still_syntax_type_str: StillSyntaxType = StillSyntaxType::Construct {
-    name: still_syntax_node_empty(StillName::const_new("str")),
+    name: still_syntax_node_empty(StillName::const_new(still_type_str_name)),
     arguments: vec![],
 };
 const still_type_vec_name: &str = "vec";
+fn still_type_vec(element_type: StillType) -> StillType {
+    StillType::Construct {
+        name: StillName::new(still_type_vec_name),
+        arguments: vec![element_type],
+    }
+}
 fn still_syntax_type_vec(element_type: StillSyntaxNode<StillSyntaxType>) -> StillSyntaxType {
     StillSyntaxType::Construct {
         name: still_syntax_node_empty(StillName::new(still_type_vec_name)),
@@ -8633,6 +8682,50 @@ fn still_project_info_to_rust(
                 })
                 .copied()
                 .collect::<Vec<_>>();
+        // initialize only the parameters into compiled_choice_type_infos
+        // so that no "not found" errors are raised
+        for type_declaration_info in &type_declaration_infos {
+            match type_declaration_info {
+                StillSyntaxTypeDeclarationInfo::TypeAlias {
+                    name: name_node,
+                    parameters,
+                    ..
+                } => {
+                    compiled_type_alias_infos.insert(
+                        name_node.value.clone(),
+                        TypeAliasInfo {
+                            parameters: (*parameters).clone(),
+                            name_range: None,
+                            documentation: None,
+                            type_syntax: None,
+                            type_: None,
+                            is_copy: false,
+                            has_lifetime_parameter: true,
+                        },
+                    );
+                }
+                StillSyntaxTypeDeclarationInfo::ChoiceType {
+                    name: name_node,
+                    parameters,
+                    ..
+                } => {
+                    compiled_choice_type_infos.insert(
+                        name_node.value.clone(),
+                        ChoiceTypeInfo {
+                            parameters: (*parameters).clone(),
+                            name_range: None,
+                            documentation: None,
+                            variant0_name: None,
+                            variant0_value: None,
+                            variant1_up: vec![],
+                            is_copy: false,
+                            has_lifetime_parameter: true,
+                            recursive_variant_value_variant_indexes: vec![],
+                        },
+                    );
+                }
+            }
+        }
         let scc_type_declaration_names: std::collections::HashSet<&str> = type_declaration_infos
             .iter()
             .map(|&type_declaration| match type_declaration {
@@ -8666,12 +8759,13 @@ fn still_project_info_to_rust(
                             name_range: Some(name_node.range),
                             documentation: maybe_documentation.as_ref().map(|n| n.value.clone()),
                             parameters: parameters.clone(),
-                            type_: maybe_type.clone(),
+                            type_syntax: maybe_type.clone(),
+                            type_: compiled_type_alias.type_,
                             is_copy: compiled_type_alias.is_copy,
                             has_lifetime_parameter: compiled_type_alias.has_lifetime_parameter,
                         },
                     );
-                    rust_items.push(compiled_type_alias.rust);
+                    rust_items.extend(compiled_type_alias.rust);
                 }
                 StillSyntaxTypeDeclarationInfo::ChoiceType {
                     range,
@@ -8743,44 +8837,37 @@ fn still_project_info_to_rust(
                             documentation: variable_declaration
                                 .documentation
                                 .map(|n| n.value.clone()),
+                            type_syntax: None,
                             type_: None,
                             has_allocator_parameter: true,
                         },
                     );
                 }
                 Some(result_node) => {
-                    match still_syntax_expression_type(
-                        &compiled_type_alias_infos,
-                        &compiled_variable_declaration_infos,
-                        result_node,
-                    ) {
-                        // is there a better way? Maybe do complain when used variables have no known type
-                        StillSyntaxNode {
-                            range: _,
-                            value: StillSyntaxType::Parenthesized(None),
-                        } => {
-                            errors.push(StillErrorNode {
-                                    range: variable_declaration.range,
-                                    message: Box::from(
-                                        "recursive variable declarations (and mutually recursive ones) need to have a known type. \
-Please change for example  \\input, patterns -> ...  to  \\input, patterns -> :output: ... "
-                                    )
-                                });
-                        }
-                        type_node => {
-                            compiled_variable_declaration_infos.insert(
-                                variable_declaration.name.value.clone(),
-                                CompiledVariableDeclarationInfo {
-                                    name_range: Some(variable_declaration.range),
-                                    documentation: variable_declaration
-                                        .documentation
-                                        .map(|n| n.value.clone()),
-                                    type_: Some(type_node),
-                                    has_allocator_parameter: true,
-                                },
-                            );
-                        }
-                    }
+                    let result_type_node: StillSyntaxNode<StillSyntaxType> =
+                        still_syntax_expression_type(
+                            &compiled_type_alias_infos,
+                            &compiled_variable_declaration_infos,
+                            result_node,
+                        );
+                    compiled_variable_declaration_infos.insert(
+                        variable_declaration.name.value.clone(),
+                        CompiledVariableDeclarationInfo {
+                            name_range: Some(variable_declaration.range),
+                            documentation: variable_declaration
+                                .documentation
+                                .map(|n| n.value.clone()),
+                            type_: still_syntax_type_to_type(
+                                // will be reported when compiling
+                                &mut Vec::new(),
+                                &compiled_type_alias_infos,
+                                &compiled_choice_type_infos,
+                                still_syntax_node_as_ref(&result_type_node),
+                            ),
+                            type_syntax: Some(result_type_node),
+                            has_allocator_parameter: true,
+                        },
+                    );
                 }
             }
         }
@@ -8794,7 +8881,7 @@ Please change for example  \\input, patterns -> ...  to  \\input, patterns -> :o
                     &compiled_variable_declaration_infos,
                     variable_declaration,
                 );
-            rust_items.push(rust_item_to_add);
+            rust_items.extend(rust_item_to_add);
             if !rust_declaration_has_allocator_parameter
                 && let Some(info) =
                     compiled_variable_declaration_infos.get_mut(&variable_declaration.name.value)
@@ -8822,34 +8909,25 @@ Please change for example  \\input, patterns -> ...  to  \\input, patterns -> :o
 struct CompiledVariableDeclarationInfo {
     name_range: Option<lsp_types::Range>,
     documentation: Option<Box<str>>,
-    type_: Option<StillSyntaxNode<StillSyntaxType>>,
+    type_syntax: Option<StillSyntaxNode<StillSyntaxType>>,
+    type_: Option<StillType>,
     has_allocator_parameter: bool,
 }
 fn core_variable_declaration_infos()
 -> std::collections::HashMap<StillName, CompiledVariableDeclarationInfo> {
-    fn variable(name: &'static str) -> StillSyntaxType {
-        StillSyntaxType::Variable(StillName::from(name))
+    fn variable(name: &'static str) -> StillType {
+        StillType::Variable(StillName::from(name))
     }
-    fn function(
-        inputs: impl IntoIterator<Item = StillSyntaxType>,
-        output: StillSyntaxType,
-    ) -> StillSyntaxType {
-        StillSyntaxType::Function {
-            inputs: inputs
-                .into_iter()
-                .map(still_syntax_node_empty)
-                .collect::<Vec<_>>(),
-            arrow_key_symbol_range: None,
-            output: Some(still_syntax_node_empty(Box::new(output))),
+    fn function(inputs: impl IntoIterator<Item = StillType>, output: StillType) -> StillType {
+        StillType::Function {
+            inputs: inputs.into_iter().collect::<Vec<_>>(),
+            output: Box::new(output),
         }
     }
-    fn vec(element: StillSyntaxType) -> StillSyntaxType {
-        still_syntax_type_vec(still_syntax_node_empty(element))
-    }
-    fn opt(value: StillSyntaxType) -> StillSyntaxType {
-        StillSyntaxType::Construct {
-            name: still_syntax_node_empty(StillName::const_new("opt")),
-            arguments: vec![still_syntax_node_empty(value)],
+    fn opt(value: StillType) -> StillType {
+        StillType::Construct {
+            name: StillName::const_new("opt"),
+            arguments: vec![value],
         }
     }
     std::collections::HashMap::from(
@@ -8857,143 +8935,143 @@ fn core_variable_declaration_infos()
             (
                 StillName::from("int-negate"),
                 false,
-                function([still_syntax_type_int], still_syntax_type_int),
+                function([still_type_int], still_type_int),
                 "Flip its sign",
             ),
             (
                 StillName::from("int-absolute"),
                 false,
-                function([still_syntax_type_int], still_syntax_type_int),
+                function([still_type_int], still_type_int),
                 "If negative, negate",
             ),
             (
                 StillName::from("int-add"),
                 false,
-                function([still_syntax_type_int,still_syntax_type_int], still_syntax_type_int),
+                function([still_type_int,still_type_int], still_type_int),
                 "`+` plus operation",
             ),
             (
                 StillName::from("int-mul"),
                 false,
-                function([still_syntax_type_int,still_syntax_type_int], still_syntax_type_int),
+                function([still_type_int,still_type_int], still_type_int),
                 "`*` times operation",
             ),
             (
                 StillName::from("int-div"),
                 false,
-                function([still_syntax_type_int,still_syntax_type_int], still_syntax_type_int),
+                function([still_type_int,still_type_int], still_type_int),
                 "`/` integer divide operation, discarding any remainder",
             ),
             (
                 StillName::from("int-to-str"),
                 true,
-                function([still_syntax_type_int], still_syntax_type_str),
+                function([still_type_int], still_type_str),
                 "Convert `int` to `str`",
             ),
             (
                 StillName::from("str-to-int"),
                 false,
-                function([still_syntax_type_str], opt(still_syntax_type_int)),
+                function([still_type_str], opt(still_type_int)),
                 "Parse a complete `str` into an `int`, returning :opt int:Absent otherwise",
             ),
             (
                 StillName::from("dec-negate"),
                 false,
-                function([still_syntax_type_dec], still_syntax_type_dec),
+                function([still_type_dec], still_type_dec),
                 "Flip its sign",
             ),
             (
                 StillName::from("dec-absolute"),
                 false,
-                function([still_syntax_type_dec], still_syntax_type_dec),
+                function([still_type_dec], still_type_dec),
                 "If negative, negate",
             ),
             (
                 StillName::from("dec-add"),
                 false,
-                function([still_syntax_type_dec,still_syntax_type_dec], still_syntax_type_dec),
+                function([still_type_dec,still_type_dec], still_type_dec),
                 "`+` plus operation",
             ),
             (
                 StillName::from("dec-mul"),
                 false,
-                function([still_syntax_type_dec,still_syntax_type_dec], still_syntax_type_dec),
+                function([still_type_dec,still_type_dec], still_type_dec),
                 "`*` times operation",
             ),
             (
                 StillName::from("dec-div"),
                 false,
-                function([still_syntax_type_dec,still_syntax_type_dec], still_syntax_type_dec),
+                function([still_type_dec,still_type_dec], still_type_dec),
                 "`/` divide operation",
             ),
             (
                 StillName::from("dec-to-str"),
                 true,
-                function([still_syntax_type_dec], still_syntax_type_str),
+                function([still_type_dec], still_type_str),
                 "Convert `dec` to `str`",
             ),
             (
                 StillName::from("str-to-dec"),
                 false,
-                function([still_syntax_type_str], opt(still_syntax_type_dec)),
+                function([still_type_str], opt(still_type_dec)),
                 "Parse a complete `str` into an `dec`, returning :opt dec:Absent otherwise",
             ),
             (
                 StillName::from("chr-byte-count"),
                 false,
-                function([still_syntax_type_chr], still_syntax_type_int),
+                function([still_type_chr], still_type_int),
                 "Encoded as UTF-8, how many bytes the `chr` spans, between 1 and 4",
             ),
             (
                 StillName::from("chr-to-str"),
                 true,
-                function([still_syntax_type_chr], still_syntax_type_str),
+                function([still_type_chr], still_type_str),
                 "Convert `chr` to `str`",
             ),
             (
                 StillName::from("str-byte-count"),
                 false,
-                function([still_syntax_type_str], still_syntax_type_int),
+                function([still_type_str], still_type_int),
                 "Encoded as UTF-8, how many bytes the `str` spans",
             ),
             (
                 StillName::from("str-chr-at-byte-index"),
                 false,
                 function(
-                    [still_syntax_type_int, still_syntax_type_str],
-                    opt(still_syntax_type_chr),
+                    [still_type_int, still_type_str],
+                    opt(still_type_chr),
                 ),
                 "The `chr` at the floor char boundary of a given UTF-8 index. If it lands out of bounds, results in :option Element:Absent",
             ),
             (
                 StillName::from("str-to-chrs"),
                 true,
-                function([still_syntax_type_str], vec(still_syntax_type_chr)),
+                function([still_type_str], still_type_vec(still_type_chr)),
                 "Split the `str` into a `vec` of `chr`s",
             ),
             (
                 StillName::from("chrs-to-str"),
                 true,
-                function([vec(still_syntax_type_chr)], still_syntax_type_str),
+                function([still_type_vec(still_type_chr)], still_type_str),
                 "Concatenate a `vec` of `chr`s into one `str`",
             ),
             (
                 StillName::from("vec-repeat"),
                 true,
-                function([still_syntax_type_int, variable("A")], vec(variable("A"))),
+                function([still_type_int, variable("A")], still_type_vec(variable("A"))),
                 "Build a `vec` with a given length and a given element at each index",
             ),
             (
                 StillName::from("vec-length"),
                 false,
-                function([vec(variable("A"))], still_syntax_type_int),
+                function([still_type_vec(variable("A"))], still_type_int),
                 "Its element count",
             ),
             (
                 StillName::from("vec-element"),
                 false,
                 function(
-                    [still_syntax_type_int, vec(variable("A"))],
+                    [still_type_int, still_type_vec(variable("A"))],
                     opt(variable("A")),
                 ),
                 "The element at a given index. If it lands out of bounds, results in :option Element:Absent",
@@ -9002,27 +9080,27 @@ fn core_variable_declaration_infos()
                 StillName::from("vec-take"),
                 false,
                 function(
-                    [still_syntax_type_int, vec(variable("A"))],
-                    vec(variable("A")),
+                    [still_type_int, still_type_vec(variable("A"))],
+                    still_type_vec(variable("A")),
                 ),
                 "Truncate to at most a given length",
             ),
             (
                 StillName::from("vec-attach"),
                 false,
-                function([vec(variable("A")), vec(variable("A"))], vec(variable("A"))),
+                function([still_type_vec(variable("A")), still_type_vec(variable("A"))], still_type_vec(variable("A"))),
                 "Glue the elements in a second `vec` after the first `vec`",
             ),
             (
                 StillName::from("vec-flatten"),
                 false,
-                function([vec(vec(variable("A")))], vec(variable("A"))),
+                function([still_type_vec(still_type_vec(variable("A")))], still_type_vec(variable("A"))),
                 "Concatenate all the elements nested inside the inner `vec`s",
             ),
             (
                 StillName::from("strs-flatten"),
                 true,
-                function([vec(still_syntax_type_str)], still_syntax_type_str),
+                function([still_type_vec(still_type_str)], still_type_str),
                 "Concatenate all the string elements",
             ),
         ]
@@ -9032,17 +9110,41 @@ fn core_variable_declaration_infos()
                 CompiledVariableDeclarationInfo {
                     name_range: None,
                     documentation: Some(Box::from(documentation)),
-                    type_: Some(still_syntax_node_empty(type_)),
+                    type_syntax: Some(still_type_to_syntax_node(&type_)),
+                    type_: Some(type_),
                     has_allocator_parameter: has_allocator_parameter,
                 },
             )
         }),
     )
 }
+fn still_type_to_syntax_node(type_: &StillType) -> StillSyntaxNode<StillSyntaxType> {
+    still_syntax_node_empty(match type_ {
+        StillType::Variable(name) => StillSyntaxType::Variable(name.clone()),
+        StillType::Function { inputs, output } => StillSyntaxType::Function {
+            inputs: inputs.iter().map(still_type_to_syntax_node).collect(),
+            arrow_key_symbol_range: None,
+            output: Some(still_syntax_node_box(still_type_to_syntax_node(output))),
+        },
+        StillType::Construct { name, arguments } => StillSyntaxType::Construct {
+            name: still_syntax_node_empty(name.clone()),
+            arguments: arguments.iter().map(still_type_to_syntax_node).collect(),
+        },
+        StillType::Record(fields) => StillSyntaxType::Record(
+            fields
+                .iter()
+                .map(|field| StillSyntaxTypeField {
+                    name: still_syntax_node_empty(field.name.clone()),
+                    value: Some(still_type_to_syntax_node(&field.value)),
+                })
+                .collect(),
+        ),
+    })
+}
 fn core_choice_type_infos() -> std::collections::HashMap<StillName, ChoiceTypeInfo> {
     std::collections::HashMap::from([
         (
-            StillName::from("int"),
+            StillName::from(still_type_int_name),
             ChoiceTypeInfo {
                 name_range: None,
                 documentation: Some(Box::from(
@@ -9063,7 +9165,7 @@ vec-repeat 5 2
             },
         ),
         (
-            StillName::from("dec"),
+            StillName::from(still_type_dec_name),
             ChoiceTypeInfo {
                 name_range: None,
                 documentation: Some(Box::from(
@@ -9089,7 +9191,7 @@ dec-div five 2.0
             },
         ),
         (
-            StillName::from("chr"),
+            StillName::from(still_type_chr_name),
             ChoiceTypeInfo {
                 name_range: None,
                 documentation: Some(Box::from(
@@ -9113,7 +9215,7 @@ Read if interested: [swift's grapheme cluster docs](https://docs.swift.org/swift
             },
         ),
         (
-            StillName::from("str"),
+            StillName::from(still_type_str_name),
             ChoiceTypeInfo {
                 name_range: None,
                 documentation: Some(Box::from(
@@ -10031,9 +10133,10 @@ fn still_syntax_expression_connect_variables_in_graph_from(
     }
 }
 struct CompiledTypeAlias {
-    rust: syn::Item,
+    rust: Option<syn::Item>,
     is_copy: bool,
     has_lifetime_parameter: bool,
+    type_: Option<StillType>,
 }
 fn type_alias_declaration_to_rust<'a>(
     errors: &mut Vec<StillErrorNode>,
@@ -10053,29 +10156,10 @@ fn type_alias_declaration_to_rust<'a>(
             message: Box::from("type alias declaration is missing a type the given name is equal to after type alias ..type-name.. = here"),
         });
         return CompiledTypeAlias {
-            rust: syn::Item::Type(syn::ItemType {
-                attrs: maybe_documentation
-                    .map(syn_attribute_doc)
-                    .into_iter()
-                    .collect::<Vec<_>>(),
-                vis: syn::Visibility::Public(syn::token::Pub(syn_span())),
-                type_token: syn::token::Type(syn_span()),
-                ident: syn_ident(&rust_name),
-                generics: syn::Generics {
-                    lt_token: None,
-                    params: syn::punctuated::Punctuated::new(),
-                    gt_token: None,
-                    where_clause: None,
-                },
-                eq_token: syn::token::Eq(syn_span()),
-                ty: Box::new(syn::Type::Path(syn::TypePath {
-                    qself: None,
-                    path: syn_path_reference(["Blank"]),
-                })),
-                semi_token: syn::token::Semi(syn_span()),
-            }),
+            rust: None,
             has_lifetime_parameter: false,
             is_copy: true,
+            type_: None,
         };
     };
     let has_lifetime_parameter: bool =
@@ -10090,8 +10174,9 @@ fn type_alias_declaration_to_rust<'a>(
             &still_type_variable_to_rust(&parameter_node.value),
         ))));
     }
+    // TODO verify specified parameter names match with still_type_variables_into
     CompiledTypeAlias {
-        rust: syn::Item::Type(syn::ItemType {
+        rust: Some(syn::Item::Type(syn::ItemType {
             attrs: maybe_documentation
                 .map(syn_attribute_doc)
                 .into_iter()
@@ -10115,9 +10200,10 @@ fn type_alias_declaration_to_rust<'a>(
                 type_node,
             )),
             semi_token: syn::token::Semi(syn_span()),
-        }),
+        })),
         has_lifetime_parameter: has_lifetime_parameter,
         is_copy: still_syntax_type_is_copy(true, type_aliases, choice_types, type_node),
+        type_: still_syntax_type_to_type(errors, type_aliases, choice_types, type_node),
     }
 }
 struct CompiledRustChoiceTypeInfo {
@@ -10240,6 +10326,7 @@ fn choice_type_declaration_to_rust_into<'a>(
             )))
         }))
         .collect();
+    // TODO verify specified parameter names match with still_type_variables_into
     let rust_enum_name: String = still_name_to_uppercase_rust(name);
     rust_items.push(syn::Item::Enum(syn::ItemEnum {
         attrs: maybe_documentation
@@ -10967,6 +11054,43 @@ fn still_syntax_variant_to_rust<'a>(
         discriminant: None,
     }
 }
+fn still_type_is_copy(
+    variables_are_copy: bool,
+    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
+    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
+    type_: &StillType,
+) -> bool {
+    match type_ {
+        StillType::Variable(_) => variables_are_copy,
+        StillType::Function { .. } => {
+            true
+            // TODO for non-dyn it would be false
+        }
+        StillType::Construct {
+            name: name_node,
+            arguments,
+        } => {
+            (match choice_types.get(name_node.as_str()) {
+                None => {
+                    match type_aliases.get(name_node.as_str()) {
+                        None => {
+                            // not found, therefore from (mutually) recursive type,
+                            // therefore compiled to a reference, therefore Copy
+                            true
+                        }
+                        Some(compile_type_alias_info) => compile_type_alias_info.is_copy,
+                    }
+                }
+                Some(choice_type_info) => choice_type_info.is_copy,
+            }) && arguments.iter().all(|input_type| {
+                still_type_is_copy(variables_are_copy, type_aliases, choice_types, input_type)
+            })
+        }
+        StillType::Record(fields) => fields.iter().all(|field| {
+            still_type_is_copy(variables_are_copy, type_aliases, choice_types, &field.value)
+        }),
+    }
+}
 fn still_syntax_type_is_copy(
     variables_are_copy: bool,
     type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
@@ -11100,7 +11224,7 @@ fn still_syntax_type_uses_lifetime(
                         Some(choice_type_info) => choice_type_info.is_copy,
                     }
                 }
-                Some(type_alias) => match &type_alias.type_ {
+                Some(type_alias) => match &type_alias.type_syntax {
                     None => false,
                     Some(aliased_type_node) => still_syntax_type_uses_lifetime(
                         type_aliases,
@@ -11210,53 +11334,36 @@ fn variable_declaration_to_rust<'a>(
     choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
     variable_declarations: &std::collections::HashMap<StillName, CompiledVariableDeclarationInfo>,
     variable_declaration_info: StillSyntaxVariableDeclarationInfo<'a>,
-) -> (syn::Item, bool) {
-    let (rust_type, maybe_still_type_node) = match variable_declaration_info.result {
-        None => {
-            errors.push(StillErrorNode {
-                range: variable_declaration_info.range,
-                message: Box::from(
-                    "missing expression after the variable declaration name ..variable-name.. here",
-                ),
-            });
-            (
-                syn::Type::Never(syn::TypeNever {
-                    bang_token: syn::token::Not(syn_span()),
-                }),
-                None,
-            )
-        }
-        Some(result_node) => {
-            let type_node = still_syntax_expression_type_with(
-                type_aliases,
-                variable_declarations,
-                std::rc::Rc::new(std::collections::HashMap::new()),
-                result_node,
-            );
-            (
-                still_syntax_type_to_rust(
-                    // errors are reported when compiling expression
-                    &mut Vec::new(),
-                    // TODO this is dumb.
-                    // consider separating out to_rust from collecting records
-                    &mut std::collections::HashSet::new(),
-                    type_aliases,
-                    choice_types,
-                    syn_default_lifetime_name,
-                    still_syntax_node_as_ref(&type_node),
-                ),
-                Some(type_node),
-            )
-        }
+) -> (Option<syn::Item>, bool) {
+    let Some(result_node) = variable_declaration_info.result else {
+        errors.push(StillErrorNode {
+            range: variable_declaration_info.range,
+            message: Box::from(
+                "missing expression after the variable declaration name ..variable-name.. here",
+            ),
+        });
+        return (None, false);
+    };
+    let compiled_result: CompiledStillExpression = still_syntax_expression_to_rust(
+        errors,
+        records_used,
+        type_aliases,
+        choice_types,
+        variable_declarations,
+        std::rc::Rc::new(std::collections::HashMap::new()),
+        true,
+        result_node,
+    );
+    let Some(type_) = compiled_result.type_.and_then(|result_type| {
+        still_type_resolve_outer_type_aliases(type_aliases, std::borrow::Cow::Owned(result_type))
+            .map(std::borrow::Cow::into_owned)
+    }) else {
+        // rust top level declarations need explicit types, so partial types won't do.
+        return (None, false);
     };
     let mut still_type_parameters: std::collections::HashSet<&str> =
         std::collections::HashSet::new();
-    if let Some(still_type_node) = maybe_still_type_node.as_ref() {
-        still_syntax_type_variables_into(
-            &mut still_type_parameters,
-            still_syntax_node_as_ref(still_type_node),
-        );
-    }
+    still_type_variables_into(&mut still_type_parameters, &type_);
     let rust_attrs: Vec<syn::Attribute> = variable_declaration_info
         .documentation
         .map(|n| syn_attribute_doc(&n.value))
@@ -11282,30 +11389,72 @@ fn variable_declaration_to_rust<'a>(
         gt_token: Some(syn::token::Gt(syn_span())),
         where_clause: None,
     };
-    // TODO when contains type contains neither type variables nor lifetime variables and is not a function type,
+    // TODO when contains type contains neither type variables nor lifetime variables and oes not contain a function type,
     // use syn::Item::Static(syn::ItemStatic
-    match maybe_still_type_node
-        .as_ref()
-        .and_then(|n| still_syntax_type_to_function(type_aliases, still_syntax_node_as_ref(n)))
-    {
-        None => {
-            let compiled_result: CompiledStillExpression = match variable_declaration_info.result {
-                None => CompiledStillExpression {
-                    uses_allocator: false,
-                    rust: syn_expr_todo(),
-                },
-                Some(result_node) => still_syntax_expression_to_rust(
-                    errors,
-                    records_used,
-                    type_aliases,
-                    choice_types,
-                    variable_declarations,
-                    std::rc::Rc::new(std::collections::HashMap::new()),
-                    result_node,
-                ),
-            };
-            (
-                syn::Item::Fn(syn::ItemFn {
+    match type_ {
+        StillType::Function {
+            inputs: input_types,
+            output,
+        } => match compiled_result.rust {
+            syn::Expr::Closure(result_lambda) => {
+                let rust_parameters: syn::punctuated::Punctuated<syn::FnArg, syn::token::Comma> =
+                    (if compiled_result.uses_allocator {
+                        Some(default_allocator_fn_arg())
+                    } else {
+                        None
+                    })
+                    .into_iter()
+                    .chain(result_lambda.inputs.into_iter().zip(input_types).map(
+                        |(parameter_pat, parameter_type)| {
+                            syn::FnArg::Typed(syn::PatType {
+                                pat: Box::new(parameter_pat),
+                                attrs: vec![],
+                                colon_token: syn::token::Colon(syn_span()),
+                                ty: Box::new(still_type_to_rust(
+                                    type_aliases,
+                                    choice_types,
+                                    syn_default_lifetime_name,
+                                    &parameter_type,
+                                )),
+                            })
+                        },
+                    ))
+                    .collect();
+                (
+                    Some(syn::Item::Fn(syn::ItemFn {
+                        attrs: rust_attrs,
+                        vis: syn::Visibility::Public(syn::token::Pub(syn_span())),
+                        sig: syn::Signature {
+                            constness: None,
+                            asyncness: None,
+                            unsafety: None,
+                            abi: None,
+                            fn_token: syn::token::Fn(syn_span()),
+                            ident: rust_ident,
+                            generics: rust_generics,
+                            paren_token: syn::token::Paren(syn_span()),
+                            inputs: rust_parameters,
+                            output: syn::ReturnType::Type(
+                                syn::token::RArrow(syn_span()),
+                                Box::new(still_type_to_rust(
+                                    type_aliases,
+                                    choice_types,
+                                    syn_default_lifetime_name,
+                                    &output,
+                                )),
+                            ),
+                            variadic: None,
+                        },
+                        block: Box::new(syn::Block {
+                            brace_token: syn::token::Brace(syn_span()),
+                            stmts: vec![syn::Stmt::Expr(*result_lambda.body, None)],
+                        }),
+                    })),
+                    compiled_result.uses_allocator,
+                )
+            }
+            result_rust => (
+                Some(syn::Item::Fn(syn::ItemFn {
                     attrs: rust_attrs,
                     vis: syn::Visibility::Public(syn::token::Pub(syn_span())),
                     sig: syn::Signature {
@@ -11323,242 +11472,103 @@ fn variable_declaration_to_rust<'a>(
                             None
                         })
                         .into_iter()
+                        .chain(input_types.iter().enumerate().map(|(i, input_type_node)| {
+                            syn::FnArg::Typed(syn::PatType {
+                                pat: Box::new(syn::Pat::Path(syn::ExprPath {
+                                    attrs: vec![],
+                                    qself: None,
+                                    path: syn_path_reference([&rust_generated_fn_parameter_name(
+                                        i,
+                                    )]),
+                                })),
+                                attrs: vec![],
+                                colon_token: syn::token::Colon(syn_span()),
+                                ty: Box::new(still_type_to_rust(
+                                    type_aliases,
+                                    choice_types,
+                                    syn_default_lifetime_name,
+                                    input_type_node,
+                                )),
+                            })
+                        }))
                         .collect(),
                         output: syn::ReturnType::Type(
                             syn::token::RArrow(syn_span()),
-                            Box::new(rust_type),
+                            Box::new(still_type_to_rust(
+                                type_aliases,
+                                choice_types,
+                                syn_default_lifetime_name,
+                                &output,
+                            )),
                         ),
                         variadic: None,
                     },
                     block: Box::new(syn::Block {
                         brace_token: syn::token::Brace(syn_span()),
-                        stmts: vec![syn::Stmt::Expr(compiled_result.rust, None)],
+                        stmts: vec![syn::Stmt::Expr(
+                            syn::Expr::Call(syn::ExprCall {
+                                attrs: vec![],
+                                func: Box::new(result_rust),
+                                paren_token: syn::token::Paren(syn_span()),
+                                args: input_types
+                                    .iter()
+                                    .enumerate()
+                                    .map(|(i, _)| {
+                                        syn::Expr::Path(syn::ExprPath {
+                                            attrs: vec![],
+                                            qself: None,
+                                            path: syn_path_reference([
+                                                &rust_generated_fn_parameter_name(i),
+                                            ]),
+                                        })
+                                    })
+                                    .collect(),
+                            }),
+                            None,
+                        )],
                     }),
-                }),
+                })),
                 compiled_result.uses_allocator,
-            )
-        }
-        Some((inputs, maybe_output)) => match variable_declaration_info
-            .result
-            .and_then(still_syntax_expression_to_lambda)
-        {
-            Some((result_lambda_parameters, result_lambda_result)) => {
-                let mut local_bindings: std::collections::HashMap<
-                    &str,
-                    Option<StillSyntaxNode<StillSyntaxType>>,
-                > = std::collections::HashMap::new();
-                for parameter_node in result_lambda_parameters {
-                    still_syntax_pattern_binding_types_into(
-                        &mut local_bindings,
-                        still_syntax_node_as_ref(parameter_node),
-                    );
-                }
-                let compiled_result_lambda_result: CompiledStillExpression =
-                    maybe_still_syntax_expression_to_rust(
-                        errors,
-                        || StillErrorNode {
-                            range: variable_declaration_info.range,
-                            message: Box::from(
-                                "missing lambda result expression after \\..parameters.. -> here",
-                            ),
-                        },
-                        records_used,
-                        type_aliases,
-                        choice_types,
-                        variable_declarations,
-                        std::rc::Rc::new(local_bindings),
-                        result_lambda_result,
-                    );
-                let mut bindings_to_clone: Vec<BindingToClone> = Vec::new();
-                let rust_parameters: syn::punctuated::Punctuated<syn::FnArg, syn::token::Comma> =
-                    (if compiled_result_lambda_result.uses_allocator {
+            ),
+        },
+        type_not_function => (
+            Some(syn::Item::Fn(syn::ItemFn {
+                attrs: rust_attrs,
+                vis: syn::Visibility::Public(syn::token::Pub(syn_span())),
+                sig: syn::Signature {
+                    constness: None,
+                    asyncness: None,
+                    unsafety: None,
+                    abi: None,
+                    fn_token: syn::token::Fn(syn_span()),
+                    ident: rust_ident,
+                    generics: rust_generics,
+                    paren_token: syn::token::Paren(syn_span()),
+                    inputs: (if compiled_result.uses_allocator {
                         Some(default_allocator_fn_arg())
                     } else {
                         None
                     })
                     .into_iter()
-                    .chain(result_lambda_parameters.iter().zip(inputs.iter()).map(
-                        |(parameter_node, input_type_node)| {
-                            syn::FnArg::Typed(syn::PatType {
-                                pat: Box::new(still_syntax_pattern_to_rust(
-                                    errors,
-                                    records_used,
-                                    &mut bindings_to_clone,
-                                    type_aliases,
-                                    choice_types,
-                                    false,
-                                    still_syntax_node_as_ref(parameter_node),
-                                )),
-                                attrs: vec![],
-                                colon_token: syn::token::Colon(syn_span()),
-                                ty: Box::new(still_syntax_type_to_rust(
-                                    // errors are reported when compiling expression
-                                    &mut Vec::new(),
-                                    // TODO this is dumb.
-                                    // consider separating out to_rust from collecting records
-                                    &mut std::collections::HashSet::new(),
-                                    type_aliases,
-                                    choice_types,
-                                    syn_default_lifetime_name,
-                                    still_syntax_node_as_ref(input_type_node),
-                                )),
-                            })
-                        },
-                    ))
-                    .collect();
-                let mut rust_stmts: Vec<syn::Stmt> = Vec::new();
-                bindings_to_clone_to_rust_into(&mut rust_stmts, bindings_to_clone);
-                rust_stmts.push(syn::Stmt::Expr(compiled_result_lambda_result.rust, None));
-                (
-                    syn::Item::Fn(syn::ItemFn {
-                        attrs: rust_attrs,
-                        vis: syn::Visibility::Public(syn::token::Pub(syn_span())),
-                        sig: syn::Signature {
-                            constness: None,
-                            asyncness: None,
-                            unsafety: None,
-                            abi: None,
-                            fn_token: syn::token::Fn(syn_span()),
-                            ident: rust_ident,
-                            generics: rust_generics,
-                            paren_token: syn::token::Paren(syn_span()),
-                            inputs: rust_parameters,
-                            output: syn::ReturnType::Type(
-                                syn::token::RArrow(syn_span()),
-                                Box::new(match maybe_output {
-                                    None => syn_type_infer(),
-                                    Some(output_node) => still_syntax_type_to_rust(
-                                        // errors are reported when compiling expression
-                                        &mut Vec::new(),
-                                        // TODO this is dumb.
-                                        // consider separating out to_rust from collecting records
-                                        &mut std::collections::HashSet::new(),
-                                        type_aliases,
-                                        choice_types,
-                                        syn_default_lifetime_name,
-                                        still_syntax_node_as_ref(&output_node),
-                                    ),
-                                }),
-                            ),
-                            variadic: None,
-                        },
-                        block: Box::new(syn::Block {
-                            brace_token: syn::token::Brace(syn_span()),
-                            stmts: rust_stmts,
-                        }),
-                    }),
-                    compiled_result_lambda_result.uses_allocator,
-                )
-            }
-            None => {
-                let compiled_result: CompiledStillExpression =
-                    match variable_declaration_info.result {
-                        None => CompiledStillExpression {
-                            uses_allocator: false,
-                            rust: syn_expr_todo(),
-                        },
-                        Some(result_node) => still_syntax_expression_to_rust(
-                            errors,
-                            records_used,
+                    .collect(),
+                    output: syn::ReturnType::Type(
+                        syn::token::RArrow(syn_span()),
+                        Box::new(still_type_to_rust(
                             type_aliases,
                             choice_types,
-                            variable_declarations,
-                            std::rc::Rc::new(std::collections::HashMap::new()),
-                            result_node,
-                        ),
-                    };
-                (
-                    syn::Item::Fn(syn::ItemFn {
-                        attrs: rust_attrs,
-                        vis: syn::Visibility::Public(syn::token::Pub(syn_span())),
-                        sig: syn::Signature {
-                            constness: None,
-                            asyncness: None,
-                            unsafety: None,
-                            abi: None,
-                            fn_token: syn::token::Fn(syn_span()),
-                            ident: rust_ident,
-                            generics: rust_generics,
-                            paren_token: syn::token::Paren(syn_span()),
-                            inputs: (if compiled_result.uses_allocator {
-                                Some(default_allocator_fn_arg())
-                            } else {
-                                None
-                            })
-                            .into_iter()
-                            .chain(inputs.iter().enumerate().map(|(i, input_type_node)| {
-                                syn::FnArg::Typed(syn::PatType {
-                                    pat: Box::new(syn::Pat::Path(syn::ExprPath {
-                                        attrs: vec![],
-                                        qself: None,
-                                        path: syn_path_reference([
-                                            &rust_generated_fn_parameter_name(i),
-                                        ]),
-                                    })),
-                                    attrs: vec![],
-                                    colon_token: syn::token::Colon(syn_span()),
-                                    ty: Box::new(still_syntax_type_to_rust(
-                                        // errors are reported when compiling expression
-                                        &mut Vec::new(),
-                                        // TODO this is dumb.
-                                        // consider separating out to_rust from collecting records
-                                        &mut std::collections::HashSet::new(),
-                                        type_aliases,
-                                        choice_types,
-                                        syn_default_lifetime_name,
-                                        still_syntax_node_as_ref(input_type_node),
-                                    )),
-                                })
-                            }))
-                            .collect(),
-                            output: syn::ReturnType::Type(
-                                syn::token::RArrow(syn_span()),
-                                Box::new(match maybe_output {
-                                    None => syn_type_infer(),
-                                    Some(output_node) => still_syntax_type_to_rust(
-                                        // errors are reported when compiling expression
-                                        &mut Vec::new(),
-                                        // TODO this is dumb.
-                                        // consider separating out to_rust from collecting records
-                                        &mut std::collections::HashSet::new(),
-                                        type_aliases,
-                                        choice_types,
-                                        syn_default_lifetime_name,
-                                        still_syntax_node_as_ref(&output_node),
-                                    ),
-                                }),
-                            ),
-                            variadic: None,
-                        },
-                        block: Box::new(syn::Block {
-                            brace_token: syn::token::Brace(syn_span()),
-                            stmts: vec![syn::Stmt::Expr(
-                                syn::Expr::Call(syn::ExprCall {
-                                    attrs: vec![],
-                                    func: Box::new(compiled_result.rust),
-                                    paren_token: syn::token::Paren(syn_span()),
-                                    args: inputs
-                                        .iter()
-                                        .enumerate()
-                                        .map(|(i, _)| {
-                                            syn::Expr::Path(syn::ExprPath {
-                                                attrs: vec![],
-                                                qself: None,
-                                                path: syn_path_reference([
-                                                    &rust_generated_fn_parameter_name(i),
-                                                ]),
-                                            })
-                                        })
-                                        .collect(),
-                                }),
-                                None,
-                            )],
-                        }),
-                    }),
-                    compiled_result.uses_allocator,
-                )
-            }
-        },
+                            syn_default_lifetime_name,
+                            &type_not_function,
+                        )),
+                    ),
+                    variadic: None,
+                },
+                block: Box::new(syn::Block {
+                    brace_token: syn::token::Brace(syn_span()),
+                    stmts: vec![syn::Stmt::Expr(compiled_result.rust, None)],
+                }),
+            })),
+            compiled_result.uses_allocator,
+        ),
     }
 }
 fn rust_generated_fn_parameter_name(index: usize) -> String {
@@ -11647,12 +11657,75 @@ fn still_syntax_type_to_choice_type(
         _ => None,
     }
 }
+/// None indicates an error already reported in a different place
+fn still_type_resolve_outer_type_aliases<'a>(
+    type_aliases: &'a std::collections::HashMap<StillName, TypeAliasInfo>,
+    still_type: std::borrow::Cow<'a, StillType>,
+) -> Option<std::borrow::Cow<'a, StillType>> {
+    match still_type.as_ref() {
+        StillType::Construct { name, arguments } => match type_aliases.get(name) {
+            None => Some(still_type),
+            Some(type_alias) => match &type_alias.type_ {
+                None => None,
+                Some(type_alias_type) => {
+                    if type_alias.parameters.is_empty() {
+                        return Some(std::borrow::Cow::Borrowed(type_alias_type));
+                    }
+                    let type_parameter_replacements: std::collections::HashMap<&str, &StillType> =
+                        type_alias
+                            .parameters
+                            .iter()
+                            .map(|n| n.value.as_str())
+                            .zip(arguments.iter())
+                            .collect::<std::collections::HashMap<_, _>>();
+                    let mut peeled: StillType = type_alias_type.clone();
+                    still_type_replace_variables(&type_parameter_replacements, &mut peeled);
+                    still_type_resolve_outer_type_aliases(
+                        type_aliases,
+                        std::borrow::Cow::Owned(peeled),
+                    )
+                }
+            },
+        },
+        _ => Some(still_type),
+    }
+}
+fn still_type_replace_variables(
+    type_parameter_replacements: &std::collections::HashMap<&str, &StillType>,
+    type_: &mut StillType,
+) {
+    match type_ {
+        StillType::Variable(variable) => {
+            if let Some(&replacement_type_node) = type_parameter_replacements.get(variable.as_str())
+            {
+                *type_ = replacement_type_node.clone();
+            }
+        }
+        StillType::Construct { name: _, arguments } => {
+            for argument_type in arguments {
+                still_type_replace_variables(type_parameter_replacements, argument_type);
+            }
+        }
+        StillType::Record(fields) => {
+            for field in fields {
+                still_type_replace_variables(type_parameter_replacements, &mut field.value);
+            }
+        }
+        StillType::Function { inputs, output } => {
+            for input_type in inputs {
+                still_type_replace_variables(type_parameter_replacements, input_type);
+            }
+            still_type_replace_variables(type_parameter_replacements, output);
+        }
+    }
+}
 #[derive(Clone)]
 struct TypeAliasInfo {
     name_range: Option<lsp_types::Range>,
     documentation: Option<Box<str>>,
     parameters: Vec<StillSyntaxNode<StillName>>,
-    type_: Option<StillSyntaxNode<StillSyntaxType>>,
+    type_syntax: Option<StillSyntaxNode<StillSyntaxType>>,
+    type_: Option<StillType>,
     is_copy: bool,
     has_lifetime_parameter: bool,
 }
@@ -11664,6 +11737,7 @@ struct ChoiceTypeInfo {
     variant0_name: Option<StillSyntaxNode<StillName>>,
     variant0_value: Option<StillSyntaxNode<StillSyntaxType>>,
     variant1_up: Vec<StillSyntaxChoiceTypeDeclarationTailingVariant>,
+    // TODO add actual StillType s
     is_copy: bool,
     has_lifetime_parameter: bool,
     recursive_variant_value_variant_indexes: Vec<usize>,
@@ -11681,7 +11755,7 @@ fn still_syntax_type_resolve_while_type_alias(
             arguments,
         } => match type_aliases.get(&name_node.value) {
             None => None,
-            Some(type_alias) => match &type_alias.type_ {
+            Some(type_alias) => match &type_alias.type_syntax {
                 None => None,
                 Some(type_alias_type_node) => {
                     if type_alias.parameters.is_empty() {
@@ -11821,6 +11895,104 @@ fn still_syntax_type_replace_variables(
         },
     }
 }
+fn still_type_collect_variables_that_are_concrete_into(
+    type_parameter_replacements: &mut std::collections::HashMap<Box<str>, StillType>,
+    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
+    type_with_variables: &StillType,
+    concrete_type: StillType,
+) {
+    let Some(resolved_type_with_variables) = still_type_resolve_outer_type_aliases(
+        type_aliases,
+        std::borrow::Cow::Borrowed(type_with_variables),
+    ) else {
+        return;
+    };
+    match resolved_type_with_variables.as_ref() {
+        StillType::Variable(variable_name) => {
+            type_parameter_replacements.insert(Box::from(variable_name.as_str()), concrete_type);
+        }
+        StillType::Function {
+            inputs,
+            output: output_type,
+        } => {
+            if let Some(StillType::Function {
+                inputs: concrete_function_inputs,
+                output: concrete_function_output_type,
+            }) = still_type_resolve_outer_type_aliases(
+                type_aliases,
+                std::borrow::Cow::Owned(concrete_type),
+            )
+            .map(std::borrow::Cow::into_owned)
+            {
+                for (input_type, concrete_input_type) in
+                    inputs.iter().zip(concrete_function_inputs.into_iter())
+                {
+                    still_type_collect_variables_that_are_concrete_into(
+                        type_parameter_replacements,
+                        type_aliases,
+                        input_type,
+                        concrete_input_type,
+                    );
+                }
+                still_type_collect_variables_that_are_concrete_into(
+                    type_parameter_replacements,
+                    type_aliases,
+                    output_type,
+                    *concrete_function_output_type,
+                );
+            }
+        }
+        StillType::Construct { name, arguments } => {
+            if let Some(StillType::Construct {
+                name: concrete_choice_type_construct_name,
+                arguments: concrete_choice_type_construct_arguments,
+            }) = still_type_resolve_outer_type_aliases(
+                type_aliases,
+                std::borrow::Cow::Owned(concrete_type),
+            )
+            .map(std::borrow::Cow::into_owned)
+                && name == concrete_choice_type_construct_name
+            {
+                for (argument_type, concrete_argument_type) in arguments
+                    .iter()
+                    .zip(concrete_choice_type_construct_arguments.into_iter())
+                {
+                    still_type_collect_variables_that_are_concrete_into(
+                        type_parameter_replacements,
+                        type_aliases,
+                        argument_type,
+                        concrete_argument_type,
+                    );
+                }
+            }
+        }
+        StillType::Record(fields) => {
+            if let Some(StillType::Record(mut concrete_fields)) =
+                still_type_resolve_outer_type_aliases(
+                    type_aliases,
+                    std::borrow::Cow::Owned(concrete_type),
+                )
+                .map(std::borrow::Cow::into_owned)
+            {
+                for field in fields {
+                    if let Some(matching_concrete_field_index) = concrete_fields
+                        .iter()
+                        .position(|concrete_field| concrete_field.name == field.name)
+                    {
+                        let concrete_field =
+                            concrete_fields.swap_remove(matching_concrete_field_index);
+                        still_type_collect_variables_that_are_concrete_into(
+                            type_parameter_replacements,
+                            type_aliases,
+                            &field.value,
+                            concrete_field.value,
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
 fn still_syntax_type_collect_variables_that_are_concrete_into(
     type_parameter_replacements: &mut std::collections::HashMap<
         Box<str>,
@@ -11953,42 +12125,6 @@ fn still_syntax_type_collect_variables_that_are_concrete_into(
         }
     }
 }
-fn still_syntax_expression_to_lambda(
-    still_type_node: StillSyntaxNode<&StillSyntaxExpression>,
-) -> Option<(
-    &[StillSyntaxNode<StillSyntaxPattern>],
-    Option<StillSyntaxNode<&StillSyntaxExpression>>,
-)> {
-    match still_type_node.value {
-        StillSyntaxExpression::Lambda {
-            parameters,
-            arrow_key_symbol_range: _,
-            result: maybe_result,
-        } => Some((
-            parameters,
-            maybe_result.as_ref().map(still_syntax_node_unbox),
-        )),
-        StillSyntaxExpression::WithComment {
-            comment: _,
-            expression: Some(after_comment_node),
-        } => still_syntax_expression_to_lambda(still_syntax_node_unbox(after_comment_node)),
-        StillSyntaxExpression::Typed {
-            type_: _,
-            expression:
-                Some(StillSyntaxNode {
-                    range: in_typed_range,
-                    value: StillSyntaxExpressionUntyped::Other(in_typed),
-                }),
-        } => still_syntax_expression_to_lambda(StillSyntaxNode {
-            range: *in_typed_range,
-            value: in_typed,
-        }),
-        StillSyntaxExpression::Parenthesized(Some(in_parens_node)) => {
-            still_syntax_expression_to_lambda(still_syntax_node_unbox(in_parens_node))
-        }
-        _ => None,
-    }
-}
 fn maybe_still_syntax_type_to_rust<'a>(
     errors: &mut Vec<StillErrorNode>,
     error_on_none: impl FnOnce() -> StillErrorNode,
@@ -12013,7 +12149,164 @@ fn maybe_still_syntax_type_to_rust<'a>(
         ),
     }
 }
-/// TODO consider merging with is-copy and uses-lifetime
+fn still_type_to_rust(
+    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
+    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
+    lifetime: &str,
+    type_: &StillType,
+) -> syn::Type {
+    match type_ {
+        StillType::Variable(variable) => syn_type_variable(&still_type_variable_to_rust(variable)),
+        StillType::Function { inputs, output } => {
+            let output_rust_type: syn::Type =
+                still_type_to_rust(type_aliases, choice_types, lifetime, output);
+            // TODO replace by &dyn !
+            syn::Type::ImplTrait(syn::TypeImplTrait {
+                impl_token: syn::token::Impl(syn_span()),
+                bounds: std::iter::once(syn::TypeParamBound::Trait(syn::TraitBound {
+                    paren_token: None,
+                    modifier: syn::TraitBoundModifier::None,
+                    lifetimes: None,
+                    path: syn::Path::from(syn::PathSegment {
+                        ident: syn_ident("Fn"),
+                        arguments: syn::PathArguments::Parenthesized(
+                            syn::ParenthesizedGenericArguments {
+                                paren_token: syn::token::Paren(syn_span()),
+                                inputs: inputs
+                                    .iter()
+                                    .map(|input_type| {
+                                        still_type_to_rust(
+                                            type_aliases,
+                                            choice_types,
+                                            lifetime,
+                                            input_type,
+                                        )
+                                    })
+                                    .collect(),
+                                output: syn::ReturnType::Type(
+                                    syn::token::RArrow(syn_span()),
+                                    Box::new(output_rust_type),
+                                ),
+                            },
+                        ),
+                    }),
+                }))
+                .chain(default_parameter_bounds())
+                .collect(),
+            })
+        }
+        StillType::Construct { name, arguments } => {
+            let has_lifetime_parameter: bool = choice_types
+                .get(name.as_str())
+                .map(|compile_choice_type_info| compile_choice_type_info.has_lifetime_parameter)
+                .or_else(|| {
+                    type_aliases
+                        .get(name.as_str())
+                        .map(|compiled_type_alias| compiled_type_alias.has_lifetime_parameter)
+                })
+                .unwrap_or({
+                    // recursive type → contains a reference with a lifetime
+                    true
+                });
+            syn::Type::Path(syn::TypePath {
+                qself: None,
+                path: syn::Path {
+                    leading_colon: None,
+                    segments: std::iter::once(syn::PathSegment {
+                        ident: syn_ident(&still_name_to_uppercase_rust(name)),
+                        arguments: syn::PathArguments::AngleBracketed(
+                            syn::AngleBracketedGenericArguments {
+                                colon2_token: None,
+                                lt_token: syn::token::Lt(syn_span()),
+                                args: (if has_lifetime_parameter {
+                                    Some(syn::GenericArgument::Lifetime(syn_lifetime(lifetime)))
+                                } else {
+                                    None
+                                })
+                                .into_iter()
+                                .chain(arguments.iter().map(|argument_type| {
+                                    syn::GenericArgument::Type(still_type_to_rust(
+                                        type_aliases,
+                                        choice_types,
+                                        lifetime,
+                                        argument_type,
+                                    ))
+                                }))
+                                .collect(),
+                                gt_token: syn::token::Gt(syn_span()),
+                            },
+                        ),
+                    })
+                    .collect(),
+                },
+            })
+        }
+        StillType::Record(fields) => {
+            let mut fields_sorted: Vec<&StillTypeField> = fields.iter().collect();
+            fields_sorted.sort_by(|a, b| {
+                still_name_to_lowercase_rust(&a.name).cmp(&still_name_to_lowercase_rust(&b.name))
+            });
+            syn::Type::Path(syn::TypePath {
+                qself: None,
+                path: syn::Path {
+                    leading_colon: None,
+                    segments: std::iter::once(syn::PathSegment {
+                        ident: syn_ident(&still_field_names_to_rust_record_struct_name(
+                            fields_sorted.iter().map(|field| field.name.as_ref()),
+                        )),
+                        arguments: syn::PathArguments::AngleBracketed(
+                            syn::AngleBracketedGenericArguments {
+                                colon2_token: None,
+                                lt_token: syn::token::Lt(syn_span()),
+                                gt_token: syn::token::Gt(syn_span()),
+                                args: fields_sorted
+                                    .into_iter()
+                                    .map(|field| {
+                                        syn::GenericArgument::Type(still_type_to_rust(
+                                            type_aliases,
+                                            choice_types,
+                                            lifetime,
+                                            &field.value,
+                                        ))
+                                    })
+                                    .collect(),
+                            },
+                        ),
+                    })
+                    .collect(),
+                },
+            })
+        }
+    }
+}
+fn still_type_variables_into<'a>(
+    variables: &mut std::collections::HashSet<&'a str>,
+    type_: &'a StillType,
+) {
+    match type_ {
+        StillType::Variable(variable) => {
+            variables.insert(variable);
+        }
+        StillType::Function { inputs, output } => {
+            for input_type in inputs {
+                still_type_variables_into(variables, input_type);
+            }
+            // TODO skip as it should not contain variables not used in the inputs
+            still_type_variables_into(variables, output);
+        }
+        StillType::Construct { name: _, arguments } => {
+            for argument_type in arguments {
+                still_type_variables_into(variables, argument_type);
+            }
+        }
+        StillType::Record(fields) => {
+            for field in fields {
+                still_type_variables_into(variables, &field.value);
+            }
+        }
+    }
+}
+/// TODO remove
 fn still_syntax_type_to_rust<'a>(
     errors: &mut Vec<StillErrorNode>,
     records_used: &mut std::collections::HashSet<Vec<&'a str>>,
@@ -12216,69 +12509,10 @@ fn still_syntax_type_to_rust<'a>(
         }
     }
 }
-fn still_syntax_type_variables_into<'a>(
-    variables: &mut std::collections::HashSet<&'a str>,
-    type_node: StillSyntaxNode<&'a StillSyntaxType>,
-) {
-    match type_node.value {
-        StillSyntaxType::Variable(variable) => {
-            variables.insert(variable);
-        }
-        StillSyntaxType::Parenthesized(maybe_in_parens) => {
-            if let Some(in_parens_node) = maybe_in_parens {
-                still_syntax_type_variables_into(
-                    variables,
-                    still_syntax_node_unbox(in_parens_node),
-                );
-            }
-        }
-        StillSyntaxType::WithComment {
-            comment: _,
-            type_: maybe_after_comment,
-        } => {
-            if let Some(after_comment_node) = maybe_after_comment {
-                still_syntax_type_variables_into(
-                    variables,
-                    still_syntax_node_unbox(after_comment_node),
-                );
-            }
-        }
-        StillSyntaxType::Function {
-            inputs,
-            arrow_key_symbol_range: _,
-            output: maybe_output,
-        } => {
-            for input_node in inputs {
-                still_syntax_type_variables_into(variables, still_syntax_node_as_ref(input_node));
-            }
-            // TODO skip as it should not contain variables not used in the inputs
-            if let Some(output_node) = maybe_output {
-                still_syntax_type_variables_into(variables, still_syntax_node_unbox(output_node));
-            }
-        }
-        StillSyntaxType::Construct { name: _, arguments } => {
-            for argument_node in arguments {
-                still_syntax_type_variables_into(
-                    variables,
-                    still_syntax_node_as_ref(argument_node),
-                );
-            }
-        }
-        StillSyntaxType::Record(fields) => {
-            for field in fields {
-                if let Some(field_value_node) = &field.value {
-                    still_syntax_type_variables_into(
-                        variables,
-                        still_syntax_node_as_ref(field_value_node),
-                    );
-                }
-            }
-        }
-    }
-}
 struct CompiledStillExpression {
     rust: syn::Expr,
     uses_allocator: bool,
+    type_: Option<StillType>,
 }
 fn maybe_still_syntax_expression_to_rust<'a>(
     errors: &mut Vec<StillErrorNode>,
@@ -12290,9 +12524,8 @@ fn maybe_still_syntax_expression_to_rust<'a>(
         StillName,
         CompiledVariableDeclarationInfo,
     >,
-    local_bindings: std::rc::Rc<
-        std::collections::HashMap<&'a str, Option<StillSyntaxNode<StillSyntaxType>>>,
-    >,
+    local_bindings: std::rc::Rc<std::collections::HashMap<&'a str, Option<StillType>>>,
+    skip_allocating_closure: bool,
     maybe_expression: Option<StillSyntaxNode<&'a StillSyntaxExpression>>,
 ) -> CompiledStillExpression {
     match maybe_expression {
@@ -12301,6 +12534,7 @@ fn maybe_still_syntax_expression_to_rust<'a>(
             CompiledStillExpression {
                 rust: syn_expr_todo(),
                 uses_allocator: false,
+                type_: None,
             }
         }
         Some(expression_node) => still_syntax_expression_to_rust(
@@ -12310,6 +12544,7 @@ fn maybe_still_syntax_expression_to_rust<'a>(
             choice_types,
             project_variable_declarations,
             local_bindings,
+            skip_allocating_closure,
             expression_node,
         ),
     }
@@ -12323,9 +12558,8 @@ fn still_syntax_expression_to_rust<'a>(
         StillName,
         CompiledVariableDeclarationInfo,
     >,
-    local_bindings: std::rc::Rc<
-        std::collections::HashMap<&'a str, Option<StillSyntaxNode<StillSyntaxType>>>,
-    >,
+    local_bindings: std::rc::Rc<std::collections::HashMap<&'a str, Option<StillType>>>,
+    should_skip_allocating_closure: bool,
     expression_node: StillSyntaxNode<&'a StillSyntaxExpression>,
 ) -> CompiledStillExpression {
     match expression_node.value {
@@ -12338,59 +12572,54 @@ fn still_syntax_expression_to_rust<'a>(
                 attrs: vec![],
                 lit: syn::Lit::Str(syn::LitStr::new(content, syn_span())),
             }),
+            type_: Some(still_type_str),
         },
-        StillSyntaxExpression::Char(maybe_char) => match *maybe_char {
-            None => {
-                errors.push(StillErrorNode {
-                    range: expression_node.range,
-                    message: Box::from("missing character between 'here'"),
-                });
-                CompiledStillExpression {
-                    uses_allocator: false,
-                    rust: syn_expr_todo(),
+        StillSyntaxExpression::Char(maybe_char) => CompiledStillExpression {
+            uses_allocator: false,
+            type_: Some(still_type_chr),
+            rust: match *maybe_char {
+                None => {
+                    errors.push(StillErrorNode {
+                        range: expression_node.range,
+                        message: Box::from("missing character between 'here'"),
+                    });
+                    syn_expr_todo()
                 }
-            }
-            Some(char) => CompiledStillExpression {
-                uses_allocator: false,
-                rust: syn::Expr::Lit(syn::ExprLit {
+                Some(char) => syn::Expr::Lit(syn::ExprLit {
                     attrs: vec![],
                     lit: syn::Lit::Char(syn::LitChar::new(char, syn_span())),
                 }),
             },
         },
-        StillSyntaxExpression::Dec(dec_or_err) => match dec_or_err.parse::<f64>() {
-            Err(parse_error) => {
-                errors.push(StillErrorNode {
-                    range: expression_node.range,
-                    message: Box::from(format!("dec literal cannot be parsed: {parse_error}")),
-                });
-                CompiledStillExpression {
-                    uses_allocator: false,
-                    rust: syn_expr_todo(),
+        StillSyntaxExpression::Dec(dec_or_err) => CompiledStillExpression {
+            uses_allocator: false,
+            type_: Some(still_type_dec),
+            rust: match dec_or_err.parse::<f64>() {
+                Err(parse_error) => {
+                    errors.push(StillErrorNode {
+                        range: expression_node.range,
+                        message: Box::from(format!("dec literal cannot be parsed: {parse_error}")),
+                    });
+                    syn_expr_todo()
                 }
-            }
-            Ok(dec) => CompiledStillExpression {
-                uses_allocator: false,
-                rust: syn::Expr::Lit(syn::ExprLit {
+                Ok(dec) => syn::Expr::Lit(syn::ExprLit {
                     attrs: vec![],
                     lit: syn::Lit::Float(syn::LitFloat::new(&dec.to_string(), syn_span())),
                 }),
             },
         },
-        StillSyntaxExpression::Int(representation) => match representation.parse::<isize>() {
-            Err(parse_error) => {
-                errors.push(StillErrorNode {
-                    range: expression_node.range,
-                    message: Box::from(format!("int literal cannot be parsed: {parse_error}")),
-                });
-                CompiledStillExpression {
-                    uses_allocator: false,
-                    rust: syn_expr_todo(),
+        StillSyntaxExpression::Int(representation) => CompiledStillExpression {
+            uses_allocator: false,
+            type_: Some(still_type_int),
+            rust: match representation.parse::<isize>() {
+                Err(parse_error) => {
+                    errors.push(StillErrorNode {
+                        range: expression_node.range,
+                        message: Box::from(format!("int literal cannot be parsed: {parse_error}")),
+                    });
+                    syn_expr_todo()
                 }
-            }
-            Ok(int) => CompiledStillExpression {
-                uses_allocator: false,
-                rust: syn::Expr::Lit(syn::ExprLit {
+                Ok(int) => syn::Expr::Lit(syn::ExprLit {
                     attrs: vec![],
                     lit: syn::Lit::Int(syn::LitInt::new(&int.to_string(), syn_span())),
                 }),
@@ -12401,34 +12630,34 @@ fn still_syntax_expression_to_rust<'a>(
             arrow_key_symbol_range: _,
             result: maybe_result,
         } => {
-            let mut local_bindings: std::collections::HashMap<
-                &str,
-                Option<StillSyntaxNode<StillSyntaxType>>,
-            > = std::rc::Rc::unwrap_or_clone(local_bindings);
-            for parameter_node in parameters {
-                still_syntax_pattern_binding_types_into(
-                    &mut local_bindings,
-                    still_syntax_node_as_ref(parameter_node),
-                );
-            }
+            let mut local_bindings: std::collections::HashMap<&str, Option<StillType>> =
+                std::rc::Rc::unwrap_or_clone(local_bindings);
             let mut bindings_to_clone: Vec<BindingToClone> = Vec::new();
-            let rust_patterns = parameters
+            let (rust_patterns, input_type_maybes): (
+                syn::punctuated::Punctuated<syn::Pat, syn::token::Comma>,
+                Vec<Option<StillType>>,
+            ) = parameters
                 .iter()
-                .map(|pattern_node| {
-                    still_syntax_pattern_to_rust(
+                .map(|parameter_node| {
+                    let compiled_parameter: CompiledStillPattern = still_syntax_pattern_to_rust(
                         errors,
                         records_used,
+                        &mut local_bindings,
                         &mut bindings_to_clone,
                         type_aliases,
                         choice_types,
                         false,
-                        still_syntax_node_as_ref(pattern_node),
+                        still_syntax_node_as_ref(parameter_node),
+                    );
+                    (
+                        compiled_parameter.rust.unwrap_or_else(syn_pat_wild),
+                        compiled_parameter.type_,
                     )
                 })
                 .collect();
             let mut rust_stmts: Vec<syn::Stmt> = Vec::new();
             bindings_to_clone_to_rust_into(&mut rust_stmts, bindings_to_clone);
-            let rust_result: syn::Expr = maybe_still_syntax_expression_to_rust(
+            let compiled_result: CompiledStillExpression = maybe_still_syntax_expression_to_rust(
                 errors,
                 || StillErrorNode {
                     range: expression_node.range,
@@ -12439,36 +12668,49 @@ fn still_syntax_expression_to_rust<'a>(
                 choice_types,
                 project_variable_declarations,
                 std::rc::Rc::new(local_bindings),
+                false,
                 maybe_result.as_ref().map(still_syntax_node_unbox),
-            )
-            .rust;
+            );
+            let rust_closure: syn::Expr = syn::Expr::Closure(syn::ExprClosure {
+                attrs: vec![],
+                lifetimes: None,
+                constness: None,
+                movability: None,
+                asyncness: None,
+                capture: Some(syn::token::Move(syn_span())),
+                or1_token: syn::token::Or(syn_span()),
+                inputs: rust_patterns,
+                or2_token: syn::token::Or(syn_span()),
+                output: syn::ReturnType::Default,
+                body: Box::new(if rust_stmts.is_empty() {
+                    compiled_result.rust
+                } else {
+                    rust_stmts.push(syn::Stmt::Expr(compiled_result.rust, None));
+                    syn::Expr::Block(syn::ExprBlock {
+                        attrs: vec![],
+                        label: None,
+                        block: syn::Block {
+                            brace_token: syn::token::Brace(syn_span()),
+                            stmts: rust_stmts,
+                        },
+                    })
+                }),
+            });
             CompiledStillExpression {
                 uses_allocator: true,
-                rust: syn_expr_call_alloc_method(syn::Expr::Closure(syn::ExprClosure {
-                    attrs: vec![],
-                    lifetimes: None,
-                    constness: None,
-                    movability: None,
-                    asyncness: None,
-                    capture: Some(syn::token::Move(syn_span())),
-                    or1_token: syn::token::Or(syn_span()),
-                    inputs: rust_patterns,
-                    or2_token: syn::token::Or(syn_span()),
-                    output: syn::ReturnType::Default,
-                    body: Box::new(if rust_stmts.is_empty() {
-                        rust_result
-                    } else {
-                        rust_stmts.push(syn::Stmt::Expr(rust_result, None));
-                        syn::Expr::Block(syn::ExprBlock {
-                            attrs: vec![],
-                            label: None,
-                            block: syn::Block {
-                                brace_token: syn::token::Brace(syn_span()),
-                                stmts: rust_stmts,
-                            },
-                        })
+                type_: input_type_maybes
+                    .into_iter()
+                    .collect::<Option<Vec<_>>>()
+                    .zip(compiled_result.type_)
+                    .map(|(input_types, result_type)| StillType::Function {
+                        inputs: input_types,
+                        output: Box::new(result_type),
                     }),
-                })),
+                rust: if should_skip_allocating_closure {
+                    rust_closure
+                } else {
+                    syn_expr_call_alloc_method(rust_closure)
+                },
             }
         }
         StillSyntaxExpression::Let {
@@ -12488,49 +12730,10 @@ fn still_syntax_expression_to_rust<'a>(
                 choice_types,
                 project_variable_declarations,
                 local_bindings,
+                should_skip_allocating_closure,
                 maybe_result.as_ref().map(still_syntax_node_unbox),
             ),
             Some(declaration_node) => {
-                let local_bindings_without_let: std::rc::Rc<
-                    std::collections::HashMap<&str, Option<StillSyntaxNode<StillSyntaxType>>>,
-                > = local_bindings.clone();
-                let mut local_bindings_with_let: std::collections::HashMap<
-                    &str,
-                    Option<StillSyntaxNode<StillSyntaxType>>,
-                > = (*local_bindings).clone();
-                match &declaration_node.value {
-                    StillSyntaxLetDeclaration::VariableDeclaration {
-                        name: name_node,
-                        result: declaration_maybe_result,
-                    } => {
-                        local_bindings_with_let.insert(
-                            &name_node.value,
-                            declaration_maybe_result
-                                .as_ref()
-                                .map(|declaration_result_node| {
-                                    still_syntax_expression_type_with(
-                                        type_aliases,
-                                        project_variable_declarations,
-                                        local_bindings_without_let,
-                                        still_syntax_node_unbox(declaration_result_node),
-                                    )
-                                }),
-                        );
-                    }
-                    StillSyntaxLetDeclaration::Destructuring {
-                        pattern: pattern_node,
-                        equals_key_symbol_range: _,
-                        expression: _,
-                    } => {
-                        still_syntax_pattern_binding_types_into(
-                            &mut local_bindings_with_let,
-                            still_syntax_node_as_ref(pattern_node),
-                        );
-                    }
-                }
-                let local_bindings_with_let: std::rc::Rc<
-                    std::collections::HashMap<&str, Option<StillSyntaxNode<StillSyntaxType>>>,
-                > = std::rc::Rc::new(local_bindings_with_let);
                 let mut rust_stmts: Vec<syn::Stmt> = Vec::new();
                 let let_declaration_compiled: CompiledStillLetDeclarationInfo =
                     still_syntax_let_declaration_to_rust_into(
@@ -12540,7 +12743,7 @@ fn still_syntax_expression_to_rust<'a>(
                         type_aliases,
                         choice_types,
                         project_variable_declarations,
-                        local_bindings_with_let.clone(),
+                        local_bindings,
                         still_syntax_node_as_ref(declaration_node),
                     );
                 let maybe_result_compiled: CompiledStillExpression =
@@ -12556,12 +12759,14 @@ fn still_syntax_expression_to_rust<'a>(
                         type_aliases,
                         choice_types,
                         project_variable_declarations,
-                        local_bindings_with_let,
+                        std::rc::Rc::new(let_declaration_compiled.local_bindings_including_let),
+                        should_skip_allocating_closure,
                         maybe_result.as_ref().map(still_syntax_node_unbox),
                     );
                 CompiledStillExpression {
                     uses_allocator: let_declaration_compiled.uses_allocator
                         || maybe_result_compiled.uses_allocator,
+                    type_: maybe_result_compiled.type_,
                     rust: match maybe_result_compiled.rust {
                         syn::Expr::Block(rust_let_result_block) => {
                             rust_stmts.extend(rust_let_result_block.block.stmts);
@@ -12590,8 +12795,17 @@ fn still_syntax_expression_to_rust<'a>(
             }
         },
         StillSyntaxExpression::Vec(elements) => {
+            if elements.is_empty() {
+                errors.push(StillErrorNode {
+                    range: expression_node.range,
+                    message: Box::from("an empty vec needs a type :here:[]"),
+                });
+            }
             let mut uses_allocator: bool = false;
-            let rust_elements: syn::punctuated::Punctuated<syn::Expr, syn::token::Comma> = elements
+            let (rust_elements, element_type_maybes): (
+                syn::punctuated::Punctuated<syn::Expr, syn::token::Comma>,
+                Vec<Option<StillType>>,
+            ) = elements
                 .iter()
                 .map(|element_node| {
                     let compiled: CompiledStillExpression = still_syntax_expression_to_rust(
@@ -12601,14 +12815,23 @@ fn still_syntax_expression_to_rust<'a>(
                         choice_types,
                         project_variable_declarations,
                         local_bindings.clone(),
+                        false,
                         still_syntax_node_as_ref(element_node),
                     );
                     uses_allocator = uses_allocator || compiled.uses_allocator;
-                    compiled.rust
+                    (compiled.rust, compiled.type_)
                 })
-                .collect();
+                .unzip();
             CompiledStillExpression {
                 uses_allocator: uses_allocator,
+                type_: element_type_maybes
+                    .into_iter()
+                    .collect::<Option<Vec<StillType>>>()
+                    .and_then(|element_types| {
+                        // TODO verify all elements are equal
+                        let element_type: StillType = element_types.into_iter().next()?;
+                        Some(still_type_vec(element_type))
+                    }),
                 rust: syn::Expr::Call(syn::ExprCall {
                     attrs: vec![],
                     func: Box::new(syn_expr_reference(["vec_literal"])),
@@ -12634,6 +12857,7 @@ fn still_syntax_expression_to_rust<'a>(
                 choice_types,
                 project_variable_declarations,
                 local_bindings.clone(),
+                should_skip_allocating_closure,
                 maybe_in_parens.as_ref().map(still_syntax_node_unbox),
             )
         }
@@ -12650,6 +12874,7 @@ fn still_syntax_expression_to_rust<'a>(
                 });
                 CompiledStillExpression {
                     uses_allocator: false,
+                    type_: None,
                     rust: syn::Expr::Macro(syn::ExprMacro {
                         attrs: vec![],
                         mac: syn::Macro {
@@ -12674,10 +12899,12 @@ fn still_syntax_expression_to_rust<'a>(
                         choice_types,
                         project_variable_declarations,
                         local_bindings.clone(),
+                        should_skip_allocating_closure,
                         still_syntax_node_unbox(after_comment_node),
                     );
                 CompiledStillExpression {
                     uses_allocator: compiled_after_comment.uses_allocator,
+                    type_: compiled_after_comment.type_,
                     rust: syn::Expr::Paren(syn::ExprParen {
                         attrs: vec![syn_attribute_doc(&comment_node.value)],
 
@@ -12690,714 +12917,71 @@ fn still_syntax_expression_to_rust<'a>(
         StillSyntaxExpression::Typed {
             type_: maybe_type,
             expression: maybe_in_typed,
-        } => match maybe_in_typed {
-            None => {
-                errors.push(StillErrorNode {
-                    range: expression_node.range,
-                    message: Box::from("missing expression after type :...: here"),
-                });
-                CompiledStillExpression {
-                    uses_allocator: false,
-                    rust: syn_expr_todo(),
-                }
-            }
-            Some(untyped_node) => match &untyped_node.value {
-                StillSyntaxExpressionUntyped::Variant {
-                    name: name_node,
-                    value: maybe_value,
-                } => {
-                    let Some((origin_choice_type_name, _)) = (match maybe_type {
-                        None => None,
-                        Some(type_node) => still_syntax_type_to_choice_type(
-                            type_aliases,
-                            still_syntax_node_as_ref(type_node),
-                        ),
-                    }) else {
-                        return CompiledStillExpression {
-                            uses_allocator: false,
-                            rust: syn_expr_todo(),
-                        };
-                    };
-                    let variant_value_needs_to_be_reference: bool = 'variant_value_is_reference: {
-                        let Some(origin_choice_type) =
-                            choice_types.get(origin_choice_type_name.as_ref())
-                        else {
-                            break 'variant_value_is_reference false;
-                        };
-                        let Some(variant_index_in_origin_choice_type) =
-                            std::iter::once(origin_choice_type.variant0_name.as_ref())
-                                .chain(
-                                    origin_choice_type
-                                        .variant1_up
-                                        .iter()
-                                        .map(|variant| variant.name.as_ref()),
-                                )
-                                .enumerate()
-                                .find(|(_, origin_choice_type_variant_maybe_name)| {
-                                    origin_choice_type_variant_maybe_name.is_some_and(
-                                        |origin_choice_type_variant_name_node| {
-                                            origin_choice_type_variant_name_node.value
-                                                == name_node.value
-                                        },
-                                    )
-                                })
-                                .map(|(i, _)| i)
-                        else {
-                            break 'variant_value_is_reference false;
-                        };
-                        origin_choice_type
-                            .recursive_variant_value_variant_indexes
-                            .contains(&variant_index_in_origin_choice_type)
-                    };
-                    let rust_variant_reference: syn::Expr = syn_expr_reference([
-                        &still_name_to_uppercase_rust(&origin_choice_type_name),
-                        &still_name_to_uppercase_rust(&name_node.value),
-                    ]);
-                    match maybe_value {
-                        None => CompiledStillExpression {
-                            uses_allocator: false,
-                            rust: rust_variant_reference,
-                        },
-                        Some(value_node) => {
-                            let value_compiled: CompiledStillExpression =
-                                still_syntax_expression_to_rust(
-                                    errors,
-                                    records_used,
-                                    type_aliases,
-                                    choice_types,
-                                    project_variable_declarations,
-                                    local_bindings,
-                                    still_syntax_node_unbox(value_node),
-                                );
-                            CompiledStillExpression {
-                                uses_allocator: variant_value_needs_to_be_reference
-                                    || value_compiled.uses_allocator,
-                                rust: syn::Expr::Call(syn::ExprCall {
-                                    attrs: vec![],
-                                    func: Box::new(rust_variant_reference),
-                                    paren_token: syn::token::Paren(syn_span()),
-                                    args: std::iter::once({
-                                        if variant_value_needs_to_be_reference {
-                                            syn_expr_call_alloc_method(value_compiled.rust)
-                                        } else {
-                                            value_compiled.rust
-                                        }
-                                    })
-                                    .collect(),
-                                }),
-                            }
-                        }
-                    }
-                }
-                StillSyntaxExpressionUntyped::Other(other_expression) => {
-                    still_syntax_expression_to_rust(
-                        errors,
-                        records_used,
-                        type_aliases,
-                        choice_types,
-                        project_variable_declarations,
-                        local_bindings,
-                        StillSyntaxNode {
-                            range: untyped_node.range,
-                            value: other_expression,
-                        },
-                    )
-                }
-            },
-        },
-        StillSyntaxExpression::VariableOrCall {
-            variable: variable_node,
-            arguments,
         } => {
-            let rust_variable_name: String = still_name_to_lowercase_rust(&variable_node.value);
-            let mut uses_allocator: bool = false;
-            let rust_arguments = arguments.iter().map(|argument_node| {
-                let compiled_argument: CompiledStillExpression = still_syntax_expression_to_rust(
+            let maybe_expected_type: Option<StillType> = match maybe_type {
+                Some(type_node) => still_syntax_type_to_type(
                     errors,
-                    records_used,
                     type_aliases,
                     choice_types,
-                    project_variable_declarations,
-                    local_bindings.clone(),
-                    still_syntax_node_as_ref(argument_node),
-                );
-                uses_allocator = uses_allocator || compiled_argument.uses_allocator;
-                compiled_argument.rust
-            });
-            let rust_reference: syn::Expr = syn_expr_reference([&rust_variable_name]);
-            match project_variable_declarations.get(variable_node.value.as_str()) {
-                Some(compiled_origin_variable_declaration) => {
-                    // TODO currently all rust compiled variable declarations are fn([&Alloc])s,
-                    // once some can be static, return variable without call
-                    CompiledStillExpression {
-                        rust: syn::Expr::Call(syn::ExprCall {
-                            attrs: vec![],
-                            func: Box::new(rust_reference),
-                            paren_token: syn::token::Paren(syn_span()),
-                            args: if compiled_origin_variable_declaration.has_allocator_parameter {
-                                Some(syn_expr_reference([default_allocator_parameter_name]))
-                            } else {
-                                None
-                            }
-                            .into_iter()
-                            .chain(rust_arguments)
-                            .collect(),
-                        }),
-                        uses_allocator: uses_allocator
-                            || compiled_origin_variable_declaration.has_allocator_parameter,
-                    }
-                }
+                    still_syntax_node_as_ref(type_node),
+                ),
                 None => {
-                    let variable_is_copy: bool = {
-                        // TODO check type of local binding
-                        match local_bindings.get(variable_node.value.as_str()) {
-                            None => {
-                                // TODO error?
-                                false
-                            }
-                            Some(None) => false,
-                            Some(Some(local_binding_type_node)) => still_syntax_type_is_copy(
-                                false,
-                                type_aliases,
-                                choice_types,
-                                still_syntax_node_as_ref(local_binding_type_node),
-                            ),
-                        }
-                    };
-                    let rust_variable: syn::Expr = if variable_is_copy {
-                        rust_reference
-                    } else {
-                        syn_expr_call_clone_method(rust_reference)
-                    };
-                    CompiledStillExpression {
-                        rust: if arguments.is_empty() {
-                            rust_variable
-                        } else {
-                            syn::Expr::Call(syn::ExprCall {
-                                attrs: vec![],
-                                func: Box::new(rust_variable),
-                                paren_token: syn::token::Paren(syn_span()),
-                                args: rust_arguments.collect(),
-                            })
-                        },
-                        uses_allocator: uses_allocator,
-                    }
-                }
-            }
-        }
-        StillSyntaxExpression::CaseOf {
-            matched: maybe_matched,
-            of_keyword_range: _,
-            cases,
-        } => match maybe_matched {
-            None => {
-                errors.push(StillErrorNode {
-                    range: expression_node.range,
-                    message: Box::from("missing matched expression in case here of ..."),
-                });
-                CompiledStillExpression {
-                    uses_allocator: false,
-                    rust: syn_expr_todo(),
-                }
-            }
-            Some(matched_node) => {
-                let mut arms_use_allocator: bool = false;
-                let rust_arms: Vec<syn::Arm> = cases
-                    .iter()
-                    .map(|case| {
-                        let mut local_bindings: std::collections::HashMap<
-                            &str,
-                            Option<StillSyntaxNode<StillSyntaxType>>,
-                        > = (*local_bindings).clone();
-                        still_syntax_pattern_binding_types_into(
-                            &mut local_bindings,
-                            still_syntax_node_as_ref(&case.pattern),
-                        );
-                        let compiled_case_result: CompiledStillExpression =
-                            maybe_still_syntax_expression_to_rust(
-                                errors,
-                                || StillErrorNode {
-                                    range: case.pattern.range,
-                                    message: Box::from("missing case result after pattern -> here"),
-                                },
-                                records_used,
-                                type_aliases,
-                                choice_types,
-                                project_variable_declarations,
-                                std::rc::Rc::new(local_bindings),
-                                case.result.as_ref().map(still_syntax_node_as_ref),
-                            );
-                        arms_use_allocator =
-                            arms_use_allocator || compiled_case_result.uses_allocator;
-                        let mut bindings_to_clone: Vec<BindingToClone> = Vec::new();
-                        let rust_pattern: syn::Pat = still_syntax_pattern_to_rust(
-                            errors,
-                            records_used,
-                            &mut bindings_to_clone,
-                            type_aliases,
-                            choice_types,
-                            false,
-                            still_syntax_node_as_ref(&case.pattern),
-                        );
-                        let mut rust_stmts: Vec<syn::Stmt> = Vec::with_capacity(1);
-                        bindings_to_clone_to_rust_into(&mut rust_stmts, bindings_to_clone);
-                        rust_stmts.push(syn::Stmt::Expr(compiled_case_result.rust, None));
-                        syn::Arm {
-                            attrs: vec![],
-                            pat: rust_pattern,
-                            guard: None,
-                            fat_arrow_token: syn::token::FatArrow(syn_span()),
-                            body: Box::new(syn::Expr::Block(syn::ExprBlock {
-                                attrs: vec![],
-                                label: None,
-                                block: syn::Block {
-                                    brace_token: syn::token::Brace(syn_span()),
-                                    stmts: rust_stmts,
-                                },
-                            })),
-                            comma: None,
-                        }
-                    })
-                    // we append a _ => todo!() to still make inexhaustive matching compile
-                    // and be able to be run, rust will emit a warning
-                    // TODO remove when can be determined to be exhaustive,
-                    // otherwise also add error
-                    .chain(std::iter::once(syn::Arm {
-                        attrs: vec![],
-                        pat: syn::Pat::Wild(syn::PatWild {
-                            attrs: vec![],
-                            underscore_token: syn::token::Underscore(syn_span()),
-                        }),
-                        fat_arrow_token: syn::token::FatArrow(syn_span()),
-                        guard: None,
-                        body: Box::new(syn_expr_todo()),
-                        comma: None,
-                    }))
-                    .collect::<Vec<_>>();
-                let compiled_matched: CompiledStillExpression = still_syntax_expression_to_rust(
-                    errors,
-                    records_used,
-                    type_aliases,
-                    choice_types,
-                    project_variable_declarations,
-                    local_bindings,
-                    still_syntax_node_unbox(matched_node),
-                );
-                CompiledStillExpression {
-                    rust: syn::Expr::Match(syn::ExprMatch {
-                        attrs: vec![],
-                        match_token: syn::token::Match(syn_span()),
-                        expr: Box::new(compiled_matched.rust),
-                        brace_token: syn::token::Brace(syn_span()),
-                        arms: rust_arms,
-                    }),
-                    uses_allocator: compiled_matched.uses_allocator || arms_use_allocator,
-                }
-            }
-        },
-        StillSyntaxExpression::Record(fields) => {
-            records_used.insert(sorted_field_names(
-                fields.iter().map(|field| field.name.value.as_str()),
-            ));
-            let mut fields_use_allocator: bool = false;
-            let rust_fields: syn::punctuated::Punctuated<syn::FieldValue, syn::token::Comma> =
-                fields
-                    .iter()
-                    .map(|field| {
-                        let compiled_field_value: CompiledStillExpression =
-                            maybe_still_syntax_expression_to_rust(
-                                errors,
-                                || StillErrorNode {
-                                    range: field.name.range,
-                                    message: Box::from(
-                                        "missing field value expression after this field name",
-                                    ),
-                                },
-                                records_used,
-                                type_aliases,
-                                choice_types,
-                                project_variable_declarations,
-                                local_bindings.clone(),
-                                field.value.as_ref().map(still_syntax_node_as_ref),
-                            );
-                        fields_use_allocator =
-                            fields_use_allocator || compiled_field_value.uses_allocator;
-                        syn::FieldValue {
-                            attrs: vec![],
-                            member: syn::Member::Named(syn_ident(&still_name_to_lowercase_rust(
-                                &field.name.value,
-                            ))),
-                            colon_token: Some(syn::token::Colon(syn_span())),
-                            expr: compiled_field_value.rust,
-                        }
-                    })
-                    .collect();
-            CompiledStillExpression {
-                rust: syn::Expr::Struct(syn::ExprStruct {
-                    attrs: vec![],
-                    qself: None,
-                    path: syn_path_reference([&still_field_names_to_rust_record_struct_name(
-                        fields.iter().map(|field| field.name.value.as_ref()),
-                    )]),
-                    brace_token: syn::token::Brace(syn_span()),
-                    fields: rust_fields,
-                    dot2_token: None,
-                    rest: None,
-                }),
-                uses_allocator: fields_use_allocator,
-            }
-        }
-        StillSyntaxExpression::RecordAccess {
-            record: record_node,
-            field: maybe_field_name,
-        } => {
-            let compiled_record: CompiledStillExpression = still_syntax_expression_to_rust(
-                errors,
-                records_used,
-                type_aliases,
-                choice_types,
-                project_variable_declarations,
-                local_bindings,
-                still_syntax_node_unbox(record_node),
-            );
-            match maybe_field_name {
-                None => compiled_record,
-                Some(field_name_node) => CompiledStillExpression {
-                    uses_allocator: compiled_record.uses_allocator,
-                    rust: syn::Expr::Field(syn::ExprField {
-                        attrs: vec![],
-                        base: Box::new(compiled_record.rust),
-                        dot_token: syn::token::Dot(syn_span()),
-                        member: syn::Member::Named(syn_ident(&still_name_to_lowercase_rust(
-                            &field_name_node.value,
-                        ))),
-                    }),
-                },
-            }
-        }
-        StillSyntaxExpression::RecordUpdate {
-            record: maybe_record,
-            spread_key_symbol_range: _,
-            fields,
-        } => match maybe_record {
-            None => {
-                errors.push(StillErrorNode {
-                    range: expression_node.range,
-                    message: Box::from("missing record to update in { ..here, ... ... }"),
-                });
-                CompiledStillExpression {
-                    uses_allocator: false,
-                    rust: syn_expr_todo(),
-                }
-            }
-            Some(record_node) => {
-                let mut fields_use_allocator: bool = false;
-                let rust_fields = fields
-                    .iter()
-                    .map(|field| {
-                        let compiled_field_value: CompiledStillExpression =
-                            maybe_still_syntax_expression_to_rust(
-                                errors,
-                                || StillErrorNode {
-                                    range: field.name.range,
-                                    message: Box::from("missing field value after this field name"),
-                                },
-                                records_used,
-                                type_aliases,
-                                choice_types,
-                                project_variable_declarations,
-                                local_bindings.clone(),
-                                field.value.as_ref().map(still_syntax_node_as_ref),
-                            );
-                        fields_use_allocator =
-                            fields_use_allocator || compiled_field_value.uses_allocator;
-                        syn::FieldValue {
-                            attrs: vec![],
-                            member: syn::Member::Named(syn_ident(&still_name_to_lowercase_rust(
-                                &field.name.value,
-                            ))),
-                            colon_token: Some(syn::token::Colon(syn_span())),
-                            expr: compiled_field_value.rust,
-                        }
-                    })
-                    .collect();
-                let compiled_record: CompiledStillExpression = still_syntax_expression_to_rust(
-                    errors,
-                    records_used,
-                    type_aliases,
-                    choice_types,
-                    project_variable_declarations,
-                    local_bindings,
-                    still_syntax_node_unbox(record_node),
-                );
-                CompiledStillExpression {
-                    rust: syn::Expr::Struct(syn::ExprStruct {
-                        attrs: vec![],
-                        qself: None,
-                        path: syn_path_reference([&still_field_names_to_rust_record_struct_name(
-                            fields.iter().map(|field| field.name.value.as_ref()),
-                        )]),
-                        brace_token: syn::token::Brace(syn_span()),
-                        fields: rust_fields,
-                        dot2_token: Some(syn::token::DotDot(syn_span())),
-                        rest: Some(Box::new(compiled_record.rust)),
-                    }),
-                    uses_allocator: compiled_record.uses_allocator || fields_use_allocator,
-                }
-            }
-        },
-    }
-}
-struct CompiledStillLetDeclarationInfo {
-    uses_allocator: bool,
-}
-fn still_syntax_let_declaration_to_rust_into<'a>(
-    rust_stmts: &mut Vec<syn::Stmt>,
-    errors: &mut Vec<StillErrorNode>,
-    records_used: &mut std::collections::HashSet<Vec<&'a str>>,
-    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
-    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
-    project_variable_declarations: &std::collections::HashMap<
-        StillName,
-        CompiledVariableDeclarationInfo,
-    >,
-    local_bindings: std::rc::Rc<
-        std::collections::HashMap<&'a str, Option<StillSyntaxNode<StillSyntaxType>>>,
-    >,
-    declaration_node: StillSyntaxNode<&'a StillSyntaxLetDeclaration>,
-) -> CompiledStillLetDeclarationInfo {
-    match &declaration_node.value {
-        StillSyntaxLetDeclaration::Destructuring {
-            pattern: pattern_node,
-            equals_key_symbol_range: _,
-            expression: maybe_destructured_expression,
-        } => {
-            let compiled_destructured: CompiledStillExpression =
-                maybe_still_syntax_expression_to_rust(
-                    errors,
-                    || StillErrorNode {
-                        range: declaration_node.range,
-                        message: Box::from("missing let destructuring result in let ... = here"),
-                    },
-                    records_used,
-                    type_aliases,
-                    choice_types,
-                    project_variable_declarations,
-                    local_bindings,
-                    maybe_destructured_expression
-                        .as_ref()
-                        .map(still_syntax_node_unbox),
-                );
-            let mut bindings_to_clone: Vec<BindingToClone> = Vec::new();
-            let rust_pattern: syn::Pat = still_syntax_pattern_to_rust(
-                errors,
-                records_used,
-                &mut bindings_to_clone,
-                type_aliases,
-                choice_types,
-                false,
-                still_syntax_node_as_ref(pattern_node),
-            );
-            bindings_to_clone_to_rust_into(rust_stmts, bindings_to_clone);
-            rust_stmts.push(syn::Stmt::Local(syn::Local {
-                attrs: vec![],
-                let_token: syn::token::Let(syn_span()),
-                pat: rust_pattern,
-                init: Some(syn::LocalInit {
-                    eq_token: syn::token::Eq(syn_span()),
-                    expr: Box::new(compiled_destructured.rust),
-                    diverge: None,
-                }),
-                semi_token: syn::token::Semi(syn_span()),
-            }));
-            CompiledStillLetDeclarationInfo {
-                uses_allocator: compiled_destructured.uses_allocator,
-            }
-        }
-        StillSyntaxLetDeclaration::VariableDeclaration {
-            name: name_node,
-            result: maybe_result,
-        } => {
-            let compiled_result: CompiledStillExpression = maybe_still_syntax_expression_to_rust(
-                errors,
-                || StillErrorNode {
-                    range: declaration_node.range,
-                    message: Box::from(
-                        "missing assigned let variable declaration expression in let ..name.. here",
-                    ),
-                },
-                records_used,
-                type_aliases,
-                choice_types,
-                project_variable_declarations,
-                local_bindings,
-                maybe_result.as_ref().map(still_syntax_node_unbox),
-            );
-            rust_stmts.push(syn::Stmt::Local(syn::Local {
-                attrs: vec![],
-                let_token: syn::token::Let(syn_span()),
-                pat: syn_pat_variable(&name_node.value),
-                init: Some(syn::LocalInit {
-                    eq_token: syn::token::Eq(syn_span()),
-                    expr: Box::new(compiled_result.rust),
-                    diverge: None,
-                }),
-                semi_token: syn::token::Semi(syn_span()),
-            }));
-            CompiledStillLetDeclarationInfo {
-                uses_allocator: compiled_result.uses_allocator,
-            }
-        }
-    }
-}
-fn maybe_still_syntax_pattern_to_rust<'a>(
-    errors: &mut Vec<StillErrorNode>,
-    error_on_none: impl FnOnce() -> StillErrorNode,
-    records_used: &mut std::collections::HashSet<Vec<&'a str>>,
-    bindings_to_clone: &mut Vec<BindingToClone<'a>>,
-    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
-    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
-    is_reference: bool,
-    maybe_pattern_node: Option<StillSyntaxNode<&'a StillSyntaxPattern>>,
-) -> syn::Pat {
-    match maybe_pattern_node {
-        None => {
-            errors.push(error_on_none());
-            syn_pat_wild()
-        }
-        Some(pattern_node) => still_syntax_pattern_to_rust(
-            errors,
-            records_used,
-            bindings_to_clone,
-            type_aliases,
-            choice_types,
-            is_reference,
-            pattern_node,
-        ),
-    }
-}
-struct BindingToClone<'a> {
-    name: &'a str,
-    is_copy: bool,
-}
-fn still_syntax_pattern_to_rust<'a>(
-    errors: &mut Vec<StillErrorNode>,
-    records_used: &mut std::collections::HashSet<Vec<&'a str>>,
-    bindings_to_clone: &mut Vec<BindingToClone<'a>>,
-    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
-    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
-    is_reference: bool,
-    pattern_node: StillSyntaxNode<&'a StillSyntaxPattern>,
-) -> syn::Pat {
-    match &pattern_node.value {
-        StillSyntaxPattern::Char(maybe_char) => match *maybe_char {
-            None => {
-                errors.push(StillErrorNode {
-                    range: pattern_node.range,
-                    message: Box::from("missing character between 'here'"),
-                });
-                // return some random, unlikely character literal that is highly unlikely to exist.
-                syn::Pat::Lit(syn::ExprLit {
-                    attrs: vec![],
-                    lit: syn::Lit::Char(syn::LitChar::new(char::REPLACEMENT_CHARACTER, syn_span())),
-                })
-            }
-            Some(char_value) => syn::Pat::Lit(syn::ExprLit {
-                attrs: vec![],
-                lit: syn::Lit::Char(syn::LitChar::new(char_value, syn_span())),
-            }),
-        },
-        StillSyntaxPattern::Int(representation) => {
-            let repr: &str = match representation.parse::<isize>() {
-                Ok(int) => &int.to_string(),
-                Err(parse_error) => {
                     errors.push(StillErrorNode {
-                        range: pattern_node.range,
-                        message: format!(
-                            "invalid int format. Expected base 10 whole numbers like -123 or 0: {parse_error}"
-                        ).into_boxed_str(),
+                        range: expression_node.range,
+                        message: Box::from("missing type between colons :here:..expression.."),
                     });
-                    // a random number that never matches
-                    "493595834980"
+                    None
                 }
             };
-            syn::Pat::Lit(syn::ExprLit {
-                attrs: vec![],
-                lit: syn::Lit::Int(syn::LitInt::new(repr, syn_span())),
-            })
-        }
-        StillSyntaxPattern::String {
-            content,
-            quoting_style: _,
-        } => syn::Pat::Lit(syn::ExprLit {
-            attrs: vec![],
-            lit: syn::Lit::Str(syn::LitStr::new(content, syn_span())),
-        }),
-        StillSyntaxPattern::WithComment {
-            comment: _,
-            pattern: maybe_after_comment,
-        } => maybe_still_syntax_pattern_to_rust(
-            errors,
-            || StillErrorNode {
-                range: pattern_node.range,
-                message: Box::from("missing pattern after comment # ...\\n here"),
-            },
-            records_used,
-            bindings_to_clone,
-            type_aliases,
-            choice_types,
-            is_reference,
-            maybe_after_comment.as_ref().map(still_syntax_node_unbox),
-        ),
-        StillSyntaxPattern::Typed {
-            type_: maybe_type,
-            pattern: maybe_in_typed,
-        } => match maybe_in_typed {
-            None => {
-                errors.push(StillErrorNode {
-                    range: pattern_node.range,
-                    message: Box::from("missing pattern after type :...: here. To ignore he incoming value, use _, or give it a lowercase name or specify a variant"),
-                });
-                syn::Pat::Wild(syn::PatWild {
-                    attrs: vec![],
-                    underscore_token: syn::token::Underscore(syn_span()),
-                })
-            }
-            Some(untyped_pattern_node) => match &untyped_pattern_node.value {
-                StillSyntaxPatternUntyped::Variable(name) => {
-                    if is_reference {
-                        bindings_to_clone.push(BindingToClone {
-                            name: name,
-                            is_copy: maybe_type.as_ref().is_some_and(|type_node| {
-                                still_syntax_type_is_copy(
-                                    false,
-                                    type_aliases,
-                                    choice_types,
-                                    still_syntax_node_as_ref(type_node),
-                                )
-                            }),
-                        });
+            match maybe_in_typed {
+                None => {
+                    errors.push(StillErrorNode {
+                        range: expression_node.range,
+                        message: Box::from("missing expression after type :...: here"),
+                    });
+                    CompiledStillExpression {
+                        uses_allocator: false,
+                        type_: maybe_expected_type,
+                        rust: syn_expr_todo(),
                     }
-                    syn_pat_variable(name)
                 }
-                StillSyntaxPatternUntyped::Ignored => syn_pat_wild(),
-                StillSyntaxPatternUntyped::Variant {
-                    name: name_node,
-                    value: maybe_value,
-                } => {
-                    let Some((origin_choice_type_name, _)) = (match maybe_type {
-                        None => None,
-                        Some(type_node) => still_syntax_type_to_choice_type(
+                Some(untyped_node) => match &untyped_node.value {
+                    StillSyntaxExpressionUntyped::Variant {
+                        name: name_node,
+                        value: maybe_value,
+                    } => {
+                        let Some(type_) = maybe_expected_type else {
+                            return CompiledStillExpression {
+                                uses_allocator: false,
+                                rust: syn_expr_todo(),
+                                type_: None,
+                            };
+                        };
+                        let Some(type_resolved) = still_type_resolve_outer_type_aliases(
                             type_aliases,
-                            still_syntax_node_as_ref(type_node),
-                        ),
-                    }) else {
-                        return syn_pat_wild();
-                    };
-                    let variant_value_is_reference: bool = is_reference
-                        || ('variant_value_is_reference: {
+                            std::borrow::Cow::Owned(type_),
+                        ) else {
+                            return CompiledStillExpression {
+                                uses_allocator: false,
+                                rust: syn_expr_todo(),
+                                type_: None,
+                            };
+                        };
+                        let StillType::Construct {
+                            name: origin_choice_type_name,
+                            arguments: origin_choice_type_arguments,
+                        } = type_resolved.into_owned()
+                        else {
+                            errors.push(StillErrorNode { range: expression_node.range, message: Box::from("type in :here: is not a choice type which is necessary for a variant pattern") });
+                            return CompiledStillExpression {
+                                uses_allocator: false,
+                                rust: syn_expr_todo(),
+                                type_: None,
+                            };
+                        };
+                        let variant_value_needs_to_be_reference: bool = 'variant_value_is_reference: {
                             let Some(origin_choice_type) =
-                                choice_types.get(origin_choice_type_name.as_ref())
+                                choice_types.get(origin_choice_type_name.as_str())
                             else {
                                 break 'variant_value_is_reference false;
                             };
@@ -13425,69 +13009,1275 @@ fn still_syntax_pattern_to_rust<'a>(
                             origin_choice_type
                                 .recursive_variant_value_variant_indexes
                                 .contains(&variant_index_in_origin_choice_type)
-                        });
-                    syn::Pat::TupleStruct(syn::PatTupleStruct {
-                        attrs: vec![],
-                        qself: None,
-                        path: syn_path_reference([
+                        };
+                        let rust_variant_reference: syn::Expr = syn_expr_reference([
                             &still_name_to_uppercase_rust(&origin_choice_type_name),
                             &still_name_to_uppercase_rust(&name_node.value),
-                        ]),
-                        paren_token: syn::token::Paren(syn_span()),
-                        elems: maybe_value
-                            .iter()
-                            .map(|value_node| {
-                                still_syntax_pattern_to_rust(
+                        ]);
+                        match maybe_value {
+                            None => {
+                                // TODO check origin variant also has no value
+                                CompiledStillExpression {
+                                    uses_allocator: false,
+                                    type_: Some(StillType::Construct {
+                                        name: origin_choice_type_name,
+                                        arguments: origin_choice_type_arguments,
+                                    }),
+                                    rust: rust_variant_reference,
+                                }
+                            }
+                            Some(value_node) => {
+                                let value_compiled: CompiledStillExpression =
+                                    still_syntax_expression_to_rust(
+                                        errors,
+                                        records_used,
+                                        type_aliases,
+                                        choice_types,
+                                        project_variable_declarations,
+                                        local_bindings,
+                                        false,
+                                        still_syntax_node_unbox(value_node),
+                                    );
+                                // TODO verify equal: origin choice type variant value with the type arguments inlined & value pattern type
+                                CompiledStillExpression {
+                                    uses_allocator: variant_value_needs_to_be_reference
+                                        || value_compiled.uses_allocator,
+                                    type_: Some(StillType::Construct {
+                                        name: origin_choice_type_name,
+                                        arguments: origin_choice_type_arguments,
+                                    }),
+                                    rust: syn::Expr::Call(syn::ExprCall {
+                                        attrs: vec![],
+                                        func: Box::new(rust_variant_reference),
+                                        paren_token: syn::token::Paren(syn_span()),
+                                        args: std::iter::once({
+                                            if variant_value_needs_to_be_reference {
+                                                syn_expr_call_alloc_method(value_compiled.rust)
+                                            } else {
+                                                value_compiled.rust
+                                            }
+                                        })
+                                        .collect(),
+                                    }),
+                                }
+                            }
+                        }
+                    }
+                    StillSyntaxExpressionUntyped::Other(other_expression) => {
+                        if let StillSyntaxExpression::Vec(elements) = other_expression.as_ref()
+                            && elements.is_empty()
+                        {
+                            CompiledStillExpression {
+                                rust: syn::Expr::Call(syn::ExprCall {
+                                    attrs: vec![],
+                                    func: Box::new(syn_expr_reference(["vec_literal"])),
+                                    paren_token: syn::token::Paren(syn_span()),
+                                    args: std::iter::once(syn::Expr::Array(syn::ExprArray {
+                                        attrs: vec![],
+                                        bracket_token: syn::token::Bracket(syn_span()),
+                                        elems: syn::punctuated::Punctuated::new(),
+                                    }))
+                                    .collect(),
+                                }),
+                                uses_allocator: false,
+                                // TODO check expected_type resolves to some vec
+                                type_: maybe_expected_type,
+                            }
+                        } else {
+                            // TODO verify equal to maybe_expected_type
+                            still_syntax_expression_to_rust(
+                                errors,
+                                records_used,
+                                type_aliases,
+                                choice_types,
+                                project_variable_declarations,
+                                local_bindings,
+                                should_skip_allocating_closure,
+                                StillSyntaxNode {
+                                    range: untyped_node.range,
+                                    value: other_expression,
+                                },
+                            )
+                        }
+                    }
+                },
+            }
+        }
+        StillSyntaxExpression::VariableOrCall {
+            variable: variable_node,
+            arguments,
+        } => {
+            let rust_variable_name: String = still_name_to_lowercase_rust(&variable_node.value);
+            let mut uses_allocator: bool = false;
+            let (rust_arguments, argument_maybe_types): (Vec<syn::Expr>, Vec<Option<StillType>>) =
+                arguments
+                    .iter()
+                    .map(|argument_node| {
+                        let compiled_argument: CompiledStillExpression =
+                            still_syntax_expression_to_rust(
+                                errors,
+                                records_used,
+                                type_aliases,
+                                choice_types,
+                                project_variable_declarations,
+                                local_bindings.clone(),
+                                // TODO eventually true for project variables
+                                false,
+                                still_syntax_node_as_ref(argument_node),
+                            );
+                        uses_allocator = uses_allocator || compiled_argument.uses_allocator;
+                        (compiled_argument.rust, compiled_argument.type_)
+                    })
+                    .unzip();
+            let rust_reference: syn::Expr = syn_expr_reference([&rust_variable_name]);
+            match local_bindings.get(variable_node.value.as_str()) {
+                Some(maybe_variable_type) => {
+                    let Some(variable_type) = maybe_variable_type else {
+                        return CompiledStillExpression {
+                            rust: syn_expr_todo(),
+                            uses_allocator: false,
+                            type_: None,
+                        };
+                    };
+                    let type_: StillType = if arguments.is_empty() {
+                        variable_type.clone()
+                    } else {
+                        match variable_type {
+                            StillType::Function {
+                                inputs: _variable_input_types,
+                                output: variable_output_type,
+                            } => {
+                                // TODO check argument count == origin reference type
+                                (**variable_output_type).clone()
+                            }
+                            _ => {
+                                errors.push(StillErrorNode { range: variable_node.range, message: Box::from("calling a variable whose type is not a function. Maybe you forgot a separating comma or similar?") });
+                                return CompiledStillExpression {
+                                    rust: syn_expr_todo(),
+                                    uses_allocator: false,
+                                    type_: None,
+                                };
+                            }
+                        }
+                    };
+                    let variable_is_copy: bool =
+                        still_type_is_copy(false, type_aliases, choice_types, &type_);
+                    let rust_reference_cloned_if_necessary: syn::Expr = if variable_is_copy {
+                        rust_reference
+                    } else {
+                        syn_expr_call_clone_method(rust_reference)
+                    };
+                    CompiledStillExpression {
+                        rust: if arguments.is_empty() {
+                            rust_reference_cloned_if_necessary
+                        } else {
+                            syn::Expr::Call(syn::ExprCall {
+                                attrs: vec![],
+                                func: Box::new(rust_reference_cloned_if_necessary),
+                                paren_token: syn::token::Paren(syn_span()),
+                                args: rust_arguments.into_iter().collect(),
+                            })
+                        },
+                        uses_allocator: uses_allocator,
+                        type_: Some(type_),
+                    }
+                }
+                None => {
+                    let Some(project_variable_info) =
+                        project_variable_declarations.get(variable_node.value.as_str())
+                    else {
+                        errors.push(StillErrorNode { range: variable_node.range, message: Box::from("unknown variable. No project variable or local variable has this name. Check for typos.") });
+                        return CompiledStillExpression {
+                            rust: syn_expr_todo(),
+                            uses_allocator: false,
+                            type_: None,
+                        };
+                    };
+                    // TODO currently all rust compiled variable declarations are fn([&Alloc])s,
+                    // once some can be static, return variable without call
+                    let Some(project_variable_type) = &project_variable_info.type_ else {
+                        errors.push(StillErrorNode { range: variable_node.range, message: Box::from("this project variable has an incomplete type. Go to that variable's declaration and fix its errors. If there aren't any, these declarations are (mutually) recursive and need an explicit output type! You can add one by prepending :type: before any expression like the lambda result.") });
+                        return CompiledStillExpression {
+                            rust: syn_expr_todo(),
+                            uses_allocator: false,
+                            type_: None,
+                        };
+                    };
+                    let type_: StillType = if arguments.is_empty() {
+                        project_variable_type.clone()
+                    } else {
+                        match project_variable_type {
+                            StillType::Function {
+                                inputs: variable_input_types,
+                                output: variable_output_type,
+                            } => {
+                                // TODO check argument count == origin reference type
+                                // optimization possibility: when output contains no type variables,
+                                // just return it
+                                let mut type_parameter_replacements: std::collections::HashMap<
+                                    Box<str>,
+                                    StillType,
+                                > = std::collections::HashMap::new();
+                                for (parameter_type_node, maybe_argument_type) in
+                                    variable_input_types
+                                        .iter()
+                                        .zip(argument_maybe_types.into_iter())
+                                {
+                                    if let Some(argument_type) = maybe_argument_type {
+                                        still_type_collect_variables_that_are_concrete_into(
+                                            &mut type_parameter_replacements,
+                                            type_aliases,
+                                            parameter_type_node,
+                                            argument_type,
+                                        );
+                                    }
+                                }
+                                let mut variable_output_type: StillType =
+                                    (**variable_output_type).clone();
+                                still_type_replace_variables(
+                                    // seems inefficient, a function would be better
+                                    &type_parameter_replacements
+                                        .iter()
+                                        .map(|(k, v)| (k.as_ref(), v))
+                                        .collect::<std::collections::HashMap<_, _>>(),
+                                    &mut variable_output_type,
+                                );
+                                variable_output_type
+                            }
+                            _ => {
+                                errors.push(StillErrorNode { range: variable_node.range, message: Box::from("calling a variable whose type is not a function. Maybe you forgot a separating comma or similar?") });
+                                return CompiledStillExpression {
+                                    rust: syn_expr_todo(),
+                                    uses_allocator: false,
+                                    type_: None,
+                                };
+                            }
+                        }
+                    };
+                    CompiledStillExpression {
+                        rust: if arguments.is_empty() {
+                            rust_reference
+                        } else {
+                            syn::Expr::Call(syn::ExprCall {
+                                attrs: vec![],
+                                func: Box::new(rust_reference),
+                                paren_token: syn::token::Paren(syn_span()),
+                                args: if project_variable_info.has_allocator_parameter {
+                                    Some(syn_expr_reference([default_allocator_parameter_name]))
+                                } else {
+                                    None
+                                }
+                                .into_iter()
+                                .chain(rust_arguments)
+                                .collect(),
+                            })
+                        },
+                        uses_allocator: project_variable_info.has_allocator_parameter
+                            || uses_allocator,
+                        type_: Some(type_),
+                    }
+                }
+            }
+        }
+        StillSyntaxExpression::CaseOf {
+            matched: maybe_matched,
+            of_keyword_range: _,
+            cases,
+        } => {
+            let Some(matched_node) = maybe_matched else {
+                errors.push(StillErrorNode {
+                    range: expression_node.range,
+                    message: Box::from("missing matched expression in case here of ..cases.."),
+                });
+                return CompiledStillExpression {
+                    uses_allocator: false,
+                    type_: None,
+                    rust: syn_expr_todo(),
+                };
+            };
+            let compiled_matched: CompiledStillExpression = still_syntax_expression_to_rust(
+                errors,
+                records_used,
+                type_aliases,
+                choice_types,
+                project_variable_declarations,
+                local_bindings.clone(),
+                false,
+                still_syntax_node_unbox(matched_node),
+            );
+            let mut arms_use_allocator: bool = false;
+            let (mut rust_arms, case_result_types): (Vec<syn::Arm>, Vec<Option<StillType>>) = cases
+                .iter()
+                .filter_map(|case| {
+                    let mut local_bindings: std::collections::HashMap<&str, Option<StillType>> =
+                        (*local_bindings).clone();
+                    let mut bindings_to_clone: Vec<BindingToClone> = Vec::new();
+                    let compiled_pattern: CompiledStillPattern = still_syntax_pattern_to_rust(
+                        errors,
+                        records_used,
+                        &mut local_bindings,
+                        &mut bindings_to_clone,
+                        type_aliases,
+                        choice_types,
+                        false,
+                        still_syntax_node_as_ref(&case.pattern),
+                    );
+                    let Some(rust_pattern) = compiled_pattern.rust else {
+                        // skip case with incomplete pattern
+                        return None;
+                    };
+                    let compiled_case_result: CompiledStillExpression =
+                        maybe_still_syntax_expression_to_rust(
+                            errors,
+                            || StillErrorNode {
+                                range: case.pattern.range,
+                                message: Box::from("missing case result after pattern -> here"),
+                            },
+                            records_used,
+                            type_aliases,
+                            choice_types,
+                            project_variable_declarations,
+                            std::rc::Rc::new(local_bindings),
+                            false,
+                            case.result.as_ref().map(still_syntax_node_as_ref),
+                        );
+                    // TODO check all pattern types are equal to matched type
+                    arms_use_allocator = arms_use_allocator || compiled_case_result.uses_allocator;
+                    let mut rust_stmts: Vec<syn::Stmt> = Vec::with_capacity(1);
+                    bindings_to_clone_to_rust_into(&mut rust_stmts, bindings_to_clone);
+                    rust_stmts.push(syn::Stmt::Expr(compiled_case_result.rust, None));
+                    Some((
+                        syn::Arm {
+                            attrs: vec![],
+                            pat: rust_pattern,
+                            guard: None,
+                            fat_arrow_token: syn::token::FatArrow(syn_span()),
+                            body: Box::new(syn::Expr::Block(syn::ExprBlock {
+                                attrs: vec![],
+                                label: None,
+                                block: syn::Block {
+                                    brace_token: syn::token::Brace(syn_span()),
+                                    stmts: rust_stmts,
+                                },
+                            })),
+                            comma: None,
+                        },
+                        compiled_case_result.type_,
+                    ))
+                })
+                .unzip();
+            // _ => todo!() is appended to still make inexhaustive matching compile
+            // and be able to be run, rust will emit a warning
+            // TODO remove when can be determined to be exhaustive,
+            // otherwise also add error
+            rust_arms.push(syn::Arm {
+                attrs: vec![],
+                pat: syn::Pat::Wild(syn::PatWild {
+                    attrs: vec![],
+                    underscore_token: syn::token::Underscore(syn_span()),
+                }),
+                fat_arrow_token: syn::token::FatArrow(syn_span()),
+                guard: None,
+                body: Box::new(syn_expr_todo()),
+                comma: None,
+            });
+            CompiledStillExpression {
+                rust: syn::Expr::Match(syn::ExprMatch {
+                    attrs: vec![],
+                    match_token: syn::token::Match(syn_span()),
+                    expr: Box::new(compiled_matched.rust),
+                    brace_token: syn::token::Brace(syn_span()),
+                    arms: rust_arms,
+                }),
+                type_: case_result_types
+                    .into_iter()
+                    // TODO check all result types are equal
+                    .find_map(|case_result_type| case_result_type),
+                uses_allocator: compiled_matched.uses_allocator || arms_use_allocator,
+            }
+        }
+        StillSyntaxExpression::Record(fields) => {
+            records_used.insert(sorted_field_names(
+                fields.iter().map(|field| field.name.value.as_str()),
+            ));
+            let mut fields_use_allocator: bool = false;
+            let (rust_fields, field_maybe_types): (
+                syn::punctuated::Punctuated<syn::FieldValue, syn::token::Comma>,
+                Vec<Option<StillTypeField>>,
+            ) = fields
+                .iter()
+                .map(|field| {
+                    let compiled_field_value: CompiledStillExpression =
+                        maybe_still_syntax_expression_to_rust(
+                            errors,
+                            || StillErrorNode {
+                                range: field.name.range,
+                                message: Box::from(
+                                    "missing field value expression after this field name",
+                                ),
+                            },
+                            records_used,
+                            type_aliases,
+                            choice_types,
+                            project_variable_declarations,
+                            local_bindings.clone(),
+                            false,
+                            field.value.as_ref().map(still_syntax_node_as_ref),
+                        );
+                    fields_use_allocator =
+                        fields_use_allocator || compiled_field_value.uses_allocator;
+                    (
+                        syn::FieldValue {
+                            attrs: vec![],
+                            member: syn::Member::Named(syn_ident(&still_name_to_lowercase_rust(
+                                &field.name.value,
+                            ))),
+                            colon_token: Some(syn::token::Colon(syn_span())),
+                            expr: compiled_field_value.rust,
+                        },
+                        compiled_field_value.type_.map(|value_type| StillTypeField {
+                            name: field.name.value.clone(),
+                            value: value_type,
+                        }),
+                    )
+                })
+                .unzip();
+            CompiledStillExpression {
+                rust: syn::Expr::Struct(syn::ExprStruct {
+                    attrs: vec![],
+                    qself: None,
+                    path: syn_path_reference([&still_field_names_to_rust_record_struct_name(
+                        fields.iter().map(|field| field.name.value.as_ref()),
+                    )]),
+                    brace_token: syn::token::Brace(syn_span()),
+                    fields: rust_fields,
+                    dot2_token: None,
+                    rest: None,
+                }),
+                uses_allocator: fields_use_allocator,
+                type_: field_maybe_types
+                    .into_iter()
+                    .collect::<Option<Vec<StillTypeField>>>()
+                    .map(StillType::Record),
+            }
+        }
+        StillSyntaxExpression::RecordAccess {
+            record: record_node,
+            field: maybe_field_name,
+        } => {
+            let compiled_record: CompiledStillExpression = still_syntax_expression_to_rust(
+                errors,
+                records_used,
+                type_aliases,
+                choice_types,
+                project_variable_declarations,
+                local_bindings,
+                false,
+                still_syntax_node_unbox(record_node),
+            );
+            let Some(field_name_node) = maybe_field_name else {
+                errors.push(StillErrorNode { range: expression_node.range, message: Box::from("missing field name in record access (..record..).here. Field names start with a lowercase letter a-z") });
+                return compiled_record;
+            };
+            let Some(record_type) = compiled_record.type_.and_then(|record_type| {
+                still_type_resolve_outer_type_aliases(
+                    type_aliases,
+                    std::borrow::Cow::Owned(record_type),
+                )
+            }) else {
+                return CompiledStillExpression {
+                    rust: syn_expr_todo(),
+                    uses_allocator: false,
+                    type_: None,
+                };
+            };
+            let StillType::Record(record_type_fields) = record_type.into_owned() else {
+                errors.push(StillErrorNode {
+                    range: field_name_node.range,
+                    message: Box::from(
+                        "cannot access record field on expression whose type is not a record",
+                    ),
+                });
+                return CompiledStillExpression {
+                    rust: syn_expr_todo(),
+                    uses_allocator: false,
+                    type_: None,
+                };
+            };
+            let Some(accessed_record_type_field) = record_type_fields
+                .iter()
+                .find(|record_type_field| record_type_field.name == field_name_node.value)
+            else {
+                errors.push(StillErrorNode {
+                    range: field_name_node.range,
+                    message: format!(
+                        "cannot access record field on expression whose type is a record without that field. Available fields are {}",
+                        record_type_fields.iter().map(|field| field.name.as_str()).collect::<Vec<&str>>().join(", "),
+                    ).into_boxed_str(),
+                });
+                return CompiledStillExpression {
+                    rust: syn_expr_todo(),
+                    uses_allocator: false,
+                    type_: None,
+                };
+            };
+            CompiledStillExpression {
+                uses_allocator: compiled_record.uses_allocator,
+                rust: syn::Expr::Field(syn::ExprField {
+                    attrs: vec![],
+                    base: Box::new(compiled_record.rust),
+                    dot_token: syn::token::Dot(syn_span()),
+                    member: syn::Member::Named(syn_ident(&still_name_to_lowercase_rust(
+                        &field_name_node.value,
+                    ))),
+                }),
+                type_: Some(accessed_record_type_field.value.clone()),
+            }
+        }
+        StillSyntaxExpression::RecordUpdate {
+            record: maybe_record,
+            spread_key_symbol_range: _,
+            fields,
+        } => match maybe_record {
+            None => {
+                errors.push(StillErrorNode {
+                    range: expression_node.range,
+                    message: Box::from(
+                        "missing record expression to update in { ..here, ... ... }",
+                    ),
+                });
+                CompiledStillExpression {
+                    uses_allocator: false,
+                    rust: syn_expr_todo(),
+                    type_: None,
+                }
+            }
+            Some(record_node) => {
+                let mut fields_use_allocator: bool = false;
+                let rust_fields = fields
+                    .iter()
+                    .map(|field| {
+                        let compiled_field_value: CompiledStillExpression =
+                            maybe_still_syntax_expression_to_rust(
+                                errors,
+                                || StillErrorNode {
+                                    range: field.name.range,
+                                    message: Box::from("missing field value after this field name"),
+                                },
+                                records_used,
+                                type_aliases,
+                                choice_types,
+                                project_variable_declarations,
+                                local_bindings.clone(),
+                                false,
+                                field.value.as_ref().map(still_syntax_node_as_ref),
+                            );
+                        fields_use_allocator =
+                            fields_use_allocator || compiled_field_value.uses_allocator;
+                        syn::FieldValue {
+                            attrs: vec![],
+                            member: syn::Member::Named(syn_ident(&still_name_to_lowercase_rust(
+                                &field.name.value,
+                            ))),
+                            colon_token: Some(syn::token::Colon(syn_span())),
+                            expr: compiled_field_value.rust,
+                        }
+                    })
+                    .collect();
+                let compiled_record: CompiledStillExpression = still_syntax_expression_to_rust(
+                    errors,
+                    records_used,
+                    type_aliases,
+                    choice_types,
+                    project_variable_declarations,
+                    local_bindings,
+                    false,
+                    still_syntax_node_unbox(record_node),
+                );
+                // TODO check the updated field values are present in the compile record type
+                // and their value types are equal
+                CompiledStillExpression {
+                    rust: syn::Expr::Struct(syn::ExprStruct {
+                        attrs: vec![],
+                        qself: None,
+                        path: syn_path_reference([&still_field_names_to_rust_record_struct_name(
+                            fields.iter().map(|field| field.name.value.as_ref()),
+                        )]),
+                        brace_token: syn::token::Brace(syn_span()),
+                        fields: rust_fields,
+                        dot2_token: Some(syn::token::DotDot(syn_span())),
+                        rest: Some(Box::new(compiled_record.rust)),
+                    }),
+                    uses_allocator: compiled_record.uses_allocator || fields_use_allocator,
+                    type_: compiled_record.type_,
+                }
+            }
+        },
+    }
+}
+struct CompiledStillLetDeclarationInfo<'a> {
+    uses_allocator: bool,
+    local_bindings_including_let: std::collections::HashMap<&'a str, Option<StillType>>,
+}
+fn still_syntax_let_declaration_to_rust_into<'a>(
+    rust_stmts: &mut Vec<syn::Stmt>,
+    errors: &mut Vec<StillErrorNode>,
+    records_used: &mut std::collections::HashSet<Vec<&'a str>>,
+    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
+    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
+    project_variable_declarations: &std::collections::HashMap<
+        StillName,
+        CompiledVariableDeclarationInfo,
+    >,
+    local_bindings: std::rc::Rc<std::collections::HashMap<&'a str, Option<StillType>>>,
+    declaration_node: StillSyntaxNode<&'a StillSyntaxLetDeclaration>,
+) -> CompiledStillLetDeclarationInfo<'a> {
+    match &declaration_node.value {
+        StillSyntaxLetDeclaration::Destructuring {
+            pattern: pattern_node,
+            equals_key_symbol_range: _,
+            expression: maybe_destructured_expression,
+        } => {
+            let compiled_destructured: CompiledStillExpression =
+                maybe_still_syntax_expression_to_rust(
+                    errors,
+                    || StillErrorNode {
+                        range: declaration_node.range,
+                        message: Box::from("missing let destructuring result in let ... = here"),
+                    },
+                    records_used,
+                    type_aliases,
+                    choice_types,
+                    project_variable_declarations,
+                    local_bindings.clone(),
+                    false,
+                    maybe_destructured_expression
+                        .as_ref()
+                        .map(still_syntax_node_unbox),
+                );
+            let mut bindings_to_clone: Vec<BindingToClone> = Vec::new();
+            let mut local_bindings = std::rc::Rc::unwrap_or_clone(local_bindings);
+            let compiled_pattern: CompiledStillPattern = still_syntax_pattern_to_rust(
+                errors,
+                records_used,
+                &mut local_bindings,
+                &mut bindings_to_clone,
+                type_aliases,
+                choice_types,
+                false,
+                still_syntax_node_as_ref(pattern_node),
+            );
+            bindings_to_clone_to_rust_into(rust_stmts, bindings_to_clone);
+            let Some(rust_pattern) = compiled_pattern.rust else {
+                return CompiledStillLetDeclarationInfo {
+                    uses_allocator: false,
+                    local_bindings_including_let: local_bindings,
+                };
+            };
+            // TODO check expression type equals pattern type
+            rust_stmts.push(syn::Stmt::Local(syn::Local {
+                attrs: vec![],
+                let_token: syn::token::Let(syn_span()),
+                pat: rust_pattern,
+                init: Some(syn::LocalInit {
+                    eq_token: syn::token::Eq(syn_span()),
+                    expr: Box::new(compiled_destructured.rust),
+                    diverge: None,
+                }),
+                semi_token: syn::token::Semi(syn_span()),
+            }));
+            CompiledStillLetDeclarationInfo {
+                uses_allocator: compiled_destructured.uses_allocator,
+                local_bindings_including_let: local_bindings,
+            }
+        }
+        StillSyntaxLetDeclaration::VariableDeclaration {
+            name: name_node,
+            result: maybe_result,
+        } => {
+            let compiled_result: CompiledStillExpression = maybe_still_syntax_expression_to_rust(
+                errors,
+                || StillErrorNode {
+                    range: declaration_node.range,
+                    message: Box::from(
+                        "missing assigned let variable declaration expression in let ..name.. here",
+                    ),
+                },
+                records_used,
+                type_aliases,
+                choice_types,
+                project_variable_declarations,
+                local_bindings.clone(),
+                // TODO eventually true when all uses are allocated if necessary
+                false,
+                maybe_result.as_ref().map(still_syntax_node_unbox),
+            );
+            rust_stmts.push(syn::Stmt::Local(syn::Local {
+                attrs: vec![],
+                let_token: syn::token::Let(syn_span()),
+                pat: syn_pat_variable(&name_node.value),
+                init: Some(syn::LocalInit {
+                    eq_token: syn::token::Eq(syn_span()),
+                    expr: Box::new(compiled_result.rust),
+                    diverge: None,
+                }),
+                semi_token: syn::token::Semi(syn_span()),
+            }));
+            let mut local_bindings = std::rc::Rc::unwrap_or_clone(local_bindings);
+            local_bindings.insert(&name_node.value, compiled_result.type_);
+            CompiledStillLetDeclarationInfo {
+                uses_allocator: compiled_result.uses_allocator,
+                local_bindings_including_let: local_bindings,
+            }
+        }
+    }
+}
+fn maybe_still_syntax_pattern_to_rust<'a>(
+    errors: &mut Vec<StillErrorNode>,
+    error_on_none: impl FnOnce() -> StillErrorNode,
+    records_used: &mut std::collections::HashSet<Vec<&'a str>>,
+    introduced_bindings: &mut std::collections::HashMap<&'a str, Option<StillType>>,
+    bindings_to_clone: &mut Vec<BindingToClone<'a>>,
+    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
+    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
+    is_reference: bool,
+    maybe_pattern_node: Option<StillSyntaxNode<&'a StillSyntaxPattern>>,
+) -> CompiledStillPattern {
+    match maybe_pattern_node {
+        None => {
+            errors.push(error_on_none());
+            CompiledStillPattern {
+                rust: None,
+                type_: None,
+            }
+        }
+        Some(pattern_node) => still_syntax_pattern_to_rust(
+            errors,
+            records_used,
+            introduced_bindings,
+            bindings_to_clone,
+            type_aliases,
+            choice_types,
+            is_reference,
+            pattern_node,
+        ),
+    }
+}
+fn still_syntax_type_to_type(
+    errors: &mut Vec<StillErrorNode>,
+    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
+    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
+    type_node: StillSyntaxNode<&StillSyntaxType>,
+) -> Option<StillType> {
+    match type_node.value {
+        StillSyntaxType::Variable(name) => Some(StillType::Variable(name.clone())),
+        StillSyntaxType::Parenthesized(maybe_in_parens) => match maybe_in_parens {
+            None => {
+                errors.push(StillErrorNode {
+                    range: type_node.range,
+                    message: Box::from("missing type inside these parens (here)"),
+                });
+                None
+            }
+            Some(in_parens_node) => still_syntax_type_to_type(
+                errors,
+                type_aliases,
+                choice_types,
+                still_syntax_node_unbox(in_parens_node),
+            ),
+        },
+        StillSyntaxType::WithComment {
+            comment: _,
+            type_: maybe_after_comment,
+        } => match maybe_after_comment {
+            None => {
+                errors.push(StillErrorNode {
+                    range: type_node.range,
+                    message: Box::from("missing type after this comment # ... \\n here"),
+                });
+                None
+            }
+            Some(after_comment_node) => still_syntax_type_to_type(
+                errors,
+                type_aliases,
+                choice_types,
+                still_syntax_node_unbox(after_comment_node),
+            ),
+        },
+        StillSyntaxType::Function {
+            inputs,
+            arrow_key_symbol_range: _,
+            output: maybe_output,
+        } => {
+            let Some(output_node) = maybe_output else {
+                errors.push(StillErrorNode {
+                    range: type_node.range,
+                    message: Box::from(
+                        "missing output type after these inputs and arrow \\..inputs.. > here",
+                    ),
+                });
+                return None;
+            };
+            if inputs.is_empty() {
+                errors.push(StillErrorNode {
+                    range: type_node.range,
+                    message: Box::from("missing input types \\here > ..output.."),
+                });
+                return None;
+            }
+            let input_types: Vec<StillType> = inputs
+                .iter()
+                .map(|input_node| {
+                    still_syntax_type_to_type(
+                        errors,
+                        type_aliases,
+                        choice_types,
+                        still_syntax_node_as_ref(input_node),
+                    )
+                })
+                .collect::<Option<Vec<_>>>()?;
+            let output_type: StillType = still_syntax_type_to_type(
+                errors,
+                type_aliases,
+                choice_types,
+                still_syntax_node_unbox(output_node),
+            )?;
+            Some(StillType::Function {
+                inputs: input_types,
+                output: Box::new(output_type),
+            })
+        }
+        StillSyntaxType::Construct {
+            name: name_node,
+            arguments,
+        } => {
+            if let Some(origin_type_alias) = type_aliases.get(&name_node.value) {
+                match origin_type_alias.parameters.len().cmp(&arguments.len()) {
+                    std::cmp::Ordering::Equal => {}
+                    std::cmp::Ordering::Less => {
+                        errors.push(StillErrorNode {
+                            range: name_node.range,
+                            message: format!(
+                                "this type alias has {} less parameters than arguments are provided here.",
+                                arguments.len() - origin_type_alias.parameters.len(),
+                            ).into_boxed_str()
+                        });
+                    }
+                    std::cmp::Ordering::Greater => {
+                        errors.push(StillErrorNode {
+                            range: name_node.range,
+                            message: format!(
+                                "this type alias has {} more parameters than arguments are provided here. The additional parameters are called {}",
+                                origin_type_alias.parameters.len() - arguments.len(),
+                                origin_type_alias.parameters.iter().map(|parameter_node| parameter_node.value.as_str()).skip(arguments.len()).collect::<Vec<_>>().join(", ")
+                            ).into_boxed_str()
+                        });
+                    }
+                }
+            } else if let Some(origin_choice_type) = choice_types.get(&name_node.value) {
+                match origin_choice_type.parameters.len().cmp(&arguments.len()) {
+                    std::cmp::Ordering::Equal => {}
+                    std::cmp::Ordering::Less => {
+                        errors.push(StillErrorNode {
+                            range: name_node.range,
+                            message: format!(
+                                "this choice type has {} less parameters than arguments are provided here.",
+                                arguments.len() - origin_choice_type.parameters.len(),
+                            ).into_boxed_str()
+                        });
+                    }
+                    std::cmp::Ordering::Greater => {
+                        errors.push(StillErrorNode {
+                            range: name_node.range,
+                            message: format!(
+                                "this choice type has {} more parameters than arguments are provided here. The additional parameters are called {}",
+                                origin_choice_type.parameters.len() - arguments.len(),
+                                origin_choice_type.parameters.iter().map(|parameter_node| parameter_node.value.as_str()).skip(arguments.len()).collect::<Vec<_>>().join(", ")
+                            ).into_boxed_str()
+                        });
+                    }
+                }
+            } else {
+                // list similar names?
+                errors.push(StillErrorNode {
+                    range: name_node.range,
+                    message: Box::from("no type alias or choice type is declared with this name"),
+                });
+            }
+            let argument_types: Vec<StillType> = arguments
+                .iter()
+                .map(|argument_node| {
+                    still_syntax_type_to_type(
+                        errors,
+                        type_aliases,
+                        choice_types,
+                        still_syntax_node_as_ref(argument_node),
+                    )
+                })
+                .collect::<Option<Vec<_>>>()?;
+            Some(StillType::Construct {
+                name: name_node.value.clone(),
+                arguments: argument_types,
+            })
+        }
+        StillSyntaxType::Record(fields) => {
+            // TODO fail if contains duplicate
+            let field_types: Vec<StillTypeField> = fields
+                .iter()
+                .map(|field| match &field.value {
+                    None => {
+                        errors.push(StillErrorNode {
+                            range: field.name.range,
+                            message: Box::from(
+                                "missing field value after this name ..field-name.. here",
+                            ),
+                        });
+                        None
+                    }
+                    Some(field_value_node) => {
+                        let field_value_type: StillType = still_syntax_type_to_type(
+                            errors,
+                            type_aliases,
+                            choice_types,
+                            still_syntax_node_as_ref(field_value_node),
+                        )?;
+                        Some(StillTypeField {
+                            name: field.name.value.clone(),
+                            value: field_value_type,
+                        })
+                    }
+                })
+                .collect::<Option<Vec<_>>>()?;
+            Some(StillType::Record(field_types))
+        }
+    }
+}
+struct BindingToClone<'a> {
+    name: &'a str,
+    is_copy: bool,
+}
+/// TODO should be `Option<{ type_: StillSype,  }>`
+/// as an untyped pattern should never exist!
+struct CompiledStillPattern {
+    // None means it should be ignored (e.g. in a case of that case should be removed)
+    rust: Option<syn::Pat>,
+    type_: Option<StillType>,
+}
+fn still_syntax_pattern_to_rust<'a>(
+    errors: &mut Vec<StillErrorNode>,
+    records_used: &mut std::collections::HashSet<Vec<&'a str>>,
+    introduced_bindings: &mut std::collections::HashMap<&'a str, Option<StillType>>,
+    bindings_to_clone: &mut Vec<BindingToClone<'a>>,
+    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
+    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
+    is_reference: bool,
+    pattern_node: StillSyntaxNode<&'a StillSyntaxPattern>,
+) -> CompiledStillPattern {
+    match &pattern_node.value {
+        StillSyntaxPattern::Char(maybe_char) => CompiledStillPattern {
+            type_: Some(still_type_chr),
+            rust: match *maybe_char {
+                None => {
+                    errors.push(StillErrorNode {
+                        range: pattern_node.range,
+                        message: Box::from("missing character between 'here'"),
+                    });
+                    None
+                }
+                Some(char_value) => Some(syn::Pat::Lit(syn::ExprLit {
+                    attrs: vec![],
+                    lit: syn::Lit::Char(syn::LitChar::new(char_value, syn_span())),
+                })),
+            },
+        },
+        StillSyntaxPattern::Int(representation) => CompiledStillPattern {
+            type_: Some(still_type_int),
+            rust: match representation.parse::<isize>() {
+                Ok(int) => Some(syn::Pat::Lit(syn::ExprLit {
+                    attrs: vec![],
+                    lit: syn::Lit::Int(syn::LitInt::new(&int.to_string(), syn_span())),
+                })),
+                Err(parse_error) => {
+                    errors.push(StillErrorNode {
+                        range: pattern_node.range,
+                        message: format!(
+                            "invalid int format. Expected base 10 whole number like -123 or 0: {parse_error}"
+                        ).into_boxed_str(),
+                    });
+                    None
+                }
+            },
+        },
+        StillSyntaxPattern::String {
+            content,
+            quoting_style: _,
+        } => CompiledStillPattern {
+            type_: Some(still_type_str),
+            rust: Some(syn::Pat::Lit(syn::ExprLit {
+                attrs: vec![],
+                lit: syn::Lit::Str(syn::LitStr::new(content, syn_span())),
+            })),
+        },
+        StillSyntaxPattern::WithComment {
+            comment: _,
+            pattern: maybe_after_comment,
+        } => maybe_still_syntax_pattern_to_rust(
+            errors,
+            || StillErrorNode {
+                range: pattern_node.range,
+                message: Box::from("missing pattern after comment # ...\\n here"),
+            },
+            records_used,
+            introduced_bindings,
+            bindings_to_clone,
+            type_aliases,
+            choice_types,
+            is_reference,
+            maybe_after_comment.as_ref().map(still_syntax_node_unbox),
+        ),
+        StillSyntaxPattern::Typed {
+            type_: maybe_type_node,
+            pattern: maybe_in_typed,
+        } => {
+            let maybe_type: Option<StillType> = match maybe_type_node {
+                None => {
+                    errors.push(StillErrorNode {
+                        range: pattern_node.range,
+                        message: Box::from("missing type between :here:"),
+                    });
+                    None
+                }
+                Some(type_node) => still_syntax_type_to_type(
+                    errors,
+                    type_aliases,
+                    choice_types,
+                    still_syntax_node_as_ref(type_node),
+                ),
+            };
+            match maybe_in_typed {
+                None => {
+                    errors.push(StillErrorNode {
+                        range: pattern_node.range,
+                        message: Box::from("missing pattern after type :...: here. To ignore he incoming value, use _, or give it a lowercase name or specify a variant"),
+                    });
+                    CompiledStillPattern {
+                        rust: Some(syn_pat_wild()),
+                        type_: maybe_type,
+                    }
+                }
+                Some(untyped_pattern_node) => match &untyped_pattern_node.value {
+                    StillSyntaxPatternUntyped::Variable(name) => {
+                        introduced_bindings.insert(name, maybe_type.clone());
+                        if is_reference {
+                            bindings_to_clone.push(BindingToClone {
+                                name: name,
+                                is_copy: maybe_type.as_ref().is_some_and(|type_| {
+                                    still_type_is_copy(false, type_aliases, choice_types, type_)
+                                }),
+                            });
+                        }
+                        CompiledStillPattern {
+                            rust: Some(syn_pat_variable(name)),
+                            type_: maybe_type,
+                        }
+                    }
+                    StillSyntaxPatternUntyped::Ignored => CompiledStillPattern {
+                        rust: Some(syn_pat_wild()),
+                        type_: maybe_type,
+                    },
+                    StillSyntaxPatternUntyped::Variant {
+                        name: name_node,
+                        value: maybe_value,
+                    } => {
+                        let Some(type_) = maybe_type else {
+                            return CompiledStillPattern {
+                                rust: None,
+                                type_: None,
+                            };
+                        };
+                        let Some(resolved_type) = still_type_resolve_outer_type_aliases(
+                            type_aliases,
+                            std::borrow::Cow::Owned(type_),
+                        ) else {
+                            return CompiledStillPattern {
+                                rust: None,
+                                type_: None,
+                            };
+                        };
+                        let StillType::Construct {
+                            name: origin_choice_type_name,
+                            arguments: origin_choice_type_arguments,
+                        } = resolved_type.into_owned()
+                        else {
+                            errors.push(StillErrorNode {
+                                range: pattern_node.range,
+                                message: Box::from("type in :here: is not a choice type which is necessary for a variant pattern"),
+                            });
+                            return CompiledStillPattern {
+                                rust: None,
+                                type_: None,
+                            };
+                        };
+                        let variant_value_is_reference: bool = is_reference
+                            || ('variant_value_is_reference: {
+                                let Some(origin_choice_type) =
+                                    choice_types.get(origin_choice_type_name.as_str())
+                                else {
+                                    break 'variant_value_is_reference false;
+                                };
+                                let Some(variant_index_in_origin_choice_type) =
+                                    std::iter::once(origin_choice_type.variant0_name.as_ref())
+                                        .chain(
+                                            origin_choice_type
+                                                .variant1_up
+                                                .iter()
+                                                .map(|variant| variant.name.as_ref()),
+                                        )
+                                        .enumerate()
+                                        .find(|(_, origin_choice_type_variant_maybe_name)| {
+                                            origin_choice_type_variant_maybe_name.is_some_and(
+                                                |origin_choice_type_variant_name_node| {
+                                                    origin_choice_type_variant_name_node.value
+                                                        == name_node.value
+                                                },
+                                            )
+                                        })
+                                        .map(|(i, _)| i)
+                                else {
+                                    break 'variant_value_is_reference false;
+                                };
+                                origin_choice_type
+                                    .recursive_variant_value_variant_indexes
+                                    .contains(&variant_index_in_origin_choice_type)
+                            });
+                        let compiled_maybe_value: Option<syn::Pat> = match maybe_value.as_ref() {
+                            None => {
+                                // TODO check origin variant also has no value
+                                None
+                            }
+                            Some(value_node) => {
+                                let compiled_value = still_syntax_pattern_to_rust(
                                     errors,
                                     records_used,
+                                    introduced_bindings,
                                     bindings_to_clone,
                                     type_aliases,
                                     choice_types,
                                     variant_value_is_reference,
                                     still_syntax_node_unbox(value_node),
-                                )
-                            })
-                            .collect(),
-                    })
-                }
-            },
-        },
+                                );
+                                let Some(value_rust_pattern) = compiled_value.rust else {
+                                    return CompiledStillPattern {
+                                        rust: None,
+                                        type_: Some(StillType::Construct {
+                                            name: origin_choice_type_name,
+                                            arguments: origin_choice_type_arguments,
+                                        }),
+                                    };
+                                };
+                                let Some(_value_type) = compiled_value.type_ else {
+                                    return CompiledStillPattern {
+                                        rust: None,
+                                        type_: Some(StillType::Construct {
+                                            name: origin_choice_type_name,
+                                            arguments: origin_choice_type_arguments,
+                                        }),
+                                    };
+                                };
+                                // TODO verify equal: origin choice type variant value with the type arguments inlined & value pattern type
+                                Some(value_rust_pattern)
+                            }
+                        };
+                        CompiledStillPattern {
+                            rust: Some(syn::Pat::TupleStruct(syn::PatTupleStruct {
+                                attrs: vec![],
+                                qself: None,
+                                path: syn_path_reference([
+                                    &still_name_to_uppercase_rust(&origin_choice_type_name),
+                                    &still_name_to_uppercase_rust(&name_node.value),
+                                ]),
+                                paren_token: syn::token::Paren(syn_span()),
+                                elems: compiled_maybe_value.into_iter().collect(),
+                            })),
+                            type_: Some(StillType::Construct {
+                                name: origin_choice_type_name,
+                                arguments: origin_choice_type_arguments,
+                            }),
+                        }
+                    }
+                },
+            }
+        }
         StillSyntaxPattern::Record(fields) => {
+            // TODO check for duplictes
             records_used.insert(sorted_field_names(
                 fields.iter().map(|field| field.name.value.as_str()),
             ));
-            syn::Pat::Struct(syn::PatStruct {
-                attrs: vec![],
-                qself: None,
-                path: syn_path_reference([&still_field_names_to_rust_record_struct_name(
-                    fields.iter().map(|field| field.name.value.as_ref()),
-                )]),
-                brace_token: syn::token::Brace(syn_span()),
-                fields: fields
-                    .iter()
-                    .map(|field| syn::FieldPat {
-                        attrs: vec![],
-                        member: syn::Member::Named(syn_ident(&still_name_to_lowercase_rust(
-                            &field.name.value,
-                        ))),
-                        colon_token: Some(syn::token::Colon(syn_span())),
-                        pat: Box::new(maybe_still_syntax_pattern_to_rust(
+            let (field_values_rust, field_types): (
+                Vec<Option<(&str, syn::Pat)>>,
+                Vec<Option<StillTypeField>>,
+            ) = fields
+                .iter()
+                .map(|field| {
+                    let compiled_field_value: CompiledStillPattern =
+                        maybe_still_syntax_pattern_to_rust(
                             errors,
                             || StillErrorNode {
                                 range: field.name.range,
                                 message: Box::from("missing field value after this name"),
                             },
                             records_used,
+                            introduced_bindings,
                             bindings_to_clone,
                             type_aliases,
                             choice_types,
                             is_reference,
                             field.value.as_ref().map(still_syntax_node_as_ref),
-                        )),
-                    })
-                    .collect(),
-                rest: None,
-            })
+                        );
+                    (
+                        compiled_field_value
+                            .rust
+                            .map(|rust| (field.name.value.as_str(), rust)),
+                        compiled_field_value.type_.map(|type_| StillTypeField {
+                            name: field.name.value.clone(),
+                            value: type_,
+                        }),
+                    )
+                })
+                .unzip();
+            CompiledStillPattern {
+                type_: field_types
+                    .into_iter()
+                    .collect::<Option<Vec<StillTypeField>>>()
+                    .map(|type_fields| StillType::Record(type_fields)),
+                rust: field_values_rust
+                    .into_iter()
+                    .collect::<Option<Vec<_>>>()
+                    .map(|field_values_rust| {
+                        syn::Pat::Struct(syn::PatStruct {
+                            attrs: vec![],
+                            qself: None,
+                            path: syn_path_reference([
+                                &still_field_names_to_rust_record_struct_name(
+                                    fields.iter().map(|field| field.name.value.as_ref()),
+                                ),
+                            ]),
+                            brace_token: syn::token::Brace(syn_span()),
+                            fields: field_values_rust
+                                .into_iter()
+                                .map(|(field_name, field_value_rust)| syn::FieldPat {
+                                    attrs: vec![],
+                                    member: syn::Member::Named(syn_ident(
+                                        &still_name_to_lowercase_rust(field_name),
+                                    )),
+                                    colon_token: Some(syn::token::Colon(syn_span())),
+                                    pat: Box::new(field_value_rust),
+                                })
+                                .collect(),
+                            rest: None,
+                        })
+                    }),
+            }
         }
     }
 }

@@ -305,6 +305,8 @@ impl<A: StillIntoOwned + Clone> StillIntoOwned for Vec<A> {
         match std::rc::Rc::try_unwrap(self) {
             std::result::Result::Ok(mut owned) => {
                 vec_allocation_to_reuse.truncate(owned.len());
+                // could we iterate owned by_ref instead of drain?
+                // I'm not sure if that would drop an element
                 for (element_allocation_to_reuse, element) in std::iter::Iterator::zip(
                     vec_allocation_to_reuse.iter_mut(),
                     std::vec::Vec::drain(&mut owned, 0..vec_allocation_to_reuse_len),
