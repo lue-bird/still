@@ -2435,16 +2435,9 @@ enum StillSyntaxStringQuotingStyle {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-enum StillSyntaxLetDeclaration {
-    Destructuring {
-        pattern: StillSyntaxNode<StillSyntaxPattern>,
-        equals_key_symbol_range: Option<lsp_types::Range>,
-        expression: Option<StillSyntaxNode<Box<StillSyntaxExpression>>>,
-    },
-    VariableDeclaration {
-        name: StillSyntaxNode<StillName>,
-        result: Option<StillSyntaxNode<Box<StillSyntaxExpression>>>,
-    },
+struct StillSyntaxLetDeclaration {
+    name: StillSyntaxNode<StillName>,
+    result: Option<StillSyntaxNode<Box<StillSyntaxExpression>>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -2885,36 +2878,21 @@ fn still_syntax_expression_type_with<'a>(
                         &str,
                         Option<StillSyntaxNode<StillSyntaxType>>,
                     > = (*local_bindings).clone();
-                    match &declaration_node.value {
-                        StillSyntaxLetDeclaration::VariableDeclaration {
-                            name: name_node,
-                            result: declaration_maybe_result,
-                        } => {
-                            local_bindings_with_let.insert(
-                                &name_node.value,
-                                declaration_maybe_result
-                                    .as_ref()
-                                    .map(|declaration_result_node| {
-                                        still_syntax_expression_type_with(
-                                            type_aliases,
-                                            variable_declarations,
-                                            local_bindings_without_let,
-                                            still_syntax_node_unbox(declaration_result_node),
-                                        )
-                                    }),
-                            );
-                        }
-                        StillSyntaxLetDeclaration::Destructuring {
-                            pattern: pattern_node,
-                            equals_key_symbol_range: _,
-                            expression: _,
-                        } => {
-                            still_syntax_pattern_binding_types_into(
-                                &mut local_bindings_with_let,
-                                still_syntax_node_as_ref(pattern_node),
-                            );
-                        }
-                    }
+                    local_bindings_with_let.insert(
+                        &declaration_node.value.name.value,
+                        declaration_node
+                            .value
+                            .result
+                            .as_ref()
+                            .map(|declaration_result_node| {
+                                still_syntax_expression_type_with(
+                                    type_aliases,
+                                    variable_declarations,
+                                    local_bindings_without_let,
+                                    still_syntax_node_unbox(declaration_result_node),
+                                )
+                            }),
+                    );
                     std::rc::Rc::new(local_bindings_with_let)
                 }
             };
@@ -4018,40 +3996,16 @@ fn still_syntax_let_declaration_into(
     indent: usize,
     let_declaration_node: StillSyntaxNode<&StillSyntaxLetDeclaration>,
 ) {
-    match let_declaration_node.value {
-        StillSyntaxLetDeclaration::Destructuring {
-            pattern: pattern_node,
-            equals_key_symbol_range: _,
-            expression: maybe_expression,
-        } => {
-            still_syntax_pattern_into(so_far, indent, still_syntax_node_as_ref(pattern_node));
-            space_or_linebreak_indented_into(
-                so_far,
-                still_syntax_range_line_span(pattern_node.range),
-                next_indent(indent),
-            );
-            so_far.push_str(" =");
-            linebreak_indented_into(so_far, next_indent(indent));
-            if let Some(expression_node) = maybe_expression {
-                still_syntax_expression_not_parenthesized_into(
-                    so_far,
-                    next_indent(indent),
-                    still_syntax_node_unbox(expression_node),
-                );
-            }
-        }
-        StillSyntaxLetDeclaration::VariableDeclaration {
-            name: name_node,
-            result: maybe_result,
-        } => {
-            still_syntax_variable_declaration_into(
-                so_far,
-                indent,
-                still_syntax_node_as_ref_map(name_node, StillName::as_str),
-                maybe_result.as_ref().map(still_syntax_node_unbox),
-            );
-        }
-    }
+    still_syntax_variable_declaration_into(
+        so_far,
+        indent,
+        still_syntax_node_as_ref_map(&let_declaration_node.value.name, StillName::as_str),
+        let_declaration_node
+            .value
+            .result
+            .as_ref()
+            .map(still_syntax_node_unbox),
+    );
 }
 fn still_syntax_variable_declaration_into(
     so_far: &mut String,
@@ -4732,12 +4686,6 @@ struct StillLocalBinding<'a> {
     origin: LocalBindingOrigin,
 }
 
-fn on_some_break<A>(maybe: Option<A>) -> std::ops::ControlFlow<A, ()> {
-    match maybe {
-        None => std::ops::ControlFlow::Continue(()),
-        Some(value) => std::ops::ControlFlow::Break(value),
-    }
-}
 /// TODO swap `type_aliases` parameter to first
 fn still_syntax_expression_find_symbol_at_position<'a>(
     mut local_bindings: StillLocalBindings<'a>,
@@ -5080,62 +5028,37 @@ fn still_syntax_let_declaration_find_symbol_at_position<'a>(
     if !lsp_range_includes_position(still_syntax_let_declaration_node.range, position) {
         return std::ops::ControlFlow::Continue(local_bindings);
     }
-    match still_syntax_let_declaration_node.value {
-        StillSyntaxLetDeclaration::Destructuring {
-            pattern,
-            equals_key_symbol_range: _,
-            expression: maybe_expression,
-        } => {
-            on_some_break(still_syntax_pattern_find_symbol_at_position(
-                scope_declaration,
-                still_syntax_node_as_ref(pattern),
-                position,
-            ))?;
-            match maybe_expression {
-                Some(expression_node) => still_syntax_expression_find_symbol_at_position(
-                    local_bindings,
-                    type_aliases,
-                    variable_declarations,
-                    scope_declaration,
-                    still_syntax_node_unbox(expression_node),
-                    position,
-                ),
-                None => std::ops::ControlFlow::Continue(local_bindings),
-            }
-        }
-        StillSyntaxLetDeclaration::VariableDeclaration {
-            name,
-            result: maybe_result_node,
-        } => {
-            if lsp_range_includes_position(name.range, position) {
-                return std::ops::ControlFlow::Break(StillSyntaxNode {
-                    value: StillSyntaxSymbol::LetDeclarationName {
-                        name: &name.value,
-                        name_range: name.range,
-                        type_: maybe_result_node.as_ref().map(|result_node| {
-                            still_syntax_expression_type(
-                                type_aliases,
-                                variable_declarations,
-                                still_syntax_node_unbox(result_node),
-                            )
-                        }),
-                        scope_expression: scope_expression,
-                    },
-                    range: name.range,
-                });
-            }
-            match maybe_result_node {
-                Some(result_node) => still_syntax_expression_find_symbol_at_position(
-                    local_bindings,
-                    type_aliases,
-                    variable_declarations,
-                    scope_declaration,
-                    still_syntax_node_unbox(result_node),
-                    position,
-                ),
-                None => std::ops::ControlFlow::Continue(local_bindings),
-            }
-        }
+    if lsp_range_includes_position(still_syntax_let_declaration_node.value.name.range, position) {
+        return std::ops::ControlFlow::Break(StillSyntaxNode {
+            value: StillSyntaxSymbol::LetDeclarationName {
+                name: &still_syntax_let_declaration_node.value.name.value,
+                name_range: still_syntax_let_declaration_node.value.name.range,
+                type_: still_syntax_let_declaration_node
+                    .value
+                    .result
+                    .as_ref()
+                    .map(|result_node| {
+                        still_syntax_expression_type(
+                            type_aliases,
+                            variable_declarations,
+                            still_syntax_node_unbox(result_node),
+                        )
+                    }),
+                scope_expression: scope_expression,
+            },
+            range: still_syntax_let_declaration_node.value.name.range,
+        });
+    }
+    match &still_syntax_let_declaration_node.value.result {
+        Some(result_node) => still_syntax_expression_find_symbol_at_position(
+            local_bindings,
+            type_aliases,
+            variable_declarations,
+            scope_declaration,
+            still_syntax_node_unbox(result_node),
+            position,
+        ),
+        None => std::ops::ControlFlow::Continue(local_bindings),
     }
 }
 
@@ -5481,20 +5404,8 @@ fn still_syntax_expression_uses_of_symbol_into(
             let mut local_bindings_including_let_declaration_introduced: Vec<&str> =
                 local_bindings.to_vec();
             if let Some(let_declaration_node) = maybe_declaration {
-                match &let_declaration_node.value {
-                    StillSyntaxLetDeclaration::Destructuring { pattern, .. } => {
-                        still_syntax_pattern_binding_names_into(
-                            &mut local_bindings_including_let_declaration_introduced,
-                            still_syntax_node_as_ref(pattern),
-                        );
-                    }
-                    StillSyntaxLetDeclaration::VariableDeclaration {
-                        name: name_node,
-                        result: _,
-                    } => {
-                        local_bindings_including_let_declaration_introduced.push(&name_node.value);
-                    }
-                }
+                local_bindings_including_let_declaration_introduced
+                    .push(&let_declaration_node.value.name.value);
             }
             if let Some(let_declaration_node) = maybe_declaration {
                 still_syntax_let_declaration_uses_of_symbol_into(
@@ -5653,48 +5564,22 @@ fn still_syntax_let_declaration_uses_of_symbol_into(
     still_syntax_let_declaration: &StillSyntaxLetDeclaration,
     symbol_to_collect_uses_of: StillSymbolToReference,
 ) {
-    match still_syntax_let_declaration {
-        StillSyntaxLetDeclaration::Destructuring {
-            pattern,
-            equals_key_symbol_range: _,
-            expression: maybe_expression,
-        } => {
-            still_syntax_pattern_uses_of_symbol_into(
-                uses_so_far,
-                still_syntax_node_as_ref(pattern),
-                symbol_to_collect_uses_of,
-            );
-            if let Some(expression_node) = maybe_expression {
-                still_syntax_expression_uses_of_symbol_into(
-                    uses_so_far,
-                    local_bindings,
-                    still_syntax_node_unbox(expression_node),
-                    symbol_to_collect_uses_of,
-                );
-            }
-        }
-        StillSyntaxLetDeclaration::VariableDeclaration {
-            name: name_node,
-            result: maybe_result,
-        } => {
-            if symbol_to_collect_uses_of
-                == (StillSymbolToReference::LocalBinding {
-                    name: &name_node.value,
-                    including_let_declaration_name: true,
-                })
-            {
-                uses_so_far.push(name_node.range);
-                return;
-            }
-            if let Some(result_node) = maybe_result {
-                still_syntax_expression_uses_of_symbol_into(
-                    uses_so_far,
-                    local_bindings,
-                    still_syntax_node_unbox(result_node),
-                    symbol_to_collect_uses_of,
-                );
-            }
-        }
+    if symbol_to_collect_uses_of
+        == (StillSymbolToReference::LocalBinding {
+            name: &still_syntax_let_declaration.name.value,
+            including_let_declaration_name: true,
+        })
+    {
+        uses_so_far.push(still_syntax_let_declaration.name.range);
+        return;
+    }
+    if let Some(result_node) = &still_syntax_let_declaration.result {
+        still_syntax_expression_uses_of_symbol_into(
+            uses_so_far,
+            local_bindings,
+            still_syntax_node_unbox(result_node),
+            symbol_to_collect_uses_of,
+        );
     }
 }
 
@@ -5781,36 +5666,29 @@ fn still_syntax_let_declaration_introduced_bindings_into<'a>(
     variable_declarations: &std::collections::HashMap<StillName, CompiledVariableDeclarationInfo>,
     still_syntax_let_declaration: &'a StillSyntaxLetDeclaration,
 ) {
-    match still_syntax_let_declaration {
-        StillSyntaxLetDeclaration::Destructuring { pattern, .. } => {
-            still_syntax_pattern_bindings_into(bindings_so_far, still_syntax_node_as_ref(pattern));
-        }
-        StillSyntaxLetDeclaration::VariableDeclaration {
-            name: name_node,
-            result: maybe_result_node,
-        } => {
-            bindings_so_far.push(StillLocalBinding {
-                name: &name_node.value,
-                origin: LocalBindingOrigin::LetDeclaredVariable {
-                    name_range: name_node.range,
-                },
-                type_: maybe_result_node.as_ref().map(|result_node| {
-                    still_syntax_expression_type_with(
-                        type_aliases,
-                        variable_declarations,
-                        // this is inefficient to do for every let variable
-                        std::rc::Rc::new(
-                            bindings_so_far
-                                .iter()
-                                .map(|binding| (binding.name, binding.type_.clone()))
-                                .collect::<std::collections::HashMap<_, _>>(),
-                        ),
-                        still_syntax_node_unbox(result_node),
-                    )
-                }),
-            });
-        }
-    }
+    bindings_so_far.push(StillLocalBinding {
+        name: &still_syntax_let_declaration.name.value,
+        origin: LocalBindingOrigin::LetDeclaredVariable {
+            name_range: still_syntax_let_declaration.name.range,
+        },
+        type_: still_syntax_let_declaration
+            .result
+            .as_ref()
+            .map(|result_node| {
+                still_syntax_expression_type_with(
+                    type_aliases,
+                    variable_declarations,
+                    // this is inefficient to do for every let variable
+                    std::rc::Rc::new(
+                        bindings_so_far
+                            .iter()
+                            .map(|binding| (binding.name, binding.type_.clone()))
+                            .collect::<std::collections::HashMap<_, _>>(),
+                    ),
+                    still_syntax_node_unbox(result_node),
+                )
+            }),
+    });
 }
 
 fn still_syntax_pattern_bindings_into<'a>(
@@ -6665,47 +6543,17 @@ fn still_syntax_highlight_let_declaration_into(
     highlighted_so_far: &mut Vec<StillSyntaxNode<StillSyntaxHighlightKind>>,
     still_syntax_let_declaration_node: StillSyntaxNode<&StillSyntaxLetDeclaration>,
 ) {
-    match still_syntax_let_declaration_node.value {
-        StillSyntaxLetDeclaration::Destructuring {
-            pattern: destructuring_pattern_node,
-            equals_key_symbol_range: maybe_equals_key_symbol_range,
-            expression: maybe_destructured_expression,
-        } => {
-            still_syntax_highlight_pattern_into(
-                highlighted_so_far,
-                still_syntax_node_as_ref(destructuring_pattern_node),
-            );
-            if let &Some(equals_key_symbol_range) = maybe_equals_key_symbol_range {
-                highlighted_so_far.push(StillSyntaxNode {
-                    range: equals_key_symbol_range,
-                    value: StillSyntaxHighlightKind::KeySymbol,
-                });
-            }
-            if let Some(destructured_expression_node) = maybe_destructured_expression {
-                still_syntax_highlight_expression_into(
-                    highlighted_so_far,
-                    still_syntax_node_unbox(destructured_expression_node),
-                );
-            }
-        }
-        StillSyntaxLetDeclaration::VariableDeclaration {
-            name: name_node,
-            result: maybe_result,
-        } => {
-            highlighted_so_far.push(StillSyntaxNode {
-                range: name_node.range,
-                value: StillSyntaxHighlightKind::DeclaredVariable,
-            });
-            if let Some(result_node) = maybe_result {
-                still_syntax_highlight_expression_into(
-                    highlighted_so_far,
-                    still_syntax_node_unbox(result_node),
-                );
-            }
-        }
+    highlighted_so_far.push(StillSyntaxNode {
+        range: still_syntax_let_declaration_node.value.name.range,
+        value: StillSyntaxHighlightKind::DeclaredVariable,
+    });
+    if let Some(result_node) = &still_syntax_let_declaration_node.value.result {
+        still_syntax_highlight_expression_into(
+            highlighted_so_far,
+            still_syntax_node_unbox(result_node),
+        );
     }
 }
-
 // //
 struct ParseState<'a> {
     source: &'a str,
@@ -7903,38 +7751,6 @@ fn parse_still_syntax_let_declaration(
     if state.position.character < u32::from(state.indent) {
         return None;
     }
-    parse_still_syntax_let_variable_declaration_node(state)
-        .or_else(|| parse_still_syntax_let_destructuring_node(state))
-}
-fn parse_still_syntax_let_destructuring_node(
-    state: &mut ParseState,
-) -> Option<StillSyntaxNode<StillSyntaxLetDeclaration>> {
-    let pattern_node: StillSyntaxNode<StillSyntaxPattern> = parse_still_syntax_pattern(state)?;
-    parse_still_whitespace(state);
-    let maybe_equals_key_symbol_range: Option<lsp_types::Range> = parse_symbol_as_range(state, "=");
-    parse_still_whitespace(state);
-    let maybe_expression: Option<StillSyntaxNode<StillSyntaxExpression>> =
-        parse_still_syntax_expression_space_separated(state);
-    Some(StillSyntaxNode {
-        range: lsp_types::Range {
-            start: pattern_node.range.start,
-            end: match &maybe_expression {
-                None => maybe_equals_key_symbol_range
-                    .map(|r| r.end)
-                    .unwrap_or_else(|| pattern_node.range.end),
-                Some(expression_node) => expression_node.range.end,
-            },
-        },
-        value: StillSyntaxLetDeclaration::Destructuring {
-            pattern: pattern_node,
-            equals_key_symbol_range: maybe_equals_key_symbol_range,
-            expression: maybe_expression.map(still_syntax_node_box),
-        },
-    })
-}
-fn parse_still_syntax_let_variable_declaration_node(
-    state: &mut ParseState,
-) -> Option<StillSyntaxNode<StillSyntaxLetDeclaration>> {
     let name_node: StillSyntaxNode<StillName> = parse_still_lowercase_name_node(state)?;
     parse_still_whitespace(state);
     let _: bool = parse_symbol(state, "=");
@@ -7953,7 +7769,7 @@ fn parse_still_syntax_let_variable_declaration_node(
                 .map(|node| node.range.end)
                 .unwrap_or(name_node.range.end),
         },
-        value: StillSyntaxLetDeclaration::VariableDeclaration {
+        value: StillSyntaxLetDeclaration {
             name: name_node,
             result: maybe_result.map(still_syntax_node_box),
         },
@@ -9767,36 +9583,15 @@ fn still_syntax_expression_connect_variables_in_graph_from(
             declaration: maybe_declaration,
             result: maybe_result,
         } => {
-            if let Some(declaration_node) = maybe_declaration {
-                match &declaration_node.value {
-                    StillSyntaxLetDeclaration::Destructuring {
-                        pattern: _,
-                        equals_key_symbol_range: _,
-                        expression: maybe_destructured_expression,
-                    } => {
-                        if let Some(destructured_expression_node) = maybe_destructured_expression {
-                            still_syntax_expression_connect_variables_in_graph_from(
-                                variable_graph,
-                                origin_variable_declaration_graph_node,
-                                variable_graph_node_by_name,
-                                still_syntax_node_unbox(destructured_expression_node),
-                            );
-                        }
-                    }
-                    StillSyntaxLetDeclaration::VariableDeclaration {
-                        name: _,
-                        result: maybe_destructured_expression,
-                    } => {
-                        if let Some(destructured_expression_node) = maybe_destructured_expression {
-                            still_syntax_expression_connect_variables_in_graph_from(
-                                variable_graph,
-                                origin_variable_declaration_graph_node,
-                                variable_graph_node_by_name,
-                                still_syntax_node_unbox(destructured_expression_node),
-                            );
-                        }
-                    }
-                }
+            if let Some(declaration_node) = maybe_declaration
+                && let Some(variable_result_expression_node) = &declaration_node.value.result
+            {
+                still_syntax_expression_connect_variables_in_graph_from(
+                    variable_graph,
+                    origin_variable_declaration_graph_node,
+                    variable_graph_node_by_name,
+                    still_syntax_node_unbox(variable_result_expression_node),
+                );
             }
             if let Some(result_node) = maybe_result {
                 still_syntax_expression_connect_variables_in_graph_from(
@@ -13452,106 +13247,46 @@ fn still_syntax_let_declaration_to_rust_into<'a>(
     local_bindings: std::rc::Rc<std::collections::HashMap<&'a str, Option<StillType>>>,
     declaration_node: StillSyntaxNode<&'a StillSyntaxLetDeclaration>,
 ) -> CompiledStillLetDeclarationInfo<'a> {
-    match &declaration_node.value {
-        StillSyntaxLetDeclaration::Destructuring {
-            pattern: pattern_node,
-            equals_key_symbol_range: _,
-            expression: maybe_destructured_expression,
-        } => {
-            let compiled_destructured: CompiledStillExpression =
-                maybe_still_syntax_expression_to_rust(
-                    errors,
-                    || StillErrorNode {
-                        range: declaration_node.range,
-                        message: Box::from("missing let destructuring result in let ... = here"),
-                    },
-                    records_used,
-                    type_aliases,
-                    choice_types,
-                    project_variable_declarations,
-                    local_bindings.clone(),
-                    false,
-                    maybe_destructured_expression
-                        .as_ref()
-                        .map(still_syntax_node_unbox),
-                );
-            let mut bindings_to_clone: Vec<BindingToClone> = Vec::new();
-            let mut local_bindings = std::rc::Rc::unwrap_or_clone(local_bindings);
-            let compiled_pattern: CompiledStillPattern = still_syntax_pattern_to_rust(
-                errors,
-                records_used,
-                &mut local_bindings,
-                &mut bindings_to_clone,
-                type_aliases,
-                choice_types,
-                false,
-                still_syntax_node_as_ref(pattern_node),
-            );
-            bindings_to_clone_to_rust_into(rust_stmts, bindings_to_clone);
-            let Some(rust_pattern) = compiled_pattern.rust else {
-                return CompiledStillLetDeclarationInfo {
-                    uses_allocator: false,
-                    local_bindings_including_let: local_bindings,
-                };
-            };
-            // TODO check expression type equals pattern type
-            rust_stmts.push(syn::Stmt::Local(syn::Local {
-                attrs: vec![],
-                let_token: syn::token::Let(syn_span()),
-                pat: rust_pattern,
-                init: Some(syn::LocalInit {
-                    eq_token: syn::token::Eq(syn_span()),
-                    expr: Box::new(compiled_destructured.rust),
-                    diverge: None,
-                }),
-                semi_token: syn::token::Semi(syn_span()),
-            }));
-            CompiledStillLetDeclarationInfo {
-                uses_allocator: compiled_destructured.uses_allocator,
-                local_bindings_including_let: local_bindings,
-            }
-        }
-        StillSyntaxLetDeclaration::VariableDeclaration {
-            name: name_node,
-            result: maybe_result,
-        } => {
-            let compiled_result: CompiledStillExpression = maybe_still_syntax_expression_to_rust(
-                errors,
-                || StillErrorNode {
-                    range: declaration_node.range,
-                    message: Box::from(
-                        "missing assigned let variable declaration expression in let ..name.. here",
-                    ),
-                },
-                records_used,
-                type_aliases,
-                choice_types,
-                project_variable_declarations,
-                local_bindings.clone(),
-                // TODO eventually true when all uses are allocated if necessary
-                false,
-                maybe_result.as_ref().map(still_syntax_node_unbox),
-            );
-            rust_stmts.push(syn::Stmt::Local(syn::Local {
-                attrs: vec![],
-                let_token: syn::token::Let(syn_span()),
-                pat: syn_pat_variable(&name_node.value),
-                init: Some(syn::LocalInit {
-                    eq_token: syn::token::Eq(syn_span()),
-                    expr: Box::new(compiled_result.rust),
-                    diverge: None,
-                }),
-                semi_token: syn::token::Semi(syn_span()),
-            }));
-            let mut local_bindings = std::rc::Rc::unwrap_or_clone(local_bindings);
-            local_bindings.insert(&name_node.value, compiled_result.type_);
-            CompiledStillLetDeclarationInfo {
-                uses_allocator: compiled_result.uses_allocator,
-                local_bindings_including_let: local_bindings,
-            }
-        }
+    let compiled_result: CompiledStillExpression = maybe_still_syntax_expression_to_rust(
+        errors,
+        || StillErrorNode {
+            range: declaration_node.range,
+            message: Box::from(
+                "missing assigned let variable declaration expression in let ..name.. here",
+            ),
+        },
+        records_used,
+        type_aliases,
+        choice_types,
+        project_variable_declarations,
+        local_bindings.clone(),
+        // TODO eventually true when all uses are allocated if necessary
+        false,
+        declaration_node
+            .value
+            .result
+            .as_ref()
+            .map(still_syntax_node_unbox),
+    );
+    rust_stmts.push(syn::Stmt::Local(syn::Local {
+        attrs: vec![],
+        let_token: syn::token::Let(syn_span()),
+        pat: syn_pat_variable(&declaration_node.value.name.value),
+        init: Some(syn::LocalInit {
+            eq_token: syn::token::Eq(syn_span()),
+            expr: Box::new(compiled_result.rust),
+            diverge: None,
+        }),
+        semi_token: syn::token::Semi(syn_span()),
+    }));
+    let mut local_bindings = std::rc::Rc::unwrap_or_clone(local_bindings);
+    local_bindings.insert(&declaration_node.value.name.value, compiled_result.type_);
+    CompiledStillLetDeclarationInfo {
+        uses_allocator: compiled_result.uses_allocator,
+        local_bindings_including_let: local_bindings,
     }
 }
+
 fn maybe_still_syntax_pattern_to_rust<'a>(
     errors: &mut Vec<StillErrorNode>,
     error_on_none: impl FnOnce() -> StillErrorNode,

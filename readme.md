@@ -57,7 +57,6 @@ Then point your editor to `still lsp`, see also [specific setups](#editor-setups
 - no `Task`/`async`, visible mutation, side effects, infix operators, currying, modules, lifetime tracking
 
 ## TODO
-- remove let destructuring
 - correct impl to &dyn in type declarations (is impl not supported in type alias?)
 - correctly clone captures before closure
 - avoid generating unused lifetime in fn item when no allocator and its type uses lifetime
