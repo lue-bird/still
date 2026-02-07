@@ -26,8 +26,8 @@ run \:opt str:state-or-uninitialized >
           :opt str:Present :str:initialized > initialized
     :io str:Io-batch
         [ :io str:Standard-out-write
-            (str-flatten [ ansi-clear-screen, state, "\nType a sentence to echo: " ])
-        , :io str:Standard-in-read-line (\:str:line > line)
+            strs-flatten [ ansi-clear-screen, state, "\nType a sentence to echo: " ]
+        , :io str:Standard-in-read-line \:str:line > line
         ]
 ```
 
@@ -70,7 +70,7 @@ Then point your editor to `still lsp`, see also [specific setups](#editor-setups
     n + 1
   #
   second-function second-argument
-      # notice he nesting
+      # notice the indented nesting
       (first-function first-argument subject)
   ```
   now

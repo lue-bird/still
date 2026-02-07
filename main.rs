@@ -3798,7 +3798,7 @@ fn still_syntax_expression_not_parenthesized_into(
             }
         },
         StillSyntaxExpression::Parenthesized(None) => {
-            so_far.push_str("())");
+            so_far.push_str("()");
         }
         StillSyntaxExpression::Parenthesized(Some(in_parens)) => {
             let innermost: StillSyntaxNode<&StillSyntaxExpression> =
@@ -3836,7 +3836,12 @@ fn still_syntax_expression_not_parenthesized_into(
             }
             so_far.push(':');
             if let Some(expression_node_in_typed) = maybe_expression {
-                if still_syntax_range_line_span(expression_node.range) == LineSpan::Multiple {
+                if match &expression_node_in_typed.value {
+                    StillSyntaxExpressionUntyped::Variant { .. } => false,
+                    StillSyntaxExpressionUntyped::Other(_) => {
+                        still_syntax_range_line_span(expression_node.range) == LineSpan::Multiple
+                    }
+                } {
                     linebreak_indented_into(so_far, indent);
                 }
                 match &expression_node_in_typed.value {
@@ -6382,7 +6387,6 @@ fn still_syntax_highlight_expression_into(
             variable: variable_node,
             arguments,
         } => {
-            // TODO different color for actual calls?
             highlighted_so_far.push(StillSyntaxNode {
                 range: variable_node.range,
                 value: StillSyntaxHighlightKind::DeclaredVariable,
@@ -7582,13 +7586,8 @@ fn parse_still_syntax_expression_variant_node(
 ) -> Option<StillSyntaxNode<StillSyntaxExpressionUntyped>> {
     let name_node: StillSyntaxNode<StillName> = parse_still_uppercase_name_node(state)?;
     parse_still_whitespace(state);
-    let maybe_value: Option<StillSyntaxNode<StillSyntaxExpression>> = {
-        if state.position.character <= u32::from(state.indent) {
-            None
-        } else {
-            parse_still_syntax_expression_not_space_separated(state)
-        }
-    };
+    let maybe_value: Option<StillSyntaxNode<StillSyntaxExpression>> =
+        parse_still_syntax_expression_space_separated(state);
     Some(StillSyntaxNode {
         range: lsp_types::Range {
             start: name_node.range.start,

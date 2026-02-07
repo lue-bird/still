@@ -51,3 +51,22 @@ interface \:state:state >
     , standard-out-write int-to-str state
     }
 
+ansi-clear-screen
+    "\u{001B}c"
+
+run \:opt str:state-or-uninitialized >
+    let state
+            case state-or-uninitialized of
+                :opt str:Absent > ""
+                :opt str:Present :str:initialized > initialized
+    :io str:Io-batch
+        [ :io str:Standard-out-write
+            strs-flatten
+                [ ansi-clear-screen, state, "\\nType a sentence to echo: " ]
+        , :io str:Standard-in-read-line \:str:line > line
+        ]
+
+choice io Future
+    | Standard-out-write str
+    | Standard-in-read-line \str > Future
+

@@ -53,6 +53,7 @@ ref-patterns = { level = "warn" }
 int_plus_one = { level = "allow" }
 question_mark = { level = "allow" }
 items_after_statements = { level = "allow" }
+match_like_matches_macro = { level = "allow" }
 
 pedantic = { level = "warn", priority = -1 }
 # might enable later, currently just annoying
