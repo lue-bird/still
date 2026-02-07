@@ -24,7 +24,7 @@ run \:opt str:state-or-uninitialized >
         case state-or-uninitialized
         | :opt str:Absent > ""
         | :opt str:Present :str:initialized > initialized
-    :io str:Io-batch
+    :io str:Batch
         [ :io str:Standard-out-write
             strs-flatten [ ansi-clear-screen, state, "\nType a sentence to echo: " ]
         , :io str:Standard-in-read-line \:str:line > line
@@ -57,41 +57,12 @@ Then point your editor to `still lsp`, see also [specific setups](#editor-setups
 - no `Task`/`async`, visible mutation, side effects, infix operators, currying, modules, lifetime tracking
 
 ## TODO
+- remove let destructuring
+- correct impl to &dyn in type declarations (is impl not supported in type alias?)
+- correctly clone captures before closure
 - avoid generating unused lifetime in fn item when no allocator and its type uses lifetime
 - fix bug of `\n` being printed as `\\n`
 - type checking (vec elements equal, case results equal, function arguments equal to parameters, typed, variant value) (notably also: check that each function output type only ever uses type variables used in the input type, and similarly: on non-function types, forbid the use of any new variables; in the error say "unknown type variable")
-- rename `case x of ... > ...` to `x | ... > ...` and remove let destructuring. previous:
-  ```still
-  let :some:Variant member = variant
-  result
-  #
-  case option of
-  :opt int:Absent >
-    0
-  :opt int:Present n >
-    n + 1
-  #
-  second-function second-argument
-      # notice the indented nesting
-      (first-function first-argument subject)
-  ```
-  now
-  ```still
-  variant
-  | :some:Variant member >
-  result
-  #
-  option
-  | :opt int:Absent >
-    0
-  | :opt int:Present n >
-  n + 1
-  #
-  first-function first-argument argument
-  | :first-result:first-result >
-  second-function second-argument first-result
-  ```
-  this solves the nesting problem of early exits, "if else" and pipelines
 - complete small standard library in rust (TODO `order`, `dec-power`, `str-compare`, `int-compare`, `dec-compare`, `map`, `set`, ...)
 - replace `&'a dyn Fn(_) -> _` in function parameters by `impl Fn(_) -> _ + Clone + 'a`
   and likewise remove `alloc.alloc(|_| _)` when used as direct function parameter: `|_| _`
@@ -125,8 +96,37 @@ Then point your editor to `still lsp`, see also [specific setups](#editor-setups
   allows non-called generic functions, would allow the removal of all "::Typed" patterns and expressions (except recursion? but maybe there is a better solution for that).
 - (seems completely useless) infer constness of generated variable/fn items
 
+## syntax overview
+### matching and destructuring
+Any expression can be followed with any number of `| pattern > result` cases:
+```still
+option
+| :opt int:Absent >
+    0
+| :opt int:Present n >
+    n + 1
+```
+The last case result is allowed to be unindented;
+in effect this is like an early return.
+
+This indentation trick makes it fairly nice to do simple destructuring:
+```still
+variant
+| :some:Variant member >
+result
+```
+or something close to pipelines
+```still
+f x argument
+| :f-result:f-result >
+g y first-result
+| :g-result:g-result >
+h z g-result
+```
+You will probably prefer `let` for most cases, though.
+
 ## editor setups
-feel free to contribute, as I only use vscodium
+feel free to contribute as I only use vscodium
 
 ### vscode-like
 #### pre-built

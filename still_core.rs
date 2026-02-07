@@ -1,4 +1,9 @@
-#![allow(dead_code, non_shorthand_field_patterns, non_camel_case_types)]
+#![allow(
+    dead_code,
+    non_shorthand_field_patterns,
+    non_camel_case_types,
+    unused_imports
+)]
 #![allow(clippy::needless_pass_by_value, clippy::wrong_self_convention)]
 #![no_implicit_prelude]
 extern crate std;
@@ -6,6 +11,7 @@ use std::clone::Clone;
 use std::cmp::{Eq, Ord, PartialEq, PartialOrd};
 use std::hash::Hash;
 use std::marker::Copy;
+use std::ops::Fn;
 // core //
 
 /// bring your own bump/... allocator. For example:

@@ -2454,7 +2454,8 @@ enum StillSyntaxExpression {
         arguments: Vec<StillSyntaxNode<StillSyntaxExpression>>,
     },
     Match {
-        matched: Option<StillSyntaxNode<Box<StillSyntaxExpression>>>,
+        matched: StillSyntaxNode<Box<StillSyntaxExpression>>,
+        // consider splitting into case0, case1_up
         cases: Vec<StillSyntaxExpressionCase>,
     },
     Char(Option<char>),
@@ -3646,38 +3647,17 @@ fn still_syntax_expression_not_parenthesized_into(
             }
         }
         StillSyntaxExpression::Match {
-            matched: maybe_matched,
-
+            matched: matched_node,
             cases,
         } => {
-            so_far.push_str("case");
-            match maybe_matched {
-                None => {
-                    so_far.push(' ');
-                }
-                Some(matched_node) => {
-                    let before_cases_line_span: LineSpan =
-                        still_syntax_range_line_span(matched_node.range);
-                    space_or_linebreak_indented_into(
-                        so_far,
-                        before_cases_line_span,
-                        next_indent(indent),
-                    );
-                    still_syntax_expression_not_parenthesized_into(
-                        so_far,
-                        next_indent(indent),
-                        still_syntax_node_unbox(matched_node),
-                    );
-                    space_or_linebreak_indented_into(so_far, before_cases_line_span, indent);
-                }
-            }
-            if cases.is_empty() {
+            still_syntax_expression_not_parenthesized_into(
+                so_far,
+                indent,
+                still_syntax_node_unbox(matched_node),
+            );
+            for case in cases {
                 linebreak_indented_into(so_far, indent);
-            } else {
-                for case in cases {
-                    linebreak_indented_into(so_far, indent);
-                    still_syntax_case_into(so_far, indent, case);
-                }
+                still_syntax_case_into(so_far, indent, case);
             }
         }
         StillSyntaxExpression::Char(maybe_char) => {
@@ -4798,20 +4778,18 @@ fn still_syntax_expression_find_symbol_at_position<'a>(
                 })
         }
         StillSyntaxExpression::Match {
-            matched: maybe_matched,
+            matched: matched_node,
 
             cases,
         } => {
-            if let Some(matched_node) = maybe_matched {
-                local_bindings = still_syntax_expression_find_symbol_at_position(
-                    local_bindings,
-                    type_aliases,
-                    variable_declarations,
-                    scope_declaration,
-                    still_syntax_node_unbox(matched_node),
-                    position,
-                )?;
-            }
+            local_bindings = still_syntax_expression_find_symbol_at_position(
+                local_bindings,
+                type_aliases,
+                variable_declarations,
+                scope_declaration,
+                still_syntax_node_unbox(matched_node),
+                position,
+            )?;
             cases
                 .iter()
                 .try_fold(local_bindings, |mut local_bindings, case| {
@@ -5429,18 +5407,15 @@ fn still_syntax_expression_uses_of_symbol_into(
             }
         }
         StillSyntaxExpression::Match {
-            matched: maybe_matched,
-
+            matched: matched_node,
             cases,
         } => {
-            if let Some(matched_node) = maybe_matched {
-                still_syntax_expression_uses_of_symbol_into(
-                    uses_so_far,
-                    local_bindings,
-                    still_syntax_node_unbox(matched_node),
-                    symbol_to_collect_uses_of,
-                );
-            }
+            still_syntax_expression_uses_of_symbol_into(
+                uses_so_far,
+                local_bindings,
+                still_syntax_node_unbox(matched_node),
+                symbol_to_collect_uses_of,
+            );
             for case in cases {
                 if let Some(case_pattern_node) = &case.pattern {
                     still_syntax_pattern_uses_of_symbol_into(
@@ -6422,22 +6397,13 @@ fn still_syntax_highlight_expression_into(
             }
         }
         StillSyntaxExpression::Match {
-            matched: maybe_matched,
+            matched: matched_node,
             cases,
         } => {
-            highlighted_so_far.push(StillSyntaxNode {
-                range: lsp_types::Range {
-                    start: still_syntax_expression_node.range.start,
-                    end: lsp_position_add_characters(still_syntax_expression_node.range.start, 4),
-                },
-                value: StillSyntaxHighlightKind::KeySymbol,
-            });
-            if let Some(matched_node) = maybe_matched {
-                still_syntax_highlight_expression_into(
-                    highlighted_so_far,
-                    still_syntax_node_unbox(matched_node),
-                );
-            }
+            still_syntax_highlight_expression_into(
+                highlighted_so_far,
+                still_syntax_node_unbox(matched_node),
+            );
             for case in cases {
                 highlighted_so_far.push(StillSyntaxNode {
                     range: case.or_bar_key_symbol_range,
@@ -7056,6 +7022,7 @@ fn parse_still_syntax_type_with_comment(
     state: &mut ParseState,
 ) -> Option<StillSyntaxNode<StillSyntaxType>> {
     let comment_node: StillSyntaxNode<Box<str>> = parse_still_comment(state)?;
+    parse_still_whitespace(state);
     let maybe_type: Option<StillSyntaxNode<StillSyntaxType>> = parse_still_syntax_type(state);
     Some(StillSyntaxNode {
         range: lsp_types::Range {
@@ -7325,6 +7292,7 @@ fn parse_still_syntax_pattern_with_comment(
     state: &mut ParseState,
 ) -> Option<StillSyntaxNode<StillSyntaxPattern>> {
     let comment_node: StillSyntaxNode<Box<str>> = parse_still_comment(state)?;
+    parse_still_whitespace(state);
     let maybe_pattern: Option<StillSyntaxNode<StillSyntaxPattern>> =
         parse_still_syntax_pattern(state);
     Some(StillSyntaxNode {
@@ -7515,13 +7483,53 @@ fn parse_still_text_content_char(state: &mut ParseState) -> Option<char> {
 fn parse_still_syntax_expression_space_separated(
     state: &mut ParseState,
 ) -> Option<StillSyntaxNode<StillSyntaxExpression>> {
-    parse_still_syntax_expression_typed(state)
-        .or_else(|| parse_still_syntax_expression_match(state))
-        .or_else(|| parse_still_syntax_expression_let_in(state))
-        .or_else(|| parse_still_syntax_expression_lambda(state))
-        .or_else(|| parse_still_syntax_expression_variable_or_call(state))
-        .or_else(|| parse_still_syntax_expression_with_comment_node(state))
-        .or_else(|| parse_still_syntax_expression_not_space_separated(state))
+    let start_expression_node: StillSyntaxNode<StillSyntaxExpression> =
+        parse_still_syntax_expression_typed(state)
+            .or_else(|| parse_still_syntax_expression_let_in(state))
+            .or_else(|| parse_still_syntax_expression_lambda(state))
+            .or_else(|| parse_still_syntax_expression_variable_or_call(state))
+            .or_else(|| parse_still_syntax_expression_with_comment_node(state))
+            .or_else(|| parse_still_syntax_expression_not_space_separated(state))?;
+    parse_still_whitespace(state);
+    let mut cases: Vec<StillSyntaxExpressionCase> = Vec::new();
+    'parsing_cases: while let Some((case, is_last_case)) = parse_still_syntax_expression_case(state)
+    {
+        cases.push(case);
+        if is_last_case {
+            break 'parsing_cases;
+        }
+        parse_still_whitespace(state);
+    }
+    if cases.is_empty() {
+        Some(start_expression_node)
+    } else {
+        Some(StillSyntaxNode {
+            range: lsp_types::Range {
+                start: start_expression_node.range.start,
+                end: cases
+                    .last()
+                    .map(|last_case| {
+                        last_case
+                            .result
+                            .as_ref()
+                            .map(|result| result.range.end)
+                            .or_else(|| {
+                                last_case
+                                    .arrow_key_symbol_range
+                                    .as_ref()
+                                    .map(|range| range.end)
+                            })
+                            .or_else(|| last_case.pattern.as_ref().map(|n| n.range.end))
+                            .unwrap_or(last_case.or_bar_key_symbol_range.end)
+                    })
+                    .unwrap_or(start_expression_node.range.end),
+            },
+            value: StillSyntaxExpression::Match {
+                matched: still_syntax_node_box(start_expression_node),
+                cases,
+            },
+        })
+    }
 }
 fn parse_still_syntax_expression_untyped_node(
     state: &mut ParseState,
@@ -7622,6 +7630,7 @@ fn parse_still_syntax_expression_with_comment_node(
     state: &mut ParseState,
 ) -> Option<StillSyntaxNode<StillSyntaxExpression>> {
     let comment_node: StillSyntaxNode<Box<str>> = parse_still_comment(state)?;
+    parse_still_whitespace(state);
     let maybe_expression: Option<StillSyntaxNode<StillSyntaxExpression>> =
         parse_still_syntax_expression_space_separated(state);
     Some(StillSyntaxNode {
@@ -7788,56 +7797,11 @@ fn parse_still_syntax_expression_lambda(
         },
     })
 }
-fn parse_still_syntax_expression_match(
-    state: &mut ParseState,
-) -> Option<StillSyntaxNode<StillSyntaxExpression>> {
-    let case_keyword_range: lsp_types::Range = parse_still_keyword_as_range(state, "case")?;
-    parse_still_whitespace(state);
-    let maybe_matched: Option<StillSyntaxNode<StillSyntaxExpression>> =
-        parse_still_syntax_expression_space_separated(state);
-    parse_still_whitespace(state);
-    let mut cases: Vec<StillSyntaxExpressionCase> = Vec::new();
-    'parsing_cases: while let Some((case, is_last_case)) = parse_still_syntax_expression_case(state)
-    {
-        cases.push(case);
-        if is_last_case {
-            break 'parsing_cases;
-        }
-        parse_still_whitespace(state);
-    }
-    Some(StillSyntaxNode {
-        range: lsp_types::Range {
-            start: case_keyword_range.start,
-            end: cases
-                .last()
-                .map(|last_case| {
-                    last_case
-                        .result
-                        .as_ref()
-                        .map(|result| result.range.end)
-                        .or_else(|| {
-                            last_case
-                                .arrow_key_symbol_range
-                                .as_ref()
-                                .map(|range| range.end)
-                        })
-                        .or_else(|| last_case.pattern.as_ref().map(|n| n.range.end))
-                        .unwrap_or(last_case.or_bar_key_symbol_range.end)
-                })
-                .or_else(|| maybe_matched.as_ref().map(|n| n.range.end))
-                .unwrap_or(case_keyword_range.end),
-        },
-        value: StillSyntaxExpression::Match {
-            matched: maybe_matched.map(still_syntax_node_box),
-            cases,
-        },
-    })
-}
 /// second tuple part signifies wether the parsed case must be the last case (TODO make struct)
 fn parse_still_syntax_expression_case(
     state: &mut ParseState,
 ) -> Option<(StillSyntaxExpressionCase, bool)> {
-    if state.position.character < u32::from(state.indent) {
+    if state.position.character <= u32::from(state.indent) {
         return None;
     }
     let bar_key_symbol_range: lsp_types::Range = parse_symbol_as_range(state, "|")?;
@@ -9083,17 +9047,20 @@ Do not use plain `str` to build a big string.
                     r"Either you have some value or you have nothing."
                 )),
                 parameters: vec![still_syntax_node_empty(StillName::from("A"))],
-                variants: vec![StillSyntaxChoiceTypeVariant {
-                    or_key_symbol_range: lsp_types::Range::default(),
-                    name: Some(still_syntax_node_empty(StillName::from("Absent"))),
-                    value: None,
-                },StillSyntaxChoiceTypeVariant {
-                    or_key_symbol_range: lsp_types::Range::default(),
-                    name: Some(still_syntax_node_empty(StillName::from("Present"))),
-                    value: Some(still_syntax_node_empty(StillSyntaxType::Variable(
-                        StillName::from("A"),
-                    ))),
-                }],
+                variants: vec![
+                    StillSyntaxChoiceTypeVariant {
+                        or_key_symbol_range: lsp_types::Range::default(),
+                        name: Some(still_syntax_node_empty(StillName::from("Absent"))),
+                        value: None,
+                    },
+                    StillSyntaxChoiceTypeVariant {
+                        or_key_symbol_range: lsp_types::Range::default(),
+                        name: Some(still_syntax_node_empty(StillName::from("Present"))),
+                        value: Some(still_syntax_node_empty(StillSyntaxType::Variable(
+                            StillName::from("A"),
+                        ))),
+                    }
+                ],
                 is_copy: true,
                 has_lifetime_parameter: false,
                 recursive_variant_value_variant_indexes: vec![],
@@ -9762,18 +9729,15 @@ fn still_syntax_expression_connect_variables_in_graph_from(
             }
         }
         StillSyntaxExpression::Match {
-            matched: maybe_matched,
-
+            matched: matched_node,
             cases,
         } => {
-            if let Some(matched_node) = maybe_matched {
-                still_syntax_expression_connect_variables_in_graph_from(
-                    variable_graph,
-                    origin_variable_declaration_graph_node,
-                    variable_graph_node_by_name,
-                    still_syntax_node_unbox(matched_node),
-                );
-            }
+            still_syntax_expression_connect_variables_in_graph_from(
+                variable_graph,
+                origin_variable_declaration_graph_node,
+                variable_graph_node_by_name,
+                still_syntax_node_unbox(matched_node),
+            );
             for case in cases {
                 if let Some(field_value_node) = &case.result {
                     still_syntax_expression_connect_variables_in_graph_from(
@@ -11177,7 +11141,7 @@ fn variable_declaration_to_rust<'a>(
                     attrs: vec![],
                     ident: syn_ident(&still_type_variable_to_rust(name)),
                     colon_token: Some(syn::token::Colon(syn_span())),
-                    bounds: default_parameter_bounds().collect(),
+                    bounds: default_parameter_bounds(syn_default_lifetime_name).collect(),
                     eq_token: None,
                     default: None,
                 })
@@ -11986,7 +11950,7 @@ fn still_type_to_rust(
                         ),
                     }),
                 }))
-                .chain(default_parameter_bounds())
+                .chain(default_parameter_bounds(lifetime))
                 .collect(),
             })
         }
@@ -12226,7 +12190,7 @@ fn still_syntax_type_to_rust(
                         ),
                     }),
                 }))
-                .chain(default_parameter_bounds())
+                .chain(default_parameter_bounds(lifetime))
                 .collect(),
             })
         }
@@ -13116,23 +13080,19 @@ fn still_syntax_expression_to_rust<'a>(
                         }
                     };
                     CompiledStillExpression {
-                        rust: if arguments.is_empty() {
-                            rust_reference
-                        } else {
-                            syn::Expr::Call(syn::ExprCall {
-                                attrs: vec![],
-                                func: Box::new(rust_reference),
-                                paren_token: syn::token::Paren(syn_span()),
-                                args: if project_variable_info.has_allocator_parameter {
-                                    Some(syn_expr_reference([default_allocator_parameter_name]))
-                                } else {
-                                    None
-                                }
-                                .into_iter()
-                                .chain(rust_arguments)
-                                .collect(),
-                            })
-                        },
+                        rust: syn::Expr::Call(syn::ExprCall {
+                            attrs: vec![],
+                            func: Box::new(rust_reference),
+                            paren_token: syn::token::Paren(syn_span()),
+                            args: if project_variable_info.has_allocator_parameter {
+                                Some(syn_expr_reference([default_allocator_parameter_name]))
+                            } else {
+                                None
+                            }
+                            .into_iter()
+                            .chain(rust_arguments)
+                            .collect(),
+                        }),
                         uses_allocator: project_variable_info.has_allocator_parameter
                             || uses_allocator,
                         type_: Some(type_),
@@ -13141,21 +13101,9 @@ fn still_syntax_expression_to_rust<'a>(
             }
         }
         StillSyntaxExpression::Match {
-            matched: maybe_matched,
-
+            matched: matched_node,
             cases,
         } => {
-            let Some(matched_node) = maybe_matched else {
-                errors.push(StillErrorNode {
-                    range: expression_node.range,
-                    message: Box::from("missing matched expression in case here | ..cases.."),
-                });
-                return CompiledStillExpression {
-                    uses_allocator: false,
-                    type_: None,
-                    rust: syn_expr_todo(),
-                };
-            };
             let compiled_matched: CompiledStillExpression = still_syntax_expression_to_rust(
                 errors,
                 records_used,
@@ -14017,7 +13965,7 @@ fn still_syntax_pattern_to_rust<'a>(
                                     .recursive_variant_value_variant_indexes
                                     .contains(&variant_index_in_origin_choice_type)
                             });
-                        let compiled_maybe_value: Option<syn::Pat> = match maybe_value.as_ref() {
+                        let maybe_rust_value: Option<syn::Pat> = match maybe_value.as_ref() {
                             None => {
                                 // TODO check origin variant also has no value
                                 None
@@ -14055,17 +14003,25 @@ fn still_syntax_pattern_to_rust<'a>(
                                 Some(value_rust_pattern)
                             }
                         };
+                        let rust_variant_path = syn_path_reference([
+                            &still_name_to_uppercase_rust(&origin_choice_type_name),
+                            &still_name_to_uppercase_rust(&name_node.value),
+                        ]);
                         CompiledStillPattern {
-                            rust: Some(syn::Pat::TupleStruct(syn::PatTupleStruct {
-                                attrs: vec![],
-                                qself: None,
-                                path: syn_path_reference([
-                                    &still_name_to_uppercase_rust(&origin_choice_type_name),
-                                    &still_name_to_uppercase_rust(&name_node.value),
-                                ]),
-                                paren_token: syn::token::Paren(syn_span()),
-                                elems: compiled_maybe_value.into_iter().collect(),
-                            })),
+                            rust: Some(match maybe_rust_value {
+                                None => syn::Pat::Path(syn::ExprPath {
+                                    attrs: vec![],
+                                    qself: None,
+                                    path: rust_variant_path,
+                                }),
+                                Some(rust_value) => syn::Pat::TupleStruct(syn::PatTupleStruct {
+                                    attrs: vec![],
+                                    qself: None,
+                                    path: rust_variant_path,
+                                    paren_token: syn::token::Paren(syn_span()),
+                                    elems: std::iter::once(rust_value).collect(),
+                                }),
+                            }),
                             type_: Some(StillType::Construct {
                                 name: origin_choice_type_name,
                                 arguments: origin_choice_type_arguments,
@@ -14194,6 +14150,7 @@ fn still_name_to_uppercase_rust(name: &str) -> String {
         "Alloc",
         "StillIntoOwned",
         "OwnedToStill",
+        "Fn",
     ]
     .contains(&sanitized.as_str())
     {
@@ -14215,7 +14172,7 @@ fn still_name_to_lowercase_rust(name: &str) -> String {
 }
 /// both weak, reserved and strong.
 /// see <https://doc.rust-lang.org/reference/keywords.html>
-const rust_lowercase_keywords: [&str; 56] = [
+const rust_lowercase_keywords: [&str; 55] = [
     "as",
     "break",
     "const",
@@ -14240,7 +14197,6 @@ const rust_lowercase_keywords: [&str; 56] = [
     "ref",
     "return",
     "self",
-    "Self",
     "struct",
     "super",
     "trait",
@@ -14428,9 +14384,9 @@ fn syn_type_infer() -> syn::Type {
         underscore_token: syn::token::Underscore(syn_span()),
     })
 }
-fn default_parameter_bounds() -> impl Iterator<Item = syn::TypeParamBound> {
+fn default_parameter_bounds(lifetime: &str) -> impl Iterator<Item = syn::TypeParamBound> {
     [
-        syn::TypeParamBound::Lifetime(syn_default_lifetime()),
+        syn::TypeParamBound::Lifetime(syn_lifetime(lifetime)),
         syn::TypeParamBound::Trait(syn::TraitBound {
             paren_token: None,
             modifier: syn::TraitBoundModifier::None,

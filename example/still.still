@@ -5,7 +5,7 @@ choice tree A
     | Branch vec (tree A)
 
 tree-size \:tree A:tree >
-    case tree 
+    tree
     | :tree A:Branch :vec (tree A):subs >
         vec-length subs
     | :tree A:Leaf :A:_ >
@@ -23,7 +23,7 @@ greet \{ name :str:name } >
     let another
         vec-attach list
             list
-    case name 
+    name
     | "me" >
         "Hello, you!"
     | :str:_ >
@@ -34,7 +34,7 @@ unfinished
     ]
 
 build-tree \:int:n >
-    case n 
+    n
     | 0 > :tree {}:Leaf {}
     | :int:not-0 >
         :tree A:Branch [ build-tree (int-add not-0 -1) ]
@@ -58,17 +58,28 @@ ansi-clear-screen
 
 run \:opt str:state-or-uninitialized >
     let state
-        case state-or-uninitialized 
+        state-or-uninitialized
         | :opt str:Absent > ""
         | :opt str:Present :str:initialized > initialized
-    :io str:Io-batch
+    :io str:Batch
         [ :io str:Standard-out-write
             strs-flatten
                 [ ansi-clear-screen, state, "\\nType a sentence to echo: " ]
-        , :io str:Standard-in-read-line \:str:line > line
         ]
 
 choice io Future
     | Standard-out-write str
-    | Standard-in-read-line \str > Future
+    | Batch vec (io Future)
+    | Standard-in-read-line
+        # TODO \str > Future
+        Future
+
+(#
+
+
+
+, :io str:Standard-in-read-line \:str:line > line
+
+#)
+
 

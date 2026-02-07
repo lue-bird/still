@@ -144,7 +144,7 @@
       "name": "keyword.other.still"
     },
     {
-      "match": "\\b(case|let|>|\\\\)\\s+",
+      "match": "\\b(let|>|\\\\)\\s+",
       "name": "keyword.control.still"
     },
     {
