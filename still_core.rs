@@ -2,7 +2,8 @@
     dead_code,
     non_shorthand_field_patterns,
     non_camel_case_types,
-    unused_imports
+    unused_imports,
+    non_upper_case_globals
 )]
 #![allow(clippy::needless_pass_by_value, clippy::wrong_self_convention)]
 #![no_implicit_prelude]

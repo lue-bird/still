@@ -8489,9 +8489,9 @@ fn still_project_info_to_rust(
                             documentation: variable_declaration
                                 .documentation
                                 .map(|n| n.value.clone()),
-
                             type_: None,
                             has_allocator_parameter: true,
+                            kind: RustVariableItemKind::Fn,
                         },
                     );
                 }
@@ -8516,7 +8516,7 @@ fn still_project_info_to_rust(
                                 &compiled_choice_type_infos,
                                 still_syntax_node_as_ref(&result_type_node),
                             ),
-
+                            kind: RustVariableItemKind::Fn,
                             has_allocator_parameter: true,
                         },
                     );
@@ -8540,7 +8540,7 @@ fn still_project_info_to_rust(
                     CompiledVariableDeclarationInfo {
                         documentation: variable_declaration.documentation.map(|n| n.value.clone()),
                         name_range: Some(variable_declaration.name.range),
-
+                        kind: compiled_variable_declaration.kind,
                         has_allocator_parameter: compiled_variable_declaration
                             .has_allocator_parameter,
                         type_: Some(compiled_variable_declaration.type_),
@@ -8568,6 +8568,7 @@ fn still_project_info_to_rust(
 struct CompiledVariableDeclarationInfo {
     name_range: Option<lsp_types::Range>,
     documentation: Option<Box<str>>,
+    kind: RustVariableItemKind,
     type_: Option<StillType>,
     has_allocator_parameter: bool,
 }
@@ -8592,108 +8593,126 @@ fn core_variable_declaration_infos()
         [
             (
                 StillName::from("int-negate"),
+                RustVariableItemKind::Fn,
                 false,
                 function([still_type_int], still_type_int),
                 "Flip its sign",
             ),
             (
                 StillName::from("int-absolute"),
+                RustVariableItemKind::Fn,
                 false,
                 function([still_type_int], still_type_int),
                 "If negative, negate",
             ),
             (
                 StillName::from("int-add"),
+                RustVariableItemKind::Fn,
                 false,
                 function([still_type_int,still_type_int], still_type_int),
                 "`+` plus operation",
             ),
             (
                 StillName::from("int-mul"),
+                RustVariableItemKind::Fn,
                 false,
                 function([still_type_int,still_type_int], still_type_int),
                 "`*` times operation",
             ),
             (
                 StillName::from("int-div"),
+                RustVariableItemKind::Fn,
                 false,
                 function([still_type_int,still_type_int], still_type_int),
                 "`/` integer divide operation, discarding any remainder",
             ),
             (
                 StillName::from("int-to-str"),
+                RustVariableItemKind::Fn,
                 true,
                 function([still_type_int], still_type_str),
                 "Convert `int` to `str`",
             ),
             (
                 StillName::from("str-to-int"),
+                RustVariableItemKind::Fn,
                 false,
                 function([still_type_str], opt(still_type_int)),
                 "Parse a complete `str` into an `int`, returning :opt int:Absent otherwise",
             ),
             (
                 StillName::from("dec-negate"),
+                RustVariableItemKind::Fn,
                 false,
                 function([still_type_dec], still_type_dec),
                 "Flip its sign",
             ),
             (
                 StillName::from("dec-absolute"),
+                RustVariableItemKind::Fn,
                 false,
                 function([still_type_dec], still_type_dec),
                 "If negative, negate",
             ),
             (
                 StillName::from("dec-add"),
+                RustVariableItemKind::Fn,
                 false,
                 function([still_type_dec,still_type_dec], still_type_dec),
                 "`+` plus operation",
             ),
             (
                 StillName::from("dec-mul"),
+                RustVariableItemKind::Fn,
                 false,
                 function([still_type_dec,still_type_dec], still_type_dec),
                 "`*` times operation",
             ),
             (
                 StillName::from("dec-div"),
+                RustVariableItemKind::Fn,
                 false,
                 function([still_type_dec,still_type_dec], still_type_dec),
                 "`/` divide operation",
             ),
             (
                 StillName::from("dec-to-str"),
+                RustVariableItemKind::Fn,
                 true,
                 function([still_type_dec], still_type_str),
                 "Convert `dec` to `str`",
             ),
             (
                 StillName::from("str-to-dec"),
+                RustVariableItemKind::Fn,
                 false,
                 function([still_type_str], opt(still_type_dec)),
                 "Parse a complete `str` into an `dec`, returning :opt dec:Absent otherwise",
             ),
             (
                 StillName::from("chr-byte-count"),
+                RustVariableItemKind::Fn,
                 false,
                 function([still_type_chr], still_type_int),
                 "Encoded as UTF-8, how many bytes the `chr` spans, between 1 and 4",
             ),
             (
                 StillName::from("chr-to-str"),
+                RustVariableItemKind::Fn,
                 true,
                 function([still_type_chr], still_type_str),
                 "Convert `chr` to `str`",
             ),
             (
                 StillName::from("str-byte-count"),
+                RustVariableItemKind::Fn,
                 false,
                 function([still_type_str], still_type_int),
                 "Encoded as UTF-8, how many bytes the `str` spans",
             ),
             (
                 StillName::from("str-chr-at-byte-index"),
+                RustVariableItemKind::Fn,
                 false,
                 function(
                     [still_type_int, still_type_str],
@@ -8703,30 +8722,35 @@ fn core_variable_declaration_infos()
             ),
             (
                 StillName::from("str-to-chrs"),
+                RustVariableItemKind::Fn,
                 true,
                 function([still_type_str], still_type_vec(still_type_chr)),
                 "Split the `str` into a `vec` of `chr`s",
             ),
             (
                 StillName::from("chrs-to-str"),
+                RustVariableItemKind::Fn,
                 true,
                 function([still_type_vec(still_type_chr)], still_type_str),
                 "Concatenate a `vec` of `chr`s into one `str`",
             ),
             (
                 StillName::from("vec-repeat"),
+                RustVariableItemKind::Fn,
                 true,
                 function([still_type_int, variable("A")], still_type_vec(variable("A"))),
                 "Build a `vec` with a given length and a given element at each index",
             ),
             (
                 StillName::from("vec-length"),
+                RustVariableItemKind::Fn,
                 false,
                 function([still_type_vec(variable("A"))], still_type_int),
                 "Its element count",
             ),
             (
                 StillName::from("vec-element"),
+                RustVariableItemKind::Fn,
                 false,
                 function(
                     [still_type_int, still_type_vec(variable("A"))],
@@ -8736,6 +8760,7 @@ fn core_variable_declaration_infos()
             ),
             (
                 StillName::from("vec-take"),
+                RustVariableItemKind::Fn,
                 false,
                 function(
                     [still_type_int, still_type_vec(variable("A"))],
@@ -8745,30 +8770,34 @@ fn core_variable_declaration_infos()
             ),
             (
                 StillName::from("vec-attach"),
+                RustVariableItemKind::Fn,
                 false,
                 function([still_type_vec(variable("A")), still_type_vec(variable("A"))], still_type_vec(variable("A"))),
                 "Glue the elements in a second `vec` after the first `vec`",
             ),
             (
                 StillName::from("vec-flatten"),
+                RustVariableItemKind::Fn,
                 false,
                 function([still_type_vec(still_type_vec(variable("A")))], still_type_vec(variable("A"))),
                 "Concatenate all the elements nested inside the inner `vec`s",
             ),
             (
                 StillName::from("strs-flatten"),
+                RustVariableItemKind::Fn,
                 true,
                 function([still_type_vec(still_type_str)], still_type_str),
                 "Concatenate all the string elements",
             ),
         ]
-        .map(|(name, has_allocator_parameter, type_, documentation)| {
+        .map(|(name, kind, has_allocator_parameter, type_, documentation)| {
+            // TODO inline
             (
                 name,
                 CompiledVariableDeclarationInfo {
                     name_range: None,
                     documentation: Some(Box::from(documentation)),
-                    
+                    kind: kind,
                     type_: Some(type_),
                     has_allocator_parameter: has_allocator_parameter,
                 },
@@ -10932,6 +10961,12 @@ struct CompiledVariableDeclaration {
     rust: syn::Item,
     has_allocator_parameter: bool,
     type_: StillType,
+    kind: RustVariableItemKind,
+}
+#[derive(Clone, Copy)]
+enum RustVariableItemKind {
+    Fn,
+    Static,
 }
 fn variable_declaration_to_rust<'a>(
     errors: &mut Vec<StillErrorNode>,
@@ -10964,7 +10999,7 @@ fn variable_declaration_to_rust<'a>(
         still_type_resolve_outer_type_aliases(type_aliases, std::borrow::Cow::Owned(result_type))
             .map(std::borrow::Cow::into_owned)
     }) else {
-        // rust top level declarations need explicit types, so partial types won't do.
+        // rust top level declarations need explicit types; partial types won't do
         return None;
     };
     let mut still_type_parameters: std::collections::HashSet<&str> =
@@ -10978,25 +11013,31 @@ fn variable_declaration_to_rust<'a>(
     let rust_ident: syn::Ident = syn_ident(&still_name_to_lowercase_rust(
         &variable_declaration_info.name.value,
     ));
+    let has_lifetime_parameter: bool = compiled_result.uses_allocator
+        || still_type_uses_lifetime(type_aliases, choice_types, &type_);
     let rust_generics: syn::Generics = syn::Generics {
         lt_token: Some(syn::token::Lt(syn_span())),
-        params: std::iter::once(syn::GenericParam::Lifetime(syn_default_lifetime_param()))
-            .chain(still_type_parameters.iter().map(|name| {
-                syn::GenericParam::Type(syn::TypeParam {
-                    attrs: vec![],
-                    ident: syn_ident(&still_type_variable_to_rust(name)),
-                    colon_token: Some(syn::token::Colon(syn_span())),
-                    bounds: default_parameter_bounds(syn_default_lifetime_name).collect(),
-                    eq_token: None,
-                    default: None,
-                })
-            }))
-            .collect(),
+        params: (if has_lifetime_parameter {
+            Some(syn::GenericParam::Lifetime(syn_default_lifetime_param()))
+        } else {
+            None
+        })
+        .into_iter()
+        .chain(still_type_parameters.iter().map(|name| {
+            syn::GenericParam::Type(syn::TypeParam {
+                attrs: vec![],
+                ident: syn_ident(&still_type_variable_to_rust(name)),
+                colon_token: Some(syn::token::Colon(syn_span())),
+                bounds: default_parameter_bounds(syn_default_lifetime_name).collect(),
+                eq_token: None,
+                default: None,
+            })
+        }))
+        .collect(),
         gt_token: Some(syn::token::Gt(syn_span())),
         where_clause: None,
     };
-    // TODO when contains type contains neither type variables nor lifetime variables and oes not contain a function type,
-    // use syn::Item::Static(syn::ItemStatic
+    let has_no_type_variable_parameters: bool = still_type_parameters.is_empty();
     match type_ {
         StillType::Function {
             inputs: input_types,
@@ -11064,6 +11105,7 @@ fn variable_declaration_to_rust<'a>(
                         inputs: input_types,
                         output,
                     },
+                    kind: RustVariableItemKind::Fn,
                 })
             }
             result_rust => Some(CompiledVariableDeclaration {
@@ -11148,45 +11190,81 @@ fn variable_declaration_to_rust<'a>(
                     inputs: input_types,
                     output,
                 },
+                kind: RustVariableItemKind::Fn,
             }),
         },
-        type_not_function => Some(CompiledVariableDeclaration {
-            rust: syn::Item::Fn(syn::ItemFn {
-                attrs: rust_attrs,
-                vis: syn::Visibility::Public(syn::token::Pub(syn_span())),
-                sig: syn::Signature {
-                    constness: None,
-                    asyncness: None,
-                    unsafety: None,
-                    abi: None,
-                    fn_token: syn::token::Fn(syn_span()),
-                    ident: rust_ident,
-                    generics: rust_generics,
-                    paren_token: syn::token::Paren(syn_span()),
-                    inputs: (if compiled_result.uses_allocator {
-                        Some(default_allocator_fn_arg())
-                    } else {
-                        None
-                    })
-                    .into_iter()
-                    .collect(),
-                    output: syn::ReturnType::Type(
-                        syn::token::RArrow(syn_span()),
-                        Box::new(still_type_to_rust(
+        type_not_function => {
+            if has_no_type_variable_parameters
+                // not necessary: && !has_lifetime_parameter
+                && // only covers a subset of theoretical rust values that qualify,
+                   // and doesn't allow e.g. Box<str>.
+                   // It only coincidentally works for all current still values.
+                   still_type_is_copy(false, type_aliases, choice_types, &type_not_function)
+            {
+                Some(CompiledVariableDeclaration {
+                    rust: syn::Item::Static(syn::ItemStatic {
+                        attrs: rust_attrs,
+                        vis: syn::Visibility::Public(syn::token::Pub(syn_span())),
+                        mutability: syn::StaticMutability::None,
+                        static_token: syn::token::Static(syn_span()),
+                        ident: rust_ident,
+                        colon_token: syn::token::Colon(syn_span()),
+                        ty: Box::new(still_type_to_rust(
                             type_aliases,
                             choice_types,
-                            syn_default_lifetime_name,
-                            FnRepresentation::Impl,
+                            syn_static_lifetime_name,
+                            FnRepresentation::RefDyn,
                             &type_not_function,
                         )),
-                    ),
-                    variadic: None,
-                },
-                block: Box::new(syn_spread_expr_block(compiled_result.rust)),
-            }),
-            has_allocator_parameter: compiled_result.uses_allocator,
-            type_: type_not_function,
-        }),
+                        eq_token: syn::token::Eq(syn_span()),
+                        expr: Box::new(compiled_result.rust),
+                        semi_token: syn::token::Semi(syn_span()),
+                    }),
+                    has_allocator_parameter: false,
+                    type_: type_not_function,
+                    kind: RustVariableItemKind::Static,
+                })
+            } else {
+                Some(CompiledVariableDeclaration {
+                    rust: syn::Item::Fn(syn::ItemFn {
+                        attrs: rust_attrs,
+                        vis: syn::Visibility::Public(syn::token::Pub(syn_span())),
+                        sig: syn::Signature {
+                            constness: None,
+                            asyncness: None,
+                            unsafety: None,
+                            abi: None,
+                            fn_token: syn::token::Fn(syn_span()),
+                            ident: rust_ident,
+                            generics: rust_generics,
+                            paren_token: syn::token::Paren(syn_span()),
+                            inputs: (if compiled_result.uses_allocator {
+                                Some(default_allocator_fn_arg())
+                            } else {
+                                None
+                            })
+                            .into_iter()
+                            .collect(),
+                            output: syn::ReturnType::Type(
+                                syn::token::RArrow(syn_span()),
+                                Box::new(still_type_to_rust(
+                                    type_aliases,
+                                    choice_types,
+                                    syn_default_lifetime_name,
+                                    FnRepresentation::Impl,
+                                    &type_not_function,
+                                )),
+                            ),
+                            variadic: None,
+                        },
+                        block: Box::new(syn_spread_expr_block(compiled_result.rust)),
+                    }),
+                    has_allocator_parameter: compiled_result.uses_allocator,
+                    type_: type_not_function,
+                    kind: RustVariableItemKind::Fn,
+                })
+            }
+        }
     }
 }
 fn syn_spread_expr_block(syn_expr: syn::Expr) -> syn::Block {
@@ -12674,16 +12752,24 @@ fn still_syntax_expression_to_rust<'a>(
                             type_: None,
                         };
                     };
-                    // TODO currently all rust compiled variable declarations are fn([&Alloc])s,
-                    // once some can be static, return variable without call
                     let Some(project_variable_type) = &project_variable_info.type_ else {
-                        errors.push(StillErrorNode { range: variable_node.range, message: Box::from("this project variable has an incomplete type. Go to that variable's declaration and fix its errors. If there aren't any, these declarations are (mutually) recursive and need an explicit output type! You can add one by prepending :type: before any expression like the lambda result.") });
+                        errors.push(StillErrorNode { range: variable_node.range, message: Box::from("this project variable has an incomplete type. Go to that variable's declaration and fix its errors. If there aren't any, these declarations are (mutually) recursive and need an explicit output type! You can add one by prepending :type: before any expression like the result of a lambda.") });
                         return CompiledStillExpression {
                             rust: syn_expr_todo(),
                             uses_allocator: false,
                             type_: None,
                         };
                     };
+                    match project_variable_info.kind {
+                        RustVariableItemKind::Fn => {}
+                        RustVariableItemKind::Static => {
+                            return CompiledStillExpression {
+                                rust: rust_reference,
+                                uses_allocator: false,
+                                type_: Some(project_variable_type.clone()),
+                            };
+                        }
+                    }
                     let type_: StillType = if arguments.is_empty() {
                         project_variable_type.clone()
                     } else {
