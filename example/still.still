@@ -65,21 +65,11 @@ run \:opt str:state-or-uninitialized >
         [ :io str:Standard-out-write
             strs-flatten
                 [ ansi-clear-screen, state, "\\nType a sentence to echo: " ]
+        , :io str:Standard-in-read-line \:str:line > line
         ]
 
 choice io Future
     | Standard-out-write str
     | Batch vec (io Future)
-    | Standard-in-read-line
-        # TODO \str > Future
-        Future
-
-(#
-
-
-
-, :io str:Standard-in-read-line \:str:line > line
-
-#)
-
+    | Standard-in-read-line \str > Future
 

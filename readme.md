@@ -52,12 +52,11 @@ Then point your editor to `still lsp`, see also [specific setups](#editor-setups
   After that step, the updated state is cloned into a loop-global variable and the allocator containing all the memory allocated in this step is reset.
   See [`example/`](/example/)
 
-  Requiring diffing of the state and deep conversions alone disqualifies this memory model for performance-critical programs. It should however be competitive for regular applications which tend to have simple state but a bunch of memory waste at each frame/update/...
+  Requiring cloning of some state and deep conversions alone disqualifies this memory model for performance-critical programs. It can only be competitive for regular applications which tend to have simple state but a bunch of memory waste at each frame/update/...
 
 - no `Task`/`async`, visible mutation, side effects, infix operators, currying, modules, lifetime tracking
 
 ## TODO
-- correct impl to &dyn in type declarations (is impl not supported in type alias?)
 - correctly clone captures before closure
 - avoid generating unused lifetime in fn item when no allocator and its type uses lifetime
 - fix bug of `\n` being printed as `\\n`
@@ -94,6 +93,7 @@ Then point your editor to `still lsp`, see also [specific setups](#editor-setups
   This generally removes some verbosity, is consistent with choice type/ type alias construction,
   allows non-called generic functions, would allow the removal of all "::Typed" patterns and expressions (except recursion? but maybe there is a better solution for that).
 - (seems completely useless) infer constness of generated variable/fn items
+- consider allowing concrete bounded variables in some type aliases and choice types instead of &dyn
 
 ## syntax overview
 ### matching and destructuring
