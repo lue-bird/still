@@ -8366,7 +8366,7 @@ fn still_project_info_to_rust(
                             &compiled_choice_type_infos,
                             maybe_documentation.as_ref().map(|n| n.value.as_ref()),
                             range,
-                            &name_node.value,
+                            still_syntax_node_as_ref(name_node),
                             parameters,
                             maybe_type.as_ref().map(still_syntax_node_as_ref),
                         );
@@ -8415,7 +8415,7 @@ fn still_project_info_to_rust(
                     parameters,
                     variants,
                 } => {
-                    let compiled_choice_type_info: CompiledRustChoiceTypeInfo =
+                    let maybe_compiled_choice_type_info: Option<CompiledRustChoiceTypeInfo> =
                         choice_type_declaration_to_rust_into(
                             &mut rust_items,
                             errors,
@@ -8424,20 +8424,34 @@ fn still_project_info_to_rust(
                             &compiled_choice_type_infos,
                             &scc_type_declaration_names,
                             maybe_documentation.as_ref().map(|n| n.value.as_ref()),
-                            &name_node.value,
+                            still_syntax_node_as_ref(name_node),
                             parameters,
                             variants,
                         );
-                    let info: ChoiceTypeInfo = ChoiceTypeInfo {
-                        name_range: Some(name_node.range),
-                        documentation: maybe_documentation.as_ref().map(|n| n.value.clone()),
-                        parameters: parameters.clone(),
-                        variants: variants.clone(),
-                        is_copy: compiled_choice_type_info.is_copy,
-                        has_owned_representation: compiled_choice_type_info
-                            .has_owned_representation,
-                        has_lifetime_parameter: compiled_choice_type_info.has_lifetime_parameter,
-                        type_variants: compiled_choice_type_info.variants,
+                    let info: ChoiceTypeInfo = match maybe_compiled_choice_type_info {
+                        Some(compiled_choice_type_info) => ChoiceTypeInfo {
+                            name_range: Some(name_node.range),
+                            documentation: maybe_documentation.as_ref().map(|n| n.value.clone()),
+                            parameters: parameters.clone(),
+                            variants: variants.clone(),
+                            is_copy: compiled_choice_type_info.is_copy,
+                            has_owned_representation: compiled_choice_type_info
+                                .has_owned_representation,
+                            has_lifetime_parameter: compiled_choice_type_info
+                                .has_lifetime_parameter,
+                            type_variants: compiled_choice_type_info.variants,
+                        },
+                        None => ChoiceTypeInfo {
+                            name_range: Some(name_node.range),
+                            documentation: maybe_documentation.as_ref().map(|n| n.value.clone()),
+                            parameters: parameters.clone(),
+                            variants: variants.clone(),
+                            // dummy
+                            is_copy: false,
+                            has_owned_representation: false,
+                            has_lifetime_parameter: true,
+                            type_variants: vec![],
+                        },
                     };
                     compiled_choice_type_infos.insert(name_node.value.clone(), info);
                 }
@@ -9757,11 +9771,11 @@ fn type_alias_declaration_to_rust(
     choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
     maybe_documentation: Option<&str>,
     range: lsp_types::Range,
-    name: &str,
+    name_node: StillSyntaxNode<&StillName>,
     parameters: &[StillSyntaxNode<StillName>],
     maybe_type: Option<StillSyntaxNode<&StillSyntaxType>>,
 ) -> Option<CompiledTypeAlias> {
-    let rust_name: String = still_name_to_uppercase_rust(name);
+    let rust_name: String = still_name_to_uppercase_rust(name_node.value);
     let Some(type_node) = maybe_type else {
         errors.push(StillErrorNode {
             range: range,
@@ -9789,37 +9803,13 @@ fn type_alias_declaration_to_rust(
     if has_lifetime_parameter {
         rust_parameters.push(syn::GenericParam::Lifetime(syn_default_lifetime_param()));
     }
-    let mut bad_parameters: bool = false;
-    for parameter_node in parameters {
-        if !actually_used_type_variables.remove(parameter_node.value.as_str()) {
-            bad_parameters = true;
-            errors.push(StillErrorNode {
-                range: parameter_node.range,
-                message: Box::from(
-                    "this type variable is not used in the aliased type. Remove it or use it",
-                ),
-            });
-        }
-        rust_parameters.push(syn::GenericParam::Type(syn::TypeParam::from(syn_ident(
-            &still_type_variable_to_rust(&parameter_node.value),
-        ))));
-    }
-    if !actually_used_type_variables.is_empty() {
-        bad_parameters = true;
-        errors.push(StillErrorNode {
-            range: range,
-            message: format!(
-                "aliased type uses variables not listed before the =, namely {}. Add it",
-                actually_used_type_variables
-                    .iter()
-                    .map(StillName::as_str)
-                    .collect::<Vec<&str>>()
-                    .join(", ")
-            )
-            .into_boxed_str(),
-        });
-    }
-    if bad_parameters {
+    if let Err(()) = still_parameters_to_rust_into_error_if_different_to_actual_type_parameters(
+        errors,
+        &mut rust_parameters,
+        name_node.range,
+        parameters,
+        actually_used_type_variables,
+    ) {
         return None;
     }
     Some(CompiledTypeAlias {
@@ -9852,6 +9842,49 @@ fn type_alias_declaration_to_rust(
         type_: type_,
     })
 }
+/// returns false if
+fn still_parameters_to_rust_into_error_if_different_to_actual_type_parameters(
+    errors: &mut Vec<StillErrorNode>,
+    rust_parameters: &mut syn::punctuated::Punctuated<syn::GenericParam, syn::token::Comma>,
+    name_range: lsp_types::Range,
+    parameters: &[StillSyntaxNode<StillName>],
+    mut actually_used_type_variables: std::collections::HashSet<StillName>,
+) -> Result<(), ()> {
+    let mut bad_parameters: bool = false;
+    for parameter_node in parameters {
+        if !actually_used_type_variables.remove(parameter_node.value.as_str()) {
+            bad_parameters = true;
+            errors.push(StillErrorNode {
+                range: parameter_node.range,
+                message: Box::from("this type variable is not used. Remove it or use it"),
+            });
+        }
+        rust_parameters.push(syn::GenericParam::Type(syn::TypeParam::from(syn_ident(
+            &still_type_variable_to_rust(&parameter_node.value),
+        ))));
+    }
+    if !actually_used_type_variables.is_empty() {
+        bad_parameters = true;
+        errors.push(StillErrorNode {
+            range: name_range,
+            message: format!(
+                "some type variables are used but not declared, namely {}. Add {}",
+                actually_used_type_variables
+                    .iter()
+                    .map(StillName::as_str)
+                    .collect::<Vec<&str>>()
+                    .join(", "),
+                if actually_used_type_variables.len() >= 2 {
+                    "them"
+                } else {
+                    "it"
+                }
+            )
+            .into_boxed_str(),
+        });
+    }
+    if bad_parameters { Err(()) } else { Ok(()) }
+}
 
 struct CompiledRustChoiceTypeInfo {
     is_copy: bool,
@@ -9877,10 +9910,10 @@ fn choice_type_declaration_to_rust_into<'a>(
     choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
     scc_type_declaration_names: &std::collections::HashSet<&str>,
     maybe_documentation: Option<&str>,
-    name: &str,
+    name_node: StillSyntaxNode<&StillName>,
     parameters: &'a [StillSyntaxNode<StillName>],
     variants: &'a [StillSyntaxChoiceTypeVariant],
-) -> CompiledRustChoiceTypeInfo {
+) -> Option<CompiledRustChoiceTypeInfo> {
     let mut rust_variants: syn::punctuated::Punctuated<syn::Variant, syn::token::Comma> =
         syn::punctuated::Punctuated::new();
     let mut type_variants: Vec<StillChoiceTypeVariantInfo> =
@@ -9922,13 +9955,7 @@ fn choice_type_declaration_to_rust_into<'a>(
                         ) else {
                             // TODO instead, remember it failed but collect remaining errors,
                             //   pretend value type is None
-                            // dummy
-                            return CompiledRustChoiceTypeInfo {
-                                is_copy: false,
-                                has_owned_representation: false,
-                                has_lifetime_parameter: true,
-                                variants: vec![],
-                            };
+                            return None;
                         };
                         let variant_value_constructs_recursive_type: bool =
                             still_type_constructs_recursive_type_in(
@@ -10007,21 +10034,21 @@ fn choice_type_declaration_to_rust_into<'a>(
             }
         }
     }
-    let rust_parameters: syn::punctuated::Punctuated<syn::GenericParam, syn::token::Comma> =
-        (if has_lifetime_parameter {
-            Some(syn::GenericParam::Lifetime(syn_default_lifetime_param()))
-        } else {
-            None
-        })
-        .into_iter()
-        .chain(parameters.iter().map(|parameter_node| {
-            syn::GenericParam::Type(syn::TypeParam::from(syn_ident(
-                &still_type_variable_to_rust(&parameter_node.value),
-            )))
-        }))
-        .collect();
-    // TODO verify specified parameter names match with still_type_variables_and_records_into
-    let rust_enum_name: String = still_name_to_uppercase_rust(name);
+    let mut rust_parameters: syn::punctuated::Punctuated<syn::GenericParam, syn::token::Comma> =
+        syn::punctuated::Punctuated::new();
+    if has_lifetime_parameter {
+        rust_parameters.push(syn::GenericParam::Lifetime(syn_default_lifetime_param()));
+    }
+    if let Err(()) = still_parameters_to_rust_into_error_if_different_to_actual_type_parameters(
+        errors,
+        &mut rust_parameters,
+        name_node.range,
+        parameters,
+        actually_used_type_variables,
+    ) {
+        return None;
+    }
+    let rust_enum_name: String = still_name_to_uppercase_rust(name_node.value);
     rust_items.push(syn::Item::Enum(syn::ItemEnum {
         attrs: maybe_documentation
             .map(syn_attribute_doc)
@@ -10043,7 +10070,7 @@ fn choice_type_declaration_to_rust_into<'a>(
         variants: rust_variants,
     }));
     if has_owned_representation {
-        let owned_rust_enum_name: String = still_name_to_uppercase_rust(name) + "øOwned";
+        let owned_rust_enum_name: String = rust_enum_name.clone() + "øOwned";
         let owned_rust_variants: syn::punctuated::Punctuated<syn::Variant, syn::token::Comma> =
             type_variants
                 .iter()
@@ -10731,12 +10758,12 @@ fn choice_type_declaration_to_rust_into<'a>(
         });
         rust_items.extend([rust_owned_enum, impl_owned_to_still, impl_still_to_owned]);
     }
-    CompiledRustChoiceTypeInfo {
+    Some(CompiledRustChoiceTypeInfo {
         is_copy: is_copy,
         has_owned_representation: has_owned_representation,
         has_lifetime_parameter: has_lifetime_parameter,
         variants: type_variants,
-    }
+    })
 }
 fn still_type_is_copy(
     variables_are_copy: bool,
@@ -11010,10 +11037,7 @@ fn variable_declaration_to_rust<'a>(
                             ),
                             variadic: None,
                         },
-                        block: Box::new(syn::Block {
-                            brace_token: syn::token::Brace(syn_span()),
-                            stmts: vec![syn::Stmt::Expr(*result_lambda.body, None)],
-                        }),
+                        block: Box::new(syn_spread_expr_block(*result_lambda.body)),
                     })),
                     compiled_result.uses_allocator,
                 )
@@ -11130,13 +11154,19 @@ fn variable_declaration_to_rust<'a>(
                     ),
                     variadic: None,
                 },
-                block: Box::new(syn::Block {
-                    brace_token: syn::token::Brace(syn_span()),
-                    stmts: vec![syn::Stmt::Expr(compiled_result.rust, None)],
-                }),
+                block: Box::new(syn_spread_expr_block(compiled_result.rust)),
             })),
             compiled_result.uses_allocator,
         ),
+    }
+}
+fn syn_spread_expr_block(syn_expr: syn::Expr) -> syn::Block {
+    match syn_expr {
+        syn::Expr::Block(block) => block.block,
+        _ => syn::Block {
+            brace_token: syn::token::Brace(syn_span()),
+            stmts: vec![syn::Stmt::Expr(syn_expr, None)],
+        },
     }
 }
 fn rust_generated_fn_parameter_name(index: usize) -> String {

@@ -61,7 +61,7 @@ Then point your editor to `still lsp`, see also [specific setups](#editor-setups
 - avoid generating unused lifetime in fn item when no allocator and its type uses lifetime
 - fix bug of `\n` being printed as `\\n`
 - type checking (vec elements equal, case results equal, function arguments equal to parameters, typed, variant value) (notably also: check that each function output type only ever uses type variables used in the input type, and similarly: on non-function types, forbid the use of any new variables; in the error say "unknown type variable")
-- complete small standard library in rust (TODO `order`, `dec-power`, `str-compare`, `int-compare`, `dec-compare`, `map`, `set`, ...)
+- complete small standard library in rust (TODO `order`, `dec-power`, `str-compare`, `int-compare`, `dec-compare`, `map`, `set`, `vec-sort`, ...)
 - replace `&'a dyn Fn(_) -> _` in function parameters by `impl Fn(_) -> _ + Clone + 'a`
   and likewise remove `alloc.alloc(|_| _)` when used as direct function parameter: `|_| _`
 - introduce `nat` type (`usize`) and require regular ints to be prefixed with `+`/`-`
@@ -71,6 +71,7 @@ Then point your editor to `still lsp`, see also [specific setups](#editor-setups
 - name collision checking
 - name shadowing checking
 - implement `StillIntoOwned::into_owned_overwriting` for generated structs and enums
+- allow comments before variant (field name, case?)
 
 ## considering
 - adding anonymous choice types. They are not allowed to be recursive. Use `type alias` for these. choice types can then be removed. Should be fairly easy to implement but potentially not that nice for FFI, similar to record structs currently
