@@ -58,7 +58,6 @@ Then point your editor to `still lsp`, see also [specific setups](#editor-setups
 
 ## TODO
 - correctly clone captures before closure
-- remove multi-line comments in favor of multiple single-line comments
 - type checking (vec elements equal, case results equal, function arguments equal to parameters, typed, variant value) (notably also: check that each function output type only ever uses type variables used in the input type, and similarly: on non-function types, forbid the use of any new variables; in the error say "unknown type variable")
 - complete small standard library in rust (TODO `order`, `dec-power`, `str-compare`, `int-compare`, `dec-compare`, `map`, `set`, `vec-sort`, ...)
 - replace `&'a dyn Fn(_) -> _` in function parameters by `impl Fn(_) -> _ + Clone + 'a`

@@ -4148,9 +4148,14 @@ fn still_syntax_project_format(project_state: &ProjectState) -> String {
 }
 
 fn still_syntax_documentation_comment_then_linebreak_into(so_far: &mut String, content: &str) {
-    so_far.push_str("(#");
-    so_far.push_str(content);
-    so_far.push_str("#)\n");
+    for line in content.lines() {
+        so_far.push('#');
+        so_far.push_str(line);
+        so_far.push('\n');
+    }
+    if content.ends_with('\n') {
+        so_far.push_str("#\n");
+    }
 }
 
 fn still_syntax_declaration_into(
@@ -6624,17 +6629,6 @@ fn parse_linebreak_as_str<'a>(state: &mut ParseState<'a>) -> Option<&'a str> {
     }
 }
 /// prefer using after `parse_line_break` or similar failed
-fn parse_any_guaranteed_non_linebreak_char(state: &mut ParseState) -> bool {
-    match state.source[state.offset_utf8..].chars().next() {
-        None => false,
-        Some(parsed_char) => {
-            state.offset_utf8 += parsed_char.len_utf8();
-            state.position.character += parsed_char.len_utf16() as u32;
-            true
-        }
-    }
-}
-/// prefer using after `parse_line_break` or similar failed
 fn parse_any_guaranteed_non_linebreak_char_as_char(state: &mut ParseState) -> Option<char> {
     match state.source[state.offset_utf8..].chars().next() {
         None => None,
@@ -6742,17 +6736,9 @@ fn parse_still_keyword_as_range(state: &mut ParseState, symbol: &str) -> Option<
 fn parse_still_whitespace(state: &mut ParseState) {
     while parse_linebreak(state) || parse_same_line_char_if(state, char::is_whitespace) {}
 }
-fn parse_still_comment(state: &mut ParseState) -> Option<StillSyntaxNode<Box<str>>> {
+fn parse_still_comment_node(state: &mut ParseState) -> Option<StillSyntaxNode<Box<str>>> {
     let position_before: lsp_types::Position = state.position;
-    if !parse_symbol(state, "#") {
-        return None;
-    }
-    let content: &str = state.source[state.offset_utf8..]
-        .lines()
-        .next()
-        .unwrap_or("");
-    state.offset_utf8 += content.len();
-    state.position.character += content.encode_utf16().count() as u32;
+    let content: &str = parse_still_comment(state)?;
     let full_range: lsp_types::Range = lsp_types::Range {
         start: position_before,
         end: state.position,
@@ -6762,47 +6748,17 @@ fn parse_still_comment(state: &mut ParseState) -> Option<StillSyntaxNode<Box<str
         value: Box::from(content),
     })
 }
-fn parse_still_documentation_comment_block_str<'a>(state: &mut ParseState<'a>) -> Option<&'a str> {
-    if !parse_symbol(state, "(#") {
+fn parse_still_comment<'a>(state: &mut ParseState<'a>) -> Option<&'a str> {
+    if !parse_symbol(state, "#") {
         return None;
     }
-    let content_start_offset_utf8: usize = state.offset_utf8;
-    let mut nesting_level: u32 = 1;
-    'until_fully_unnested: loop {
-        if parse_linebreak(state) {
-        } else if parse_symbol(state, "(#") {
-            nesting_level += 1;
-        } else if parse_symbol(state, "#)") {
-            if nesting_level <= 1 {
-                break 'until_fully_unnested;
-            }
-            nesting_level -= 1;
-        } else if parse_any_guaranteed_non_linebreak_char(state) {
-        } else {
-            // end of source
-            break 'until_fully_unnested;
-        }
-    }
-    let content_including_closing: &str =
-        &state.source[content_start_offset_utf8..state.offset_utf8];
-    Some(
-        content_including_closing
-            .strip_suffix("#)")
-            .unwrap_or(content_including_closing),
-    )
-}
-fn parse_still_documentation_comment_block_node(
-    state: &mut ParseState,
-) -> Option<StillSyntaxNode<Box<str>>> {
-    let start_position: lsp_types::Position = state.position;
-    let content: &str = parse_still_documentation_comment_block_str(state)?;
-    Some(StillSyntaxNode {
-        range: lsp_types::Range {
-            start: start_position,
-            end: state.position,
-        },
-        value: Box::from(content),
-    })
+    let content: &str = state.source[state.offset_utf8..]
+        .lines()
+        .next()
+        .unwrap_or("");
+    state.offset_utf8 += content.len();
+    state.position.character += content.encode_utf16().count() as u32;
+    Some(content)
 }
 fn parse_still_lowercase_name(state: &mut ParseState) -> Option<StillName> {
     let mut chars_from_offset: std::str::Chars = state.source[state.offset_utf8..].chars();
@@ -6874,7 +6830,7 @@ fn parse_still_syntax_type(state: &mut ParseState) -> Option<StillSyntaxNode<Sti
 fn parse_still_syntax_type_with_comment(
     state: &mut ParseState,
 ) -> Option<StillSyntaxNode<StillSyntaxType>> {
-    let comment_node: StillSyntaxNode<Box<str>> = parse_still_comment(state)?;
+    let comment_node: StillSyntaxNode<Box<str>> = parse_still_comment_node(state)?;
     parse_still_whitespace(state);
     let maybe_type: Option<StillSyntaxNode<StillSyntaxType>> = parse_still_syntax_type(state);
     Some(StillSyntaxNode {
@@ -7144,7 +7100,7 @@ fn parse_still_syntax_pattern_variant(
 fn parse_still_syntax_pattern_with_comment(
     state: &mut ParseState,
 ) -> Option<StillSyntaxNode<StillSyntaxPattern>> {
-    let comment_node: StillSyntaxNode<Box<str>> = parse_still_comment(state)?;
+    let comment_node: StillSyntaxNode<Box<str>> = parse_still_comment_node(state)?;
     parse_still_whitespace(state);
     let maybe_pattern: Option<StillSyntaxNode<StillSyntaxPattern>> =
         parse_still_syntax_pattern(state);
@@ -7482,7 +7438,7 @@ fn parse_still_syntax_expression_variant_node(
 fn parse_still_syntax_expression_with_comment_node(
     state: &mut ParseState,
 ) -> Option<StillSyntaxNode<StillSyntaxExpression>> {
-    let comment_node: StillSyntaxNode<Box<str>> = parse_still_comment(state)?;
+    let comment_node: StillSyntaxNode<Box<str>> = parse_still_comment_node(state)?;
     parse_still_whitespace(state);
     let maybe_expression: Option<StillSyntaxNode<StillSyntaxExpression>> =
         parse_still_syntax_expression_space_separated(state);
@@ -7984,7 +7940,26 @@ fn parse_still_syntax_declaration_variable_node(
 fn parse_still_syntax_documented_declaration_followed_by_whitespace_and_whatever_indented(
     state: &mut ParseState,
 ) -> Option<StillSyntaxDocumentedDeclaration> {
-    match parse_still_documentation_comment_block_node(state) {
+    let start_position: lsp_types::Position = state.position;
+    let maybe_documentation_node = parse_still_comment(state).map(|first_comment_line| {
+        let mut full_comment_content: String = first_comment_line.to_string();
+        let mut end_position: lsp_types::Position = state.position;
+        parse_still_whitespace(state);
+        while let Some(next_comment_line) = parse_still_comment(state) {
+            full_comment_content.push('\n');
+            full_comment_content.push_str(next_comment_line);
+            end_position = state.position;
+            parse_still_whitespace(state);
+        }
+        StillSyntaxNode {
+            range: lsp_types::Range {
+                start: start_position,
+                end: end_position,
+            },
+            value: full_comment_content.into_boxed_str(),
+        }
+    });
+    match maybe_documentation_node {
         None => parse_still_syntax_declaration_node(state).map(|declaration_node| {
             parse_still_whitespace(state);
             StillSyntaxDocumentedDeclaration {

@@ -15,8 +15,9 @@ choice int-cons-list
     | Empty
     | Cons { head int, tail int-cons-list }
 
-(# My docs
-#)
+# My docs
+# can span multiple lines
+#
 greet \{ name :str:name } >
     let list
         [ 1, 2, 3 ]

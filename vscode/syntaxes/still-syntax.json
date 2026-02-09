@@ -172,22 +172,6 @@
       "match": "(\\(|\\))",
       "name": "punctuation.parens.still"
     },
-    "block_comment": {
-      "applyEndPatternLast": 1,
-      "begin": "\\(\\#(?!#)",
-      "captures": {
-        "0": {
-          "name": "punctuation.definition.comment.still"
-        }
-      },
-      "end": "\\#\\)",
-      "name": "comment.block.still",
-      "patterns": [
-        {
-          "include": "#block_comment"
-        }
-      ]
-    },
     "comments": {
       "patterns": [
         {
@@ -199,9 +183,6 @@
           "begin": "#",
           "end": "$",
           "name": "comment.line.still"
-        },
-        {
-          "include": "#block_comment"
         }
       ]
     },
