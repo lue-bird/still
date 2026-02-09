@@ -4311,6 +4311,7 @@ struct StillLocalBindingInfo<'a> {
     type_: Option<StillSyntaxNode<&'a StillSyntaxType>>,
     origin: LocalBindingOrigin,
     scope_expression: StillSyntaxNode<&'a StillSyntaxExpression>,
+    // TODO add origin range
 }
 fn find_local_binding_info<'a>(
     local_bindings: &'a StillLocalBindings<'a>,
@@ -12134,7 +12135,10 @@ fn still_syntax_expression_to_rust<'a>(
             arrow_key_symbol_range: maybe_arrow_key_symbol_range,
             result: maybe_lambda_result,
         } => {
-            let mut parameter_introduced_bindings = std::collections::HashMap::new();
+            let mut parameter_introduced_bindings: std::collections::HashMap<
+                &str,
+                StillLocalBindingCompileInfo,
+            > = std::collections::HashMap::new();
             let mut bindings_to_clone: Vec<BindingToClone> = Vec::new();
             let (rust_patterns, input_type_maybes): (
                 syn::punctuated::Punctuated<syn::Pat, syn::token::Comma>,
@@ -12158,35 +12162,9 @@ fn still_syntax_expression_to_rust<'a>(
                     )
                 })
                 .collect();
-            let mut parameter_introduced_binding_infos: std::collections::HashMap<
-                &str,
-                StillLocalBindingCompileInfo,
-            > = parameter_introduced_bindings
-                .into_iter()
-                .map(|(introduced_binding_name, introduced_binding_maybe_type)| {
-                    (
-                        introduced_binding_name,
-                        StillLocalBindingCompileInfo {
-                            is_copy: introduced_binding_maybe_type.as_ref().is_some_and(
-                                |introduced_binding_type| {
-                                    still_type_is_copy(
-                                        false,
-                                        type_aliases,
-                                        choice_types,
-                                        introduced_binding_type,
-                                    )
-                                },
-                            ),
-                            type_: introduced_binding_maybe_type,
-                            last_uses: vec![],
-                            closures_it_is_used_in: vec![],
-                        },
-                    )
-                })
-                .collect();
             if let Some(lambda_result_node) = maybe_lambda_result {
                 still_syntax_expression_uses_of_local_bindings_into(
-                    &mut parameter_introduced_binding_infos,
+                    &mut parameter_introduced_bindings,
                     None,
                     still_syntax_node_unbox(lambda_result_node),
                 );
@@ -12228,7 +12206,7 @@ fn still_syntax_expression_to_rust<'a>(
                 .collect();
             let mut local_bindings: std::collections::HashMap<&str, StillLocalBindingCompileInfo> =
                 std::rc::Rc::unwrap_or_clone(local_bindings);
-            local_bindings.extend(parameter_introduced_binding_infos);
+            local_bindings.extend(parameter_introduced_bindings);
 
             let mut closure_result_rust_stmts: Vec<syn::Stmt> = Vec::new();
             bindings_to_clone_to_rust_into(&mut closure_result_rust_stmts, bindings_to_clone);
@@ -12911,7 +12889,7 @@ fn still_syntax_expression_to_rust<'a>(
                     };
                     let mut introduced_pattern_bindings: std::collections::HashMap<
                         &str,
-                        Option<StillType>,
+                        StillLocalBindingCompileInfo,
                     > = std::collections::HashMap::new();
                     let mut bindings_to_clone: Vec<BindingToClone> = Vec::new();
                     let compiled_pattern: CompiledStillPattern = still_syntax_pattern_to_rust(
@@ -12928,35 +12906,9 @@ fn still_syntax_expression_to_rust<'a>(
                         // skip case with incomplete pattern
                         return None;
                     };
-                    let mut pattern_introduced_binding_infos: std::collections::HashMap<
-                        &str,
-                        StillLocalBindingCompileInfo,
-                    > = introduced_pattern_bindings
-                        .into_iter()
-                        .map(|(introduced_binding_name, introduced_binding_maybe_type)| {
-                            (
-                                introduced_binding_name,
-                                StillLocalBindingCompileInfo {
-                                    is_copy: introduced_binding_maybe_type.as_ref().is_some_and(
-                                        |introduced_binding_type| {
-                                            still_type_is_copy(
-                                                false,
-                                                type_aliases,
-                                                choice_types,
-                                                introduced_binding_type,
-                                            )
-                                        },
-                                    ),
-                                    type_: introduced_binding_maybe_type,
-                                    last_uses: vec![],
-                                    closures_it_is_used_in: vec![],
-                                },
-                            )
-                        })
-                        .collect();
                     if let Some(case_result_node) = &case.result {
                         still_syntax_expression_uses_of_local_bindings_into(
-                            &mut pattern_introduced_binding_infos,
+                            &mut introduced_pattern_bindings,
                             None,
                             still_syntax_node_as_ref(case_result_node),
                         );
@@ -12965,7 +12917,7 @@ fn still_syntax_expression_to_rust<'a>(
                         &str,
                         StillLocalBindingCompileInfo,
                     > = (*local_bindings).clone();
-                    local_bindings.extend(pattern_introduced_binding_infos);
+                    local_bindings.extend(introduced_pattern_bindings);
                     let compiled_case_result: CompiledStillExpression =
                         maybe_still_syntax_expression_to_rust(
                             errors,
@@ -13614,7 +13566,7 @@ fn maybe_still_syntax_pattern_to_rust<'a>(
     errors: &mut Vec<StillErrorNode>,
     error_on_none: impl FnOnce() -> StillErrorNode,
     records_used: &mut std::collections::HashSet<Vec<StillName>>,
-    introduced_bindings: &mut std::collections::HashMap<&'a str, Option<StillType>>,
+    introduced_bindings: &mut std::collections::HashMap<&'a str, StillLocalBindingCompileInfo>,
     bindings_to_clone: &mut Vec<BindingToClone<'a>>,
     type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
     choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
@@ -13835,7 +13787,7 @@ struct BindingToClone<'a> {
     is_copy: bool,
 }
 /// TODO should be `Option<{ type_: StillSype,  }>`
-/// as an untyped pattern should never exist!
+/// as an untyped pattern should never exist
 struct CompiledStillPattern {
     // None means it should be ignored (e.g. in a case of that case should be removed)
     rust: Option<syn::Pat>,
@@ -13844,7 +13796,7 @@ struct CompiledStillPattern {
 fn still_syntax_pattern_to_rust<'a>(
     errors: &mut Vec<StillErrorNode>,
     records_used: &mut std::collections::HashSet<Vec<StillName>>,
-    introduced_bindings: &mut std::collections::HashMap<&'a str, Option<StillType>>,
+    introduced_bindings: &mut std::collections::HashMap<&'a str, StillLocalBindingCompileInfo>,
     bindings_to_clone: &mut Vec<BindingToClone<'a>>,
     type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
     choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
@@ -13945,7 +13897,18 @@ fn still_syntax_pattern_to_rust<'a>(
                 }
                 Some(untyped_pattern_node) => match &untyped_pattern_node.value {
                     StillSyntaxPatternUntyped::Variable(name) => {
-                        introduced_bindings.insert(name, maybe_type.clone());
+                        // TODO if already exists, push error
+                        introduced_bindings.insert(
+                            name,
+                            StillLocalBindingCompileInfo {
+                                is_copy: maybe_type.as_ref().is_some_and(|type_| {
+                                    still_type_is_copy(false, type_aliases, choice_types, type_)
+                                }),
+                                type_: maybe_type.clone(),
+                                last_uses: vec![],
+                                closures_it_is_used_in: vec![],
+                            },
+                        );
                         if is_reference {
                             bindings_to_clone.push(BindingToClone {
                                 name: name,
