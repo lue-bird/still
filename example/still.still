@@ -44,6 +44,11 @@ choice result Ok Err
     | Ok Ok
     | Err Err
 
+closure-requiring-clone-of-capture \:vec int:variable >
+    [ \:int:whatever > vec-attach variable [ whatever ]
+    , \:int:another > vec-attach variable [ another ]
+    ]
+
 type state =
     int
 

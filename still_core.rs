@@ -26,6 +26,13 @@ use std::ops::Fn;
 pub trait Alloc {
     fn alloc<A>(&self, value: A) -> &A;
 }
+fn alloc_fn_as_dyn<'a, Inputs, Output>(
+    allocator: &'a impl Alloc,
+    function: impl Fn(Inputs) -> Output + 'a,
+) -> &'a dyn Fn(Inputs) -> Output {
+    allocator.alloc(function)
+}
+
 /// _Provided for any still value, for users of the generated code._
 ///
 /// When you execute still functions
