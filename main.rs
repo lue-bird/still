@@ -8295,7 +8295,9 @@ fn still_project_info_to_rust(
         core_choice_type_infos.clone();
     let mut records_used: std::collections::HashSet<Vec<StillName>> =
         std::collections::HashSet::new();
-    for type_declaration_strongly_connected_component in type_graph.find_sccs().iter_sccs() {
+    'compile_types: for type_declaration_strongly_connected_component in
+        type_graph.find_sccs().iter_sccs()
+    {
         let type_declaration_infos: Vec<StillSyntaxTypeDeclarationInfo> =
             type_declaration_strongly_connected_component
                 .iter_nodes()
@@ -8304,6 +8306,7 @@ fn still_project_info_to_rust(
                 })
                 .copied()
                 .collect::<Vec<_>>();
+        let mut all_scc_types_are_aliases: bool = true;
         // initialize only the parameters into compiled_choice_type_infos
         // so that no "not found" errors are raised
         for type_declaration_info in &type_declaration_infos {
@@ -8332,6 +8335,7 @@ fn still_project_info_to_rust(
                     parameters,
                     ..
                 } => {
+                    all_scc_types_are_aliases = false;
                     compiled_choice_type_infos.insert(
                         name_node.value.clone(),
                         ChoiceTypeInfo {
@@ -8346,6 +8350,47 @@ fn still_project_info_to_rust(
                         },
                     );
                 }
+            }
+        }
+        // report and skip (mutually) recursive type aliases. a bit messy
+        if all_scc_types_are_aliases {
+            if type_declaration_infos.len() >= 2
+                && let Some(StillSyntaxTypeDeclarationInfo::TypeAlias {
+                    name: first_scc_type_declaration_name_node,
+                    ..
+                }) = type_declaration_infos.first()
+            {
+                errors.push(StillErrorNode {
+                    range: first_scc_type_declaration_name_node.range,
+                    message: format!(
+                        "this type alias is (mutually) recursive: it references type aliases that themselves reference this type alias. The involved type aliases are: {}. This is tricky to represent in compile target languages, and can even lead to the type checker running in circles. You can break this infinite loop by wrapping this type or one of its recursive parts into a choice type.",
+                        type_declaration_infos
+                            .iter()
+                            .filter_map(|type_declaration_info| match type_declaration_info {
+                                StillSyntaxTypeDeclarationInfo::TypeAlias { name:name_node, .. } => Some(name_node.value.as_str()),
+                                StillSyntaxTypeDeclarationInfo::ChoiceType { .. } => None,
+                            })
+                            .collect::<Vec<&str>>()
+                            .join(", ")
+                        ).into_boxed_str(),
+                });
+                continue 'compile_types;
+            } else if let Some(first_scc_type_node) = type_declaration_strongly_connected_component
+                .iter_nodes()
+                .next()
+                && type_graph
+                    .iter_successors(first_scc_type_node)
+                    .any(|n| n == first_scc_type_node)
+                && let Some(StillSyntaxTypeDeclarationInfo::TypeAlias {
+                    name: first_scc_type_declaration_name_node,
+                    ..
+                }) = type_declaration_infos.first()
+            {
+                errors.push(StillErrorNode {
+                    range: first_scc_type_declaration_name_node.range,
+                    message: Box::from("this type alias is recursive: it references itself in the type is aliases. This is tricky to represent in compile target languages, and can even lead to the type checker running in circles. You can break this infinite loop by wrapping this type or one of its recursive parts into a choice type."),
+                });
+                continue 'compile_types;
             }
         }
         let scc_type_declaration_names: std::collections::HashSet<&str> = type_declaration_infos
@@ -12091,6 +12136,7 @@ fn maybe_still_syntax_expression_to_rust<'a>(
 // be aware: `last_uses` contains both variable ranges and closure ranges
 #[derive(Clone, Debug)]
 struct StillLocalBindingCompileInfo {
+    origin_range: lsp_types::Range,
     type_: Option<StillType>,
     is_copy: bool,
     last_uses: Vec<lsp_types::Range>,
@@ -12204,6 +12250,19 @@ fn still_syntax_expression_to_rust<'a>(
                     )
                 })
                 .collect();
+            for (parameter_introduced_binding_name, parameter_introduced_binding_info) in
+                &parameter_introduced_bindings
+            {
+                push_error_if_name_collides(
+                    errors,
+                    project_variable_declarations,
+                    &local_bindings,
+                    StillSyntaxNode {
+                        range: parameter_introduced_binding_info.origin_range,
+                        value: parameter_introduced_binding_name,
+                    },
+                );
+            }
             if let Some(lambda_result_node) = maybe_lambda_result {
                 still_syntax_expression_uses_of_local_bindings_into(
                     &mut parameter_introduced_bindings,
@@ -12929,7 +12988,7 @@ fn still_syntax_expression_to_rust<'a>(
                         });
                         return None;
                     };
-                    let mut introduced_pattern_bindings: std::collections::HashMap<
+                    let mut case_pattern_introduced_bindings: std::collections::HashMap<
                         &str,
                         StillLocalBindingCompileInfo,
                     > = std::collections::HashMap::new();
@@ -12937,20 +12996,33 @@ fn still_syntax_expression_to_rust<'a>(
                     let compiled_pattern: CompiledStillPattern = still_syntax_pattern_to_rust(
                         errors,
                         records_used,
-                        &mut introduced_pattern_bindings,
+                        &mut case_pattern_introduced_bindings,
                         &mut bindings_to_clone,
                         type_aliases,
                         choice_types,
                         false,
                         still_syntax_node_as_ref(case_pattern_node),
                     );
+                    for (parameter_introduced_binding_name, parameter_introduced_binding_info) in
+                        &case_pattern_introduced_bindings
+                    {
+                        push_error_if_name_collides(
+                            errors,
+                            project_variable_declarations,
+                            &local_bindings,
+                            StillSyntaxNode {
+                                range: parameter_introduced_binding_info.origin_range,
+                                value: parameter_introduced_binding_name,
+                            },
+                        );
+                    }
                     let Some(rust_pattern) = compiled_pattern.rust else {
                         // skip case with incomplete pattern
                         return None;
                     };
                     if let Some(case_result_node) = &case.result {
                         still_syntax_expression_uses_of_local_bindings_into(
-                            &mut introduced_pattern_bindings,
+                            &mut case_pattern_introduced_bindings,
                             None,
                             still_syntax_node_as_ref(case_result_node),
                         );
@@ -12959,7 +13031,7 @@ fn still_syntax_expression_to_rust<'a>(
                         &str,
                         StillLocalBindingCompileInfo,
                     > = (*local_bindings).clone();
-                    local_bindings.extend(introduced_pattern_bindings);
+                    local_bindings.extend(case_pattern_introduced_bindings);
                     let compiled_case_result: CompiledStillExpression =
                         maybe_still_syntax_expression_to_rust(
                             errors,
@@ -13482,6 +13554,38 @@ fn still_syntax_expression_uses_of_local_bindings_into<'a>(
         }
     }
 }
+fn push_error_if_name_collides(
+    errors: &mut Vec<StillErrorNode>,
+    project_variable_declarations: &std::collections::HashMap<
+        StillName,
+        CompiledVariableDeclarationInfo,
+    >,
+    local_bindings: &std::rc::Rc<std::collections::HashMap<&str, StillLocalBindingCompileInfo>>,
+    name_node: StillSyntaxNode<&str>,
+) {
+    if project_variable_declarations.contains_key(name_node.value) {
+        if core_choice_type_infos.contains_key(name_node.value) {
+            errors.push(StillErrorNode {
+                range: name_node.range,
+                message: Box::from("a variable with this name is already part of core (core variables are for example int-to-str or dec-add). Rename this variable")
+            });
+        } else {
+            errors.push(StillErrorNode {
+                range: name_node.range,
+                message: Box::from(
+                    "a variable with this name is already declared in this project. Rename one of them",
+                ),
+            });
+        }
+    } else if local_bindings.contains_key(name_node.value) {
+        errors.push(StillErrorNode {
+            range: name_node.range,
+            message: Box::from(
+                "a variable with this name is already declared locally. Rename one of them",
+            ),
+        });
+    }
+}
 fn still_syntax_let_declaration_to_rust_into(
     errors: &mut Vec<StillErrorNode>,
     records_used: &mut std::collections::HashSet<Vec<StillName>>,
@@ -13496,6 +13600,12 @@ fn still_syntax_let_declaration_to_rust_into(
     declaration_node: StillSyntaxNode<&StillSyntaxLetDeclaration>,
     maybe_result: Option<StillSyntaxNode<&StillSyntaxExpression>>,
 ) -> CompiledStillExpression {
+    push_error_if_name_collides(
+        errors,
+        project_variable_declarations,
+        &local_bindings,
+        still_syntax_node_as_ref_map(&declaration_node.value.name, StillName::as_str),
+    );
     let compiled_declaration_result: CompiledStillExpression =
         maybe_still_syntax_expression_to_rust(
             errors,
@@ -13537,6 +13647,7 @@ fn still_syntax_let_declaration_to_rust_into(
     > = std::iter::once((
         declaration_node.value.name.value.as_str(),
         StillLocalBindingCompileInfo {
+            origin_range: declaration_node.value.name.range,
             is_copy: compiled_declaration_result
                 .type_
                 .as_ref()
@@ -13944,6 +14055,7 @@ fn still_syntax_pattern_to_rust<'a>(
                         > = introduced_bindings.insert(
                             name,
                             StillLocalBindingCompileInfo {
+                                origin_range: untyped_pattern_node.range,
                                 is_copy: maybe_type.as_ref().is_some_and(|type_| {
                                     still_type_is_copy(false, type_aliases, choice_types, type_)
                                 }),

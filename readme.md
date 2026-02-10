@@ -58,20 +58,21 @@ Then point your editor to `still lsp`, see also [specific setups](#editor-setups
 
 ## TODO
 - type checking (vec elements equal, case results equal, function arguments equal to parameters, typed, variant value) (notably also: check that each function output type only ever uses type variables used in the input type, and similarly: on non-function types, forbid the use of any new variables; in the error say "unknown type variable")
-- complete small standard library in rust (TODO `order`, `dec-power`, `str-compare`, `int-compare`, `dec-compare`, `map`, `set`, `vec-sort`, ...)
+- complete small standard library in rust (TODO `order`, `dec-power`, `str-compare`, `int-compare`, `dec-compare`, `vec-sort`, `vec-add-capacity`, ...)
 - replace `&'a dyn Fn(_) -> _` in function parameters by `impl Fn(_) -> _ + Clone + 'a`
   and likewise remove `alloc.alloc(|_| _)` when used as direct function parameter: `|_| _`
 - introduce `nat` type (`usize`) and require regular ints to be prefixed with `+`/`-`
 - simple io (`standard-in-read-line`, `standard-out-write`)
 - `case of` exhaustiveness checking
-- unused checking
-- name collision checking for local variables with local variables & project variables
+- unused checking for local variables (should trivial now)
 - implement `StillIntoOwned::into_owned_overwriting` for generated structs and enums
-- allow comments before variant (field name, case?)
 
 ## considering
-- adding anonymous choice types. They are not allowed to be recursive. Use `type alias` for these. choice types can then be removed. Should be fairly easy to implement but potentially not that nice for FFI, similar to record structs currently
-- find better string literal syntax, like zig's `//` or js' `\`\``
+- (leaning towards yes) allow comments before variant (field name, case?, variant?)
+- (currently no idea how to implement in rust, maybe can be done in user land given that it required Hash but I'd like order functions to be given for each operation or similar?) add `map`, `set` core types
+- replace non-recursive nominal-ish choice types by structural-ish choice types. Should be fairly easy to implement as `enum Variant0Variant1<Variant0, Variant1>` but still alright for FFI (you always have to type `Variant0Variant1::Variant0` similar to record structs currently _but_ crucially you have the option to use a still-declared type alias like `type Choice<'a> = Variant0Variant1<usize, &'a str>` to write `Choice::Variant0`)
+- (leaning towards yes) use better multiline string literal: starting each line with `/"` or `"""` just like zig's `//`
+- (leaning slightly towards yes) change `Str<'a>` to `enum { Slice(&'a str), Rc(Rc<String>) }` and converting to Rc to a slice when necessary by allocating the Rc (same for Vec)
 - (leaning no, at least for now) add or pattern `( first | second | third )` (potentially allow `:overall:( A | B | C )` (where the inner variant patterns don't need a type) specifically for variant)
 - make formatter range-independent, and instead cut a line >=100 (is that possible to do when trying to get a maximally fast formatter? Because it seems an intermediate recursive structure is required)
 - (seems not worth the analysis cost but a simpler version maybe is) avoid unnecessary clones by field
@@ -91,36 +92,98 @@ Then point your editor to `still lsp`, see also [specific setups](#editor-setups
   This generally removes some verbosity, is consistent with choice type/ type alias construction,
   allows non-called generic functions, would allow the removal of all "::Typed" patterns and expressions (except recursion? but maybe there is a better solution for that).
 - (seems completely useless) infer constness of generated variable/fn items
-- consider allowing concrete bounded variables in some type aliases and choice types instead of &dyn
+- (leaning towards no) allow concrete bounded variables in some type aliases and choice types instead of &dyn
 
 ## syntax overview
-### matching and destructuring
-Any expression can be followed with any number of `| pattern > result` cases:
 ```still
-option
-| :opt int:Absent >
-    0
-| :opt int:Present n >
-    n + 1
-```
-The last case result is allowed to be unindented;
-in effect this is like an early return.
+# this is a comment.
 
-This indentation trick makes it fairly nice to do simple destructuring:
-```still
+# declared variable, type and field names use ascii letters, digits and -
+s0me-Name
+
+# any expression can have an explicit :type:
+:str:some-variable-name
+
+# string (of type str)
+"Yahallo"
+
+# character (of type chr)
+'👀'
+
+# integer (of type int)
+2012
+
+# floating point number (of type dec)
+1.25
+
+# function call (of type int)
+int-add 2 3
+
+# list expression with elements of the same type (of type vec int)
+[ 1, 2, 3 ]
+
+# an empty vec requires an explicit type
+:vec int:[]
+
+# a bunch of labelled values grouped together
+#   (of type { likes int, dislikes int, boosts int })
+{ likes 1, dislikes int-add 1 2, boosts 3 }
+
+# an abbreviation for a commonly used type
+type point Unity-type-parameter =
+    { x Unity-type-parameter, y Unity-type-parameter }
+
+# for expressions, that are either one thing, or some another thing
+choice card Custom-joker-action
+    | Draw4
+    | Joker
+        # variants can have 0 or 1 value
+        Custom-joker-action
+    | Regular
+        { color color
+        , value int
+        }
+
+# variant (:type: is required)
+:card int:Joker 1
+
+# function (the first symbol is a backslash)
+\first-pattern, second_pattern > result-expression
+
+# a pattern can be a number, string, character, record, variant or...
+# ...a variable 
+:str:incoming-string
+# ...a wildcard: match anything but don't store it in a variable
+:card int:_
+
+# for different cases of how a value looks, exhaustively decide what to do
+# in the example below: given a leftover card, assign minus points
+card
+| :card int:Draw4 >
+    40
+| :card int:Joker 0 >
+    20
+| :card int:Joker :int:joker_power >
+    int-mul joker_power 5
+| :card int:Regular { color :color:_, value :int:value } >
+    value
+
+# The last case result is allowed to be unindented;
+# in effect this is like an early return.
+# This indentation trick makes it fairly nice to do simple destructuring:
 variant
 | :some:Variant member >
 result
-```
-or something close to pipelines
-```still
+
+# or something close to pipelines
+# You will probably prefer `let` for most cases, though.
 f x argument
 | :f-result:f-result >
 g y first-result
 | :g-result:g-result >
 h z g-result
 ```
-You will probably prefer `let` for most cases, though.
+Some syntax might not be listed, the examples may give show more.
 
 ## editor setups
 feel free to contribute as I only use vscodium
