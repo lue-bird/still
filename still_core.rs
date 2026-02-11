@@ -598,7 +598,23 @@ fn vec_element<A: Clone>(vec: Vec<A>, index: Unt) -> Opt<A> {
         std::option::Option::Some(element) => Opt::Present(element.clone()),
     }
 }
-fn vec_take<A: Clone>(vec: Vec<A>, taken_length: Unt) -> Vec<A> {
+fn vec_replace_element<A: Clone>(vec: Vec<A>, index: Unt, new_element: A) -> Vec<A> {
+    if index >= vec.len() {
+        return vec;
+    }
+    let mut owned_vec: std::vec::Vec<A> = std::rc::Rc::unwrap_or_clone(vec);
+    owned_vec[index] = new_element;
+    std::rc::Rc::new(owned_vec)
+}
+fn vec_swap<A: Clone>(vec: Vec<A>, a_index: Unt, b_index: Unt) -> Vec<A> {
+    if a_index >= vec.len() || b_index >= vec.len() || a_index == b_index {
+        return vec;
+    }
+    let mut owned_vec: std::vec::Vec<A> = std::rc::Rc::unwrap_or_clone(vec);
+    owned_vec.swap(a_index, b_index);
+    std::rc::Rc::new(owned_vec)
+}
+fn vec_truncate<A: Clone>(vec: Vec<A>, taken_length: Unt) -> Vec<A> {
     match std::rc::Rc::try_unwrap(vec) {
         std::result::Result::Ok(mut owned_vec) => {
             owned_vec.truncate(taken_length);

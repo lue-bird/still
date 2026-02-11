@@ -67,7 +67,7 @@ Then point your editor to `still lsp`, see also [specific setups](#editor-setups
 ## considering
 - (leaning clear yes) add more core float operations like `sin`, `cos`, `pi`, `ln`
 - (leaning towards yes) add core bitwise and, or, xor, shifts, complement for the integer number types
-- (leaning towards yes) add `vec-walk-backwards-from`, `str-walk-chrs-backwards-from`, `vec-replace`, `vec-replace-by-last`
+- (leaning towards yes) add `vec-walk-backwards-from`, `str-walk-chrs-backwards-from`
 - (leaning towards yes) rename chr to char
 - (leaning towards yes) allow comments before variant (field name, case?, variant?)
 - (leaning towards yes) use better multiline string literal: starting each line with `/"` or `"""` just like zig's `//`

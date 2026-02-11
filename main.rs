@@ -9089,17 +9089,69 @@ I recommend creating helpers for common cases like mapping to an `opt` and keepi
                     [still_type_vec(variable("A")),still_type_unt],
                     still_type_opt(variable("A")),
                 ),
-                "The element at a given index. If it lands out of bounds, results in :option Element:Absent",
+                r"The element at a given index. If it is too big, results in :option Element:Absent
+```still
+vec-last-element \:vec A:vec >
+    unt-to-int (int-add (unt-to-int (vec-length vec) -1)
+    | :opt unt:Absent > 
+        # vec was empty
+        :opt A:Absent
+    | :opt unt:Present :unt:last-index >
+        vec-element vec last-index
+```
+",
             ),
             (
-                StillName::from("vec-take"),
+                StillName::from("vec-replace-element"),
+                RustVariableItemKind::Fn,
+                false,
+                function(
+                    [still_type_vec(variable("A")),still_type_unt,variable("A")],
+                    still_type_vec(variable("A")),
+                ),
+                "Set the element at a given index to a given new value. If the index is greater than the last existing index, change nothing",
+            ),
+            (
+                StillName::from("vec-swap"),
+                RustVariableItemKind::Fn,
+                false,
+                function(
+                    [still_type_vec(variable("A")),still_type_unt,variable("A")],
+                    still_type_vec(variable("A")),
+                ),
+                r"Exchange the element at the first given index with the element at the second given index. If either index is greater than the last existing index (or the indexes are equal), nothing is changed
+```still
+vec-remove-by-swapping-with-last \:vec A:vec, :unt:index >
+    let len
+        vec-length vec
+    unt-to-int (int-add (unt-to-int len) -1)
+    | :opt unt:Absent >
+        # vec was empty, nothing to do
+        vec
+    | :opt unt:Present :unt:last-index >
+        vec-truncate (vec-swap vec index last-index) last-index
+```
+",
+            ),
+            (
+                StillName::from("vec-truncate"),
                 RustVariableItemKind::Fn,
                 false,
                 function(
                     [still_type_vec(variable("A")), still_type_unt],
                     still_type_vec(variable("A")),
                 ),
-                "Truncate to at most a given length",
+                r"Take at most a given count of elements from the start
+```still
+vec-remove-last \:vec A:vec >
+    unt-to-int (int-add (unt-to-int (vec-length vec) -1)
+    | :opt unt:Absent >
+        # vec was empty, nothing to do
+        vec
+    | :opt unt:Present :unt:truncated-length >
+        vec-truncate vec truncated-length
+```
+",
             ),
             (
                 StillName::from("vec-increase-capacity-by"),
