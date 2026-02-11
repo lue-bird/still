@@ -31,7 +31,7 @@ greet \{ name :str:name } >
         strs-flatten [ "Hello, ", name, "!" ]
 
 unfinished
-    [ int-to-str 3
+    [ unt-to-str 3
     ]
 
 build-tree \:int:n >
@@ -50,13 +50,13 @@ closure-requiring-clone-of-capture \:vec int:variable >
     ]
 
 type state =
-    int
+    unt
 
 initial-state :state:0
 
 interface \:state:state >
-    { new-state int-add state 1
-    , standard-out-write int-to-str state
+    { new-state unt-add state 1
+    , standard-out-write unt-to-str state
     }
 
 ansi-clear-screen

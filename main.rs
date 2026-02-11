@@ -2396,10 +2396,11 @@ struct StillTypeField {
     value: StillType,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 enum StillSyntaxPattern {
     Char(Option<char>),
-    Int(Box<str>),
+    Int(StillSyntaxInt),
+    Unt(Box<str>),
     String {
         content: String,
         quoting_style: StillSyntaxStringQuotingStyle,
@@ -2414,12 +2415,12 @@ enum StillSyntaxPattern {
     },
     Record(Vec<StillSyntaxPatternField>),
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 struct StillSyntaxPatternField {
     name: StillSyntaxNode<StillName>,
     value: Option<StillSyntaxNode<StillSyntaxPattern>>,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 enum StillSyntaxPatternUntyped {
     Variable(StillName),
     Ignored,
@@ -2434,13 +2435,17 @@ enum StillSyntaxStringQuotingStyle {
     TripleQuoted,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 struct StillSyntaxLetDeclaration {
     name: StillSyntaxNode<StillName>,
     result: Option<StillSyntaxNode<Box<StillSyntaxExpression>>>,
 }
-
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
+enum StillSyntaxInt {
+    Zero,
+    Signed(Box<str>),
+}
+#[derive(Clone, Debug)]
 enum StillSyntaxExpression {
     VariableOrCall {
         variable: StillSyntaxNode<StillName>,
@@ -2453,7 +2458,8 @@ enum StillSyntaxExpression {
     },
     Char(Option<char>),
     Dec(Box<str>),
-    Int(Box<str>),
+    Int(StillSyntaxInt),
+    Unt(Box<str>),
     Lambda {
         parameters: Vec<StillSyntaxNode<StillSyntaxPattern>>,
         arrow_key_symbol_range: Option<lsp_types::Range>,
@@ -2489,7 +2495,7 @@ enum StillSyntaxExpression {
         quoting_style: StillSyntaxStringQuotingStyle,
     },
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 enum StillSyntaxExpressionUntyped {
     Variant {
         name: StillSyntaxNode<StillName>,
@@ -2497,20 +2503,20 @@ enum StillSyntaxExpressionUntyped {
     },
     Other(Box<StillSyntaxExpression>),
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 struct StillSyntaxExpressionCase {
     or_bar_key_symbol_range: lsp_types::Range,
     arrow_key_symbol_range: Option<lsp_types::Range>,
     pattern: Option<StillSyntaxNode<StillSyntaxPattern>>,
     result: Option<StillSyntaxNode<StillSyntaxExpression>>,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 struct StillSyntaxExpressionField {
     name: StillSyntaxNode<StillName>,
     value: Option<StillSyntaxNode<StillSyntaxExpression>>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 enum StillSyntaxDeclaration {
     ChoiceType {
         name: Option<StillSyntaxNode<StillName>>,
@@ -2587,12 +2593,12 @@ fn still_syntax_node_box<Value>(
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 struct StillSyntaxProject {
     declarations: Vec<Result<StillSyntaxDocumentedDeclaration, StillSyntaxNode<Box<str>>>>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 struct StillSyntaxDocumentedDeclaration {
     documentation: Option<StillSyntaxNode<Box<str>>>,
     declaration: Option<StillSyntaxNode<StillSyntaxDeclaration>>,
@@ -2609,6 +2615,7 @@ fn still_syntax_pattern_type(
     match pattern_node.value {
         StillSyntaxPattern::Char(_) => still_syntax_node_empty(still_syntax_type_chr),
         StillSyntaxPattern::Int { .. } => still_syntax_node_empty(still_syntax_type_int),
+        StillSyntaxPattern::Unt { .. } => still_syntax_node_empty(still_syntax_type_unt),
         StillSyntaxPattern::String { .. } => still_syntax_node_empty(still_syntax_type_str),
         StillSyntaxPattern::WithComment {
             comment: _,
@@ -2823,7 +2830,8 @@ fn still_syntax_expression_type_with<'a>(
         },
         StillSyntaxExpression::Char(_) => still_syntax_node_empty(still_syntax_type_chr),
         StillSyntaxExpression::Dec(_) => still_syntax_node_empty(still_syntax_type_dec),
-        StillSyntaxExpression::Int { .. } => still_syntax_node_empty(still_syntax_type_int),
+        StillSyntaxExpression::Int(_) => still_syntax_node_empty(still_syntax_type_int),
+        StillSyntaxExpression::Unt(_) => still_syntax_node_empty(still_syntax_type_unt),
         StillSyntaxExpression::Lambda {
             parameters,
             arrow_key_symbol_range: _,
@@ -3036,6 +3044,15 @@ const still_type_dec: StillType = StillType::ChoiceConstruct {
 };
 const still_syntax_type_dec: StillSyntaxType = StillSyntaxType::Construct {
     name: still_syntax_node_empty(StillName::const_new(still_type_dec_name)),
+    arguments: vec![],
+};
+const still_type_unt_name: &str = "unt";
+const still_type_unt: StillType = StillType::ChoiceConstruct {
+    name: StillName::const_new(still_type_unt_name),
+    arguments: vec![],
+};
+const still_syntax_type_unt: StillSyntaxType = StillSyntaxType::Construct {
+    name: still_syntax_node_empty(StillName::const_new(still_type_unt_name)),
     arguments: vec![],
 };
 const still_type_int_name: &str = "int";
@@ -3370,6 +3387,9 @@ fn still_syntax_pattern_into(
         StillSyntaxPattern::Int(representation) => {
             still_int_into(so_far, representation);
         }
+        StillSyntaxPattern::Unt(representation) => {
+            still_unt_into(so_far, representation);
+        }
         StillSyntaxPattern::String {
             content,
             quoting_style,
@@ -3530,14 +3550,36 @@ fn still_unicode_char_escape_into(so_far: &mut String, char: char) {
         let _ = write!(so_far, "\\u{{{:04X}}}", utf16_code);
     }
 }
-fn still_int_into(so_far: &mut String, representation: &str) {
-    match representation.parse::<isize>() {
+fn still_unt_into(so_far: &mut String, representation: &str) {
+    match representation.parse::<usize>() {
         Err(_) => {
             so_far.push_str(representation);
         }
         Ok(value) => {
             use std::fmt::Write as _;
             let _ = write!(so_far, "{}", value);
+        }
+    }
+}
+fn still_int_into(so_far: &mut String, representation: &StillSyntaxInt) {
+    match representation {
+        StillSyntaxInt::Zero => {
+            so_far.push_str("00");
+        }
+        StillSyntaxInt::Signed(signed_representation) => {
+            match signed_representation.parse::<isize>() {
+                Err(_) => {
+                    so_far.push_str(signed_representation);
+                }
+                Ok(value) => {
+                    use std::fmt::Write as _;
+                    if value >= 1 {
+                        let _ = write!(so_far, "+{}", value);
+                    } else {
+                        let _ = write!(so_far, "{}", value);
+                    }
+                }
+            }
         }
     }
 }
@@ -3669,6 +3711,9 @@ fn still_syntax_expression_not_parenthesized_into(
                 let _ = write!(so_far, "{}", value);
             }
         },
+        StillSyntaxExpression::Unt(representation) => {
+            still_unt_into(so_far, representation);
+        }
         StillSyntaxExpression::Int(representation) => {
             still_int_into(so_far, representation);
         }
@@ -4116,6 +4161,7 @@ fn still_syntax_expression_parenthesized_if_space_separated_into(
         StillSyntaxExpression::WithComment { .. } => true,
         StillSyntaxExpression::Char(_) => false,
         StillSyntaxExpression::Dec(_) => false,
+        StillSyntaxExpression::Unt { .. } => false,
         StillSyntaxExpression::Int { .. } => false,
         StillSyntaxExpression::Vec(_) => false,
         StillSyntaxExpression::Parenthesized(_) => false,
@@ -4539,6 +4585,7 @@ fn still_syntax_pattern_find_symbol_at_position<'a>(
 ) -> Option<StillSyntaxNode<StillSyntaxSymbol<'a>>> {
     match still_syntax_pattern_node.value {
         StillSyntaxPattern::Char(_) => None,
+        StillSyntaxPattern::Unt { .. } => None,
         StillSyntaxPattern::Int { .. } => None,
         StillSyntaxPattern::Typed {
             type_: maybe_type_node,
@@ -4804,7 +4851,8 @@ fn still_syntax_expression_find_symbol_at_position<'a>(
         }
         StillSyntaxExpression::Char(_) => std::ops::ControlFlow::Continue(local_bindings),
         StillSyntaxExpression::Dec(_) => std::ops::ControlFlow::Continue(local_bindings),
-        StillSyntaxExpression::Int { .. } => std::ops::ControlFlow::Continue(local_bindings),
+        StillSyntaxExpression::Unt(_) => std::ops::ControlFlow::Continue(local_bindings),
+        StillSyntaxExpression::Int(_) => std::ops::ControlFlow::Continue(local_bindings),
         StillSyntaxExpression::Lambda {
             parameters,
             arrow_key_symbol_range: _,
@@ -5390,7 +5438,8 @@ fn still_syntax_expression_uses_of_symbol_into(
         }
         StillSyntaxExpression::Char(_) => {}
         StillSyntaxExpression::Dec(_) => {}
-        StillSyntaxExpression::Int { .. } => {}
+        StillSyntaxExpression::Unt(_) => {}
+        StillSyntaxExpression::Int(_) => {}
         StillSyntaxExpression::Lambda {
             parameters,
             arrow_key_symbol_range: _,
@@ -5613,7 +5662,8 @@ fn still_syntax_pattern_uses_of_symbol_into(
 ) {
     match still_syntax_pattern_node.value {
         StillSyntaxPattern::Char(_) => {}
-        StillSyntaxPattern::Int { .. } => {}
+        StillSyntaxPattern::Unt(_) => {}
+        StillSyntaxPattern::Int(_) => {}
         StillSyntaxPattern::Typed {
             type_: maybe_type_node,
             pattern: maybe_pattern_node_in_typed,
@@ -5720,7 +5770,8 @@ fn still_syntax_pattern_bindings_into<'a>(
 ) {
     match still_syntax_pattern_node.value {
         StillSyntaxPattern::Char(_) => {}
-        StillSyntaxPattern::Int { .. } => {}
+        StillSyntaxPattern::Unt(_) => {}
+        StillSyntaxPattern::Int(_) => {}
         StillSyntaxPattern::String { .. } => {}
         StillSyntaxPattern::Typed {
             type_: maybe_type,
@@ -5781,7 +5832,8 @@ fn still_syntax_pattern_binding_names_into<'a>(
 ) {
     match still_syntax_pattern_node.value {
         StillSyntaxPattern::Char(_) => {}
-        StillSyntaxPattern::Int { .. } => {}
+        StillSyntaxPattern::Unt(_) => {}
+        StillSyntaxPattern::Int(_) => {}
         StillSyntaxPattern::String { .. } => {}
         StillSyntaxPattern::Typed {
             type_: _,
@@ -5839,7 +5891,8 @@ fn still_syntax_pattern_binding_types_into<'a>(
 ) {
     match still_syntax_pattern_node.value {
         StillSyntaxPattern::Char(_) => {}
-        StillSyntaxPattern::Int { .. } => {}
+        StillSyntaxPattern::Unt(_) => {}
+        StillSyntaxPattern::Int(_) => {}
         StillSyntaxPattern::String { .. } => {}
         StillSyntaxPattern::Typed {
             type_: maybe_type,
@@ -6100,7 +6153,13 @@ fn still_syntax_highlight_pattern_into(
                 value: StillSyntaxHighlightKind::String,
             });
         }
-        StillSyntaxPattern::Int { .. } => {
+        StillSyntaxPattern::Unt(_) => {
+            highlighted_so_far.push(StillSyntaxNode {
+                range: still_syntax_pattern_node.range,
+                value: StillSyntaxHighlightKind::Number,
+            });
+        }
+        StillSyntaxPattern::Int(_) => {
             highlighted_so_far.push(StillSyntaxNode {
                 range: still_syntax_pattern_node.range,
                 value: StillSyntaxHighlightKind::Number,
@@ -6342,7 +6401,13 @@ fn still_syntax_highlight_expression_into(
                 value: StillSyntaxHighlightKind::Number,
             });
         }
-        StillSyntaxExpression::Int { .. } => {
+        StillSyntaxExpression::Unt(_) => {
+            highlighted_so_far.push(StillSyntaxNode {
+                range: still_syntax_expression_node.range,
+                value: StillSyntaxHighlightKind::Number,
+            });
+        }
+        StillSyntaxExpression::Int(_) => {
             highlighted_so_far.push(StillSyntaxNode {
                 range: still_syntax_expression_node.range,
                 value: StillSyntaxHighlightKind::Number,
@@ -7006,6 +7071,7 @@ fn parse_still_syntax_pattern(
         .or_else(|| parse_still_syntax_pattern_string(state))
         .or_else(|| parse_still_syntax_pattern_record(state))
         .or_else(|| parse_still_syntax_pattern_int(state))
+        .or_else(|| parse_still_syntax_pattern_unt(state))
         .map(|pattern| StillSyntaxNode {
             range: lsp_types::Range {
                 start: start_position,
@@ -7144,26 +7210,43 @@ fn parse_still_syntax_pattern_string(state: &mut ParseState) -> Option<StillSynt
             })
         })
 }
-
-fn parse_still_syntax_pattern_int(state: &mut ParseState) -> Option<StillSyntaxPattern> {
+// must be checked for _after_ `parse_still_syntax_pattern_int`
+fn parse_still_syntax_pattern_unt(state: &mut ParseState) -> Option<StillSyntaxPattern> {
     let start_offset_utf8: usize = state.offset_utf8;
-    if parse_unsigned_integer_base10(state) {
-    } else if parse_symbol(state, "-") || parse_symbol(state, "+") {
-        let _: bool = parse_unsigned_integer_base10(state);
-    } else {
+    if !parse_unsigned_integer_base10(state) {
         return None;
     }
     let decimal_str: &str = &state.source[start_offset_utf8..state.offset_utf8];
-    Some(StillSyntaxPattern::Int(Box::from(decimal_str)))
+    Some(StillSyntaxPattern::Unt(Box::from(decimal_str)))
 }
-fn parse_still_syntax_expression_number(state: &mut ParseState) -> Option<StillSyntaxExpression> {
+// must be checked for _before_ `parse_still_syntax_pattern_unt`
+fn parse_still_syntax_pattern_int(state: &mut ParseState) -> Option<StillSyntaxPattern> {
+    if parse_symbol(state, "00") {
+        return Some(StillSyntaxPattern::Int(StillSyntaxInt::Zero));
+    }
     let start_offset_utf8: usize = state.offset_utf8;
-    if parse_unsigned_integer_base10(state) {
-    } else if parse_symbol(state, "-") || parse_symbol(state, "+") {
-        let _: bool = parse_unsigned_integer_base10(state);
-    } else {
+    if !parse_symbol(state, "-") || parse_symbol(state, "+") {
         return None;
     }
+    let _: bool = parse_unsigned_integer_base10(state);
+    let decimal_str: &str = &state.source[start_offset_utf8..state.offset_utf8];
+    Some(StillSyntaxPattern::Int(StillSyntaxInt::Signed(Box::from(
+        decimal_str,
+    ))))
+}
+fn parse_still_syntax_expression_number(state: &mut ParseState) -> Option<StillSyntaxExpression> {
+    if parse_symbol(state, "00") {
+        return Some(StillSyntaxExpression::Int(StillSyntaxInt::Zero));
+    }
+    let start_offset_utf8: usize = state.offset_utf8;
+    let has_sign: bool = if parse_symbol(state, "-") || parse_symbol(state, "+") {
+        let _: bool = parse_unsigned_integer_base10(state);
+        true
+    } else if parse_unsigned_integer_base10(state) {
+        false
+    } else {
+        return None;
+    };
     let has_decimal_point: bool = parse_symbol(state, ".");
     if has_decimal_point {
         parse_same_line_while(state, |c| c.is_ascii_digit());
@@ -7171,8 +7254,10 @@ fn parse_still_syntax_expression_number(state: &mut ParseState) -> Option<StillS
     let full_chomped_str: &str = &state.source[start_offset_utf8..state.offset_utf8];
     Some(if has_decimal_point {
         StillSyntaxExpression::Dec(Box::from(full_chomped_str))
+    } else if has_sign {
+        StillSyntaxExpression::Int(StillSyntaxInt::Signed(Box::from(full_chomped_str)))
     } else {
-        StillSyntaxExpression::Int(Box::from(full_chomped_str))
+        StillSyntaxExpression::Unt(Box::from(full_chomped_str))
     })
 }
 fn parse_still_char(state: &mut ParseState) -> Option<Option<char>> {
@@ -8658,6 +8743,62 @@ static core_variable_declaration_infos: std::sync::LazyLock<
         std::collections::HashMap::from(
         [
             (
+                StillName::from("unt-add"),
+                RustVariableItemKind::Fn,
+                false,
+                function([still_type_unt,still_type_unt], still_type_unt),
+                "Addition operation (`+`)",
+            ),
+            (
+                StillName::from("unt-mul"),
+                RustVariableItemKind::Fn,
+                false,
+                function([still_type_unt,still_type_unt], still_type_unt),
+                "Multiplication operation (`*`)",
+            ),
+            (
+                StillName::from("unt-div"),
+                RustVariableItemKind::Fn,
+                false,
+                function([still_type_unt,still_type_unt], still_type_unt),
+                "Integer division operation (`/`), discarding any remainder. Try not to divide by 0, as 0 will be returned which is not mathematically correct. This behaviour is consistent with gleam, pony, coq, lean",
+            ),
+            (
+                StillName::from("unt-order"),
+                RustVariableItemKind::Fn,
+                false,
+                function([still_type_unt,still_type_unt], still_type_order),
+                "Compare `unt` values",
+            ),
+            (
+                StillName::from("unt-to-int"),
+                RustVariableItemKind::Fn,
+                true,
+                function([still_type_unt], still_type_int),
+                "Convert `unt` to `int`",
+            ),
+            (
+                StillName::from("unt-to-dec"),
+                RustVariableItemKind::Fn,
+                true,
+                function([still_type_unt], still_type_dec),
+                "Convert `unt` to `dec`",
+            ),
+            (
+                StillName::from("unt-to-str"),
+                RustVariableItemKind::Fn,
+                true,
+                function([still_type_unt], still_type_str),
+                "Convert `unt` to `str`",
+            ),
+            (
+                StillName::from("str-to-unt"),
+                RustVariableItemKind::Fn,
+                false,
+                function([still_type_str], still_type_opt(still_type_unt)),
+                "Parse a complete `str` unto an `unt`, returning :opt unt:Absent otherwise",
+            ),
+            (
                 StillName::from("int-negate"),
                 RustVariableItemKind::Fn,
                 false,
@@ -8668,8 +8809,8 @@ static core_variable_declaration_infos: std::sync::LazyLock<
                 StillName::from("int-absolute"),
                 RustVariableItemKind::Fn,
                 false,
-                function([still_type_int], still_type_int),
-                "If negative, negate",
+                function([still_type_int], still_type_unt),
+                "If negative, negate, ultimately yielding an `unt`",
             ),
             (
                 StillName::from("int-add"),
@@ -8700,11 +8841,25 @@ static core_variable_declaration_infos: std::sync::LazyLock<
                 "Compare `int` values",
             ),
             (
+                StillName::from("int-to-dec"),
+                RustVariableItemKind::Fn,
+                true,
+                function([still_type_int], still_type_dec),
+                "Convert `int` to `dec`",
+            ),
+            (
                 StillName::from("int-to-str"),
                 RustVariableItemKind::Fn,
                 true,
                 function([still_type_int], still_type_str),
                 "Convert `int` to `str`",
+            ),
+            (
+                StillName::from("int-to-unt"),
+                RustVariableItemKind::Fn,
+                true,
+                function([still_type_int], still_type_opt(still_type_dec)),
+                "Convert the `int` to `unt` if >= 0, returning :opt unt:Absent otherwise",
             ),
             (
                 StillName::from("str-to-int"),
@@ -8808,7 +8963,7 @@ static core_variable_declaration_infos: std::sync::LazyLock<
                 StillName::from("chr-byte-count"),
                 RustVariableItemKind::Fn,
                 false,
-                function([still_type_chr], still_type_int),
+                function([still_type_chr], still_type_unt),
                 "Encoded as UTF-8, how many bytes the `chr` spans, between 1 and 4",
             ),
             (
@@ -8829,7 +8984,7 @@ static core_variable_declaration_infos: std::sync::LazyLock<
                 StillName::from("str-byte-count"),
                 RustVariableItemKind::Fn,
                 false,
-                function([still_type_str], still_type_int),
+                function([still_type_str], still_type_unt),
                 "Encoded as UTF-8, how many bytes the `str` spans",
             ),
             (
@@ -8837,7 +8992,7 @@ static core_variable_declaration_infos: std::sync::LazyLock<
                 RustVariableItemKind::Fn,
                 false,
                 function(
-                    [still_type_str, still_type_int],
+                    [still_type_str, still_type_unt],
                     still_type_opt(still_type_chr),
                 ),
                 "The `chr` at the nearest lower character boundary of a given UTF-8 index. If it lands out of bounds, results in :option Element:Absent",
@@ -8847,7 +9002,7 @@ static core_variable_declaration_infos: std::sync::LazyLock<
                 RustVariableItemKind::Fn,
                 false,
                 function(
-                    [still_type_str, still_type_int,still_type_int],
+                    [still_type_str, still_type_unt,still_type_unt],
                     still_type_opt(still_type_str),
                 ),
                 "Create a sub-slice starting at the floor character boundary of a given UTF-8 index, spanning for a given count of UTF-8 bytes until before the nearest higher character boundary",
@@ -8916,14 +9071,14 @@ I recommend creating helpers for common cases like mapping to an `opt` and keepi
                 StillName::from("vec-repeat"),
                 RustVariableItemKind::Fn,
                 true,
-                function([still_type_int, variable("A")], still_type_vec(variable("A"))),
+                function([still_type_unt, variable("A")], still_type_vec(variable("A"))),
                 "Build a `vec` with a given length and a given element at each index",
             ),
             (
                 StillName::from("vec-length"),
                 RustVariableItemKind::Fn,
                 false,
-                function([still_type_vec(variable("A"))], still_type_int),
+                function([still_type_vec(variable("A"))], still_type_unt),
                 "Its element count",
             ),
             (
@@ -8931,7 +9086,7 @@ I recommend creating helpers for common cases like mapping to an `opt` and keepi
                 RustVariableItemKind::Fn,
                 false,
                 function(
-                    [still_type_vec(variable("A")),still_type_int],
+                    [still_type_vec(variable("A")),still_type_unt],
                     still_type_opt(variable("A")),
                 ),
                 "The element at a given index. If it lands out of bounds, results in :option Element:Absent",
@@ -8941,7 +9096,7 @@ I recommend creating helpers for common cases like mapping to an `opt` and keepi
                 RustVariableItemKind::Fn,
                 false,
                 function(
-                    [still_type_vec(variable("A")), still_type_int],
+                    [still_type_vec(variable("A")), still_type_unt],
                     still_type_vec(variable("A")),
                 ),
                 "Truncate to at most a given length",
@@ -8951,7 +9106,7 @@ I recommend creating helpers for common cases like mapping to an `opt` and keepi
                 RustVariableItemKind::Fn,
                 false,
                 function(
-                    [still_type_vec(variable("A")), still_type_int],
+                    [still_type_vec(variable("A")), still_type_unt],
                     still_type_vec(variable("A")),
                 ),
                 "Reserve capacity for at least a given count of additional elements to be inserted in the given vec (reserving space is done automatically when inserting elements but when knowing more about the final size, we can avoid reallocations).",
@@ -9069,15 +9224,39 @@ static core_choice_type_infos: std::sync::LazyLock<
     std::sync::LazyLock::new(|| {
         std::collections::HashMap::from([
         (
+            StillName::from(still_type_unt_name),
+            ChoiceTypeInfo {
+                name_range: None,
+                documentation: Some(Box::from(
+                    r"A natural number >= 0 (unsigned integer). Has the same size as a pointer on the target platform (so 64 bits on 64-bit platforms).
+```still
+vec-repeat 5 2
+# = [ 2, 2, 2, 2, 2 ]
+```
+"
+                )),
+                parameters: vec![],
+                variants: vec![],
+                is_copy: true,
+                has_owned_representation: true,
+                has_lifetime_parameter: false,
+                type_variants: vec![],
+            },
+        ),
+        (
             StillName::from(still_type_int_name),
             ChoiceTypeInfo {
                 name_range: None,
                 documentation: Some(Box::from(
                     r"A whole number (signed integer). Has the same size as a pointer on the target platform (so 64 bits on 64-bit platforms).
 ```still
-vec-repeat 5 2
-# = [ 2, 2, 2, 2, 2 ]
+some-ints
+    [ -2012
+    , +3
+    , 00
+    ]
 ```
+Notice how a sign (+/-/0) is required, otherwise the number would be of type `unt`
 "
                 )),
                 parameters: vec![],
@@ -9986,7 +10165,8 @@ fn still_syntax_expression_connect_variables_in_graph_from(
     match expression_node.value {
         StillSyntaxExpression::Char(_) => {}
         StillSyntaxExpression::Dec(_) => {}
-        StillSyntaxExpression::Int { .. } => {}
+        StillSyntaxExpression::Unt(_) => {}
+        StillSyntaxExpression::Int(_) => {}
         StillSyntaxExpression::String { .. } => {}
         StillSyntaxExpression::VariableOrCall {
             variable: variable_node,
@@ -11587,7 +11767,9 @@ fn variable_declaration_to_rust<'a>(
                         vis: syn::Visibility::Public(syn::token::Pub(syn_span())),
                         mutability: syn::StaticMutability::None,
                         static_token: syn::token::Static(syn_span()),
-                        ident: rust_ident,
+                        ident: syn_ident(&still_name_to_static_rust(
+                            &variable_declaration_info.name.value,
+                        )),
                         colon_token: syn::token::Colon(syn_span()),
                         ty: Box::new(still_type_to_rust(
                             type_aliases,
@@ -12497,21 +12679,53 @@ fn still_syntax_expression_to_rust<'a>(
                 }),
             },
         },
-        StillSyntaxExpression::Int(representation) => CompiledStillExpression {
+        StillSyntaxExpression::Unt(representation) => CompiledStillExpression {
             uses_allocator: false,
-            type_: Some(still_type_int),
-            rust: match representation.parse::<isize>() {
+            type_: Some(still_type_unt),
+            rust: match representation.parse::<usize>() {
                 Err(parse_error) => {
                     errors.push(StillErrorNode {
                         range: expression_node.range,
-                        message: Box::from(format!("int literal cannot be parsed: {parse_error}")),
+                        message: Box::from(format!(
+                            "unt (unsigned integer) literal cannot be parsed: {parse_error}"
+                        )),
                     });
                     syn_expr_todo()
                 }
                 Ok(int) => syn::Expr::Lit(syn::ExprLit {
                     attrs: vec![],
-                    lit: syn::Lit::Int(syn::LitInt::new(&int.to_string(), syn_span())),
+                    lit: syn::Lit::Int(syn::LitInt::new(&(int.to_string() + "usize"), syn_span())),
                 }),
+            },
+        },
+        StillSyntaxExpression::Int(representation) => CompiledStillExpression {
+            uses_allocator: false,
+            type_: Some(still_type_int),
+            rust: match representation {
+                StillSyntaxInt::Zero => syn::Expr::Lit(syn::ExprLit {
+                    attrs: vec![],
+                    lit: syn::Lit::Int(syn::LitInt::new("0isize", syn_span())),
+                }),
+                StillSyntaxInt::Signed(signed_representation) => {
+                    match signed_representation.parse::<isize>() {
+                        Err(parse_error) => {
+                            errors.push(StillErrorNode {
+                                range: expression_node.range,
+                                message: Box::from(format!(
+                                    "int literal cannot be parsed: {parse_error}"
+                                )),
+                            });
+                            syn_expr_todo()
+                        }
+                        Ok(int) => syn::Expr::Lit(syn::ExprLit {
+                            attrs: vec![],
+                            lit: syn::Lit::Int(syn::LitInt::new(
+                                &(int.to_string() + "isize"),
+                                syn_span(),
+                            )),
+                        }),
+                    }
+                }
             },
         },
         StillSyntaxExpression::Lambda {
@@ -13033,7 +13247,6 @@ fn still_syntax_expression_to_rust<'a>(
             variable: variable_node,
             arguments,
         } => {
-            let rust_variable_name: String = still_name_to_lowercase_rust(&variable_node.value);
             let mut uses_allocator: bool = false;
             let (rust_arguments, argument_maybe_types): (Vec<syn::Expr>, Vec<Option<StillType>>) =
                 arguments
@@ -13055,9 +13268,10 @@ fn still_syntax_expression_to_rust<'a>(
                         (compiled_argument.rust, compiled_argument.type_)
                     })
                     .unzip();
-            let rust_reference: syn::Expr = syn_expr_reference([&rust_variable_name]);
             match local_bindings.get(variable_node.value.as_str()) {
                 Some(variable_info) => {
+                    let rust_reference: syn::Expr =
+                        syn_expr_reference([&still_name_to_lowercase_rust(&variable_node.value)]);
                     let Some(variable_type) = &variable_info.type_ else {
                         return CompiledStillExpression {
                             rust: syn_expr_todo(),
@@ -13151,12 +13365,16 @@ fn still_syntax_expression_to_rust<'a>(
                         RustVariableItemKind::Fn => {}
                         RustVariableItemKind::Static => {
                             return CompiledStillExpression {
-                                rust: rust_reference,
+                                rust: syn_expr_reference([&still_name_to_static_rust(
+                                    &variable_node.value,
+                                )]),
                                 uses_allocator: false,
                                 type_: Some(project_variable_type.clone()),
                             };
                         }
                     }
+                    let rust_reference: syn::Expr =
+                        syn_expr_reference([&still_name_to_lowercase_rust(&variable_node.value)]);
                     let type_: StillType = if arguments.is_empty() {
                         project_variable_type.clone()
                     } else {
@@ -13614,6 +13832,7 @@ fn still_syntax_expression_uses_of_local_bindings_into<'a>(
     match expression_node.value {
         StillSyntaxExpression::Char(_) => {}
         StillSyntaxExpression::Dec(_) => {}
+        StillSyntaxExpression::Unt(_) => {}
         StillSyntaxExpression::Int(_) => {}
         StillSyntaxExpression::String { .. } => {}
         StillSyntaxExpression::Parenthesized(maybe_in_parens) => {
@@ -14258,9 +14477,9 @@ fn still_syntax_pattern_to_rust<'a>(
                 })),
             },
         },
-        StillSyntaxPattern::Int(representation) => CompiledStillPattern {
-            type_: Some(still_type_int),
-            rust: match representation.parse::<isize>() {
+        StillSyntaxPattern::Unt(representation) => CompiledStillPattern {
+            type_: Some(still_type_unt),
+            rust: match representation.parse::<usize>() {
                 Ok(int) => Some(syn::Pat::Lit(syn::ExprLit {
                     attrs: vec![],
                     lit: syn::Lit::Int(syn::LitInt::new(&int.to_string(), syn_span())),
@@ -14273,6 +14492,32 @@ fn still_syntax_pattern_to_rust<'a>(
                         ).into_boxed_str(),
                     });
                     None
+                }
+            },
+        },
+        StillSyntaxPattern::Int(representation) => CompiledStillPattern {
+            type_: Some(still_type_int),
+            rust: match representation {
+                StillSyntaxInt::Zero => Some(syn::Pat::Lit(syn::ExprLit {
+                    attrs: vec![],
+                    lit: syn::Lit::Int(syn::LitInt::new("0isize", syn_span())),
+                })),
+                StillSyntaxInt::Signed(signed_representation) => {
+                    match signed_representation.parse::<isize>() {
+                        Ok(int) => Some(syn::Pat::Lit(syn::ExprLit {
+                            attrs: vec![],
+                            lit: syn::Lit::Int(syn::LitInt::new(&int.to_string(), syn_span())),
+                        })),
+                        Err(parse_error) => {
+                            errors.push(StillErrorNode {
+                        range: pattern_node.range,
+                        message: format!(
+                            "invalid int format. Expected base 10 whole number like -123 or 0: {parse_error}"
+                        ).into_boxed_str(),
+                    });
+                            None
+                        }
+                    }
                 }
             },
         },
@@ -14621,6 +14866,21 @@ fn still_name_to_uppercase_rust(name: &str) -> String {
         "Inputs",
         "Output",
         "State",
+    ]
+    .contains(&sanitized.as_str())
+    {
+        sanitized + "ø_"
+    } else {
+        sanitized
+    }
+}
+/// all uppercase
+fn still_name_to_static_rust(name: &str) -> String {
+    let mut sanitized: String = name.replace("-", "_");
+    sanitized.make_ascii_uppercase();
+    if [
+        // type variables used in core
+        "A", "N",
     ]
     .contains(&sanitized.as_str())
     {

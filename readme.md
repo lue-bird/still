@@ -57,12 +57,11 @@ Then point your editor to `still lsp`, see also [specific setups](#editor-setups
 - no features that obfuscate ("shiny, cool features" that ruin languages in my opinion): infix operators, currying, lifetime tracking, traits/type classes, objects, task/async, hidden mutation, macros & reflection, side effects, modules, hidden context values, undefined
 
 ## TODO
-- type checking (vec elements equal, case results equal, function arguments equal to parameters, typed, variant value) (notably also: check that each function output type only ever uses type variables used in the input type, and similarly: on non-function types, forbid the use of any new variables; in the error say "unknown type variable")
 - remove `alloc.alloc(|_| _)` when used as direct function parameter to a project variable
-- introduce `unt` type (`usize`) and require regular ints to be prefixed with `+`/`-` (for zero: `:int:` 00 and `:unt:` 0)
-- simple io (`standard-in-read-line`, `standard-out-write`)
-- `case of` exhaustiveness checking
+- pattern match exhaustiveness checking
 - unused checking for local variables (should trivial now)
+- type checking (vec elements equal, case results equal, function arguments equal to parameters, typed, variant value) (notably also: check that each function output type only ever uses type variables used in the input type, and similarly: on non-function types, forbid the use of any new variables; in the error say "unknown type variable")
+- simple io (`standard-in-read-line`, `standard-out-write`)
 - implement `StillIntoOwned::into_owned_overwriting` for generated structs and enums
 
 ## considering
@@ -113,24 +112,31 @@ s0me-Name
 # character (of type chr)
 '👀'
 
-# integer (of type int)
-2012
+# signed integer (each of type int, sign is required)
++2012
 
-# floating point number (of type dec)
+# unsigned integers (of type unt, no sign)
+2012
+0
+
+# signed integer zero (of type int, sign is required even for 0 → 00)
+00
+
+# floating point number (of type dec, sign is optional)
 1.25
 
-# function call (of type int)
-int-add 2 3
+# function call (with result type int)
+int-add -2 +3
 
-# list expression with elements of the same type (of type vec int)
+# list expression with elements of the same type (of type vec unt)
 [ 1, 2, 3 ]
 
-# an empty vec requires an explicit type
+# empty vec (:explicit type: is required)
 :vec int:[]
 
 # a bunch of labelled values grouped together
-#   (of type { likes int, dislikes int, boosts int })
-{ likes 1, dislikes int-add 1 2, boosts 3 }
+#   (of type { likes unt, dislikes unt, boosts unt })
+{ likes 1, dislikes unt-add 1 2, boosts 3 }
 
 # an abbreviation for a commonly used type
 type point Unity-type-parameter =
@@ -144,11 +150,11 @@ choice card Custom-joker-action
         Custom-joker-action
     | Regular
         { color color
-        , value int
+        , value unt
         }
 
 # variant (:type: is required)
-:card int:Joker 1
+:card unt:Joker 1
 
 # function (the first symbol is a backslash)
 \first-pattern, second_pattern > result-expression
@@ -157,18 +163,18 @@ choice card Custom-joker-action
 # ...a variable 
 :str:incoming-string
 # ...a wildcard: match anything but don't store it in a variable
-:card int:_
+:card unt:_
 
 # for different cases of how a value looks, exhaustively decide what to do
 # in the example below: given a leftover card, assign minus points
 card
-| :card int:Draw4 >
+| :card unt:Draw4 >
     40
-| :card int:Joker 0 >
+| :card unt:Joker 0 >
     20
-| :card int:Joker :int:joker_power >
-    int-mul joker_power 5
-| :card int:Regular { color :color:_, value :int:value } >
+| :card unt:Joker :unt:joker_power >
+    unt-mul joker_power 5
+| :card unt:Regular { color :color:_, value :unt:value } >
     value
 
 # The last case result is allowed to be unindented;

@@ -2,7 +2,7 @@ mod still;
 
 fn main() {
     let mut allocator: bumpalo::Bump = bumpalo::Bump::new();
-    let mut still_state = still::initial_state;
+    let mut still_state = still::INITIAL_STATE;
     for _ in std::iter::repeat_n((), 10) {
         let updated_state_still = still::interface(
             &allocator,

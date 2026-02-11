@@ -2,10 +2,9 @@
     dead_code,
     non_shorthand_field_patterns,
     non_camel_case_types,
-    unused_imports,
-    non_upper_case_globals
+    clippy::needless_pass_by_value,
+    clippy::wrong_self_convention
 )]
-#![allow(clippy::needless_pass_by_value, clippy::wrong_self_convention)]
 #![no_implicit_prelude]
 extern crate std;
 use std::clone::Clone;
@@ -151,6 +150,53 @@ impl Order {
     }
 }
 
+pub type Unt = usize;
+impl OwnedToStill for Unt {
+    type Still<'a> = Unt;
+    fn to_still<'a>(&'a self, _: &'a impl Alloc) -> Self::Still<'a> {
+        *self
+    }
+}
+impl StillIntoOwned for Unt {
+    type Owned = Unt;
+    fn into_owned(self) -> Self::Owned {
+        self
+    }
+}
+
+fn unt_add(a: Unt, b: Unt) -> Unt {
+    a + b
+}
+fn unt_mul(a: Unt, b: Unt) -> Unt {
+    a * b
+}
+fn unt_div(to_divide: Unt, to_divide_by: Unt) -> Unt {
+    if to_divide_by == 0 {
+        0
+    } else {
+        to_divide / to_divide_by
+    }
+}
+fn unt_order(left: Unt, right: Unt) -> Order {
+    Order::from_ordering(left.cmp(&right))
+}
+fn unt_to_int(unt: Unt) -> Int {
+    unt as Int
+}
+#[expect(clippy::cast_precision_loss)]
+fn unt_to_dec(unt: Unt) -> Dec {
+    unt as f32
+}
+fn unt_to_str(allocator: &impl Alloc, unt: Unt) -> Str<'_> {
+    allocator.alloc(std::format!("{}", unt))
+}
+fn str_to_unt(str: Str) -> Opt<Unt> {
+    match str.parse::<Unt>() {
+        std::result::Result::Err(_) => Opt::Absent,
+        std::result::Result::Ok(unt) => Opt::Present(unt),
+    }
+}
+
 pub type Int = isize;
 impl OwnedToStill for Int {
     type Still<'a> = Int;
@@ -168,8 +214,8 @@ impl StillIntoOwned for Int {
 fn int_negate(int: Int) -> Int {
     -int
 }
-fn int_absolute(a: Int) -> Int {
-    Int::abs(a)
+fn int_absolute(a: Int) -> Unt {
+    Int::abs(a) as Unt
 }
 fn int_add(a: Int, b: Int) -> Int {
     a + b
@@ -186,6 +232,13 @@ fn int_div(to_divide: Int, to_divide_by: Int) -> Int {
 }
 fn int_order(left: Int, right: Int) -> Order {
     Order::from_ordering(left.cmp(&right))
+}
+fn int_to_unt(int: Int) -> Opt<Unt> {
+    Opt::from_option(std::convert::TryInto::<Unt>::try_into(int).ok())
+}
+#[expect(clippy::cast_precision_loss)]
+fn int_to_dec(int: Int) -> Dec {
+    int as f32
 }
 fn int_to_str(allocator: &impl Alloc, int: Int) -> Str<'_> {
     allocator.alloc(std::format!("{}", int))
@@ -389,8 +442,8 @@ impl StillIntoOwned for Chr {
     }
 }
 
-fn chr_byte_count(chr: Chr) -> Int {
-    chr.len_utf8() as Int
+fn chr_byte_count(chr: Chr) -> Unt {
+    chr.len_utf8()
 }
 fn chr_order(left: Chr, right: Chr) -> Order {
     Order::from_ordering(left.cmp(&right))
@@ -413,24 +466,23 @@ impl OwnedToStill for std::boxed::Box<str> {
     }
 }
 
-fn str_byte_count(str: Str) -> Int {
-    str.len() as Int
+fn str_byte_count(str: Str) -> Unt {
+    str.len()
 }
-fn str_chr_at_byte_index(str: Str, byte_index: Int) -> Opt<Chr> {
+fn str_chr_at_byte_index(str: Str, byte_index: Unt) -> Opt<Chr> {
     Opt::from_option(
-        str.get(str.ceil_char_boundary(byte_index as usize)..)
+        str.get(str.ceil_char_boundary(byte_index)..)
             .and_then(|chr_sub| std::iter::Iterator::next(&mut chr_sub.chars())),
     )
 }
 fn str_slice_from_byte_index_with_byte_length<'a>(
     str: Str<'a>,
-    start_index: Int,
-    slice_byte_length: Int,
+    start_index: Unt,
+    slice_byte_length: Unt,
 ) -> Str<'a> {
-    let start_index: usize = start_index.max(0) as usize;
     str.get(
         str.floor_char_boundary(start_index)
-            ..str.ceil_char_boundary(start_index + slice_byte_length.max(0) as usize),
+            ..str.ceil_char_boundary(start_index + slice_byte_length),
     )
     .unwrap_or("")
 }
@@ -532,38 +584,37 @@ impl<A: OwnedToStill> OwnedToStill for std::vec::Vec<A> {
 fn vec_literal<const N: usize, A>(elements: [A; N]) -> Vec<A> {
     std::rc::Rc::new(std::convert::Into::<std::vec::Vec<A>>::into(elements))
 }
-fn vec_repeat<A: Clone>(length: Int, element: A) -> Vec<A> {
+fn vec_repeat<A: Clone>(length: Unt, element: A) -> Vec<A> {
     std::rc::Rc::new(std::iter::Iterator::collect(std::iter::repeat_n(
-        element,
-        length as usize,
+        element, length,
     )))
 }
-fn vec_length<A>(vec: Vec<A>) -> Int {
-    vec.len() as Int
+fn vec_length<A>(vec: Vec<A>) -> Unt {
+    vec.len()
 }
-fn vec_element<A: Clone>(vec: Vec<A>, index: Int) -> Opt<A> {
-    match vec.get(index as usize) {
+fn vec_element<A: Clone>(vec: Vec<A>, index: Unt) -> Opt<A> {
+    match vec.get(index) {
         std::option::Option::None => Opt::Absent,
         std::option::Option::Some(element) => Opt::Present(element.clone()),
     }
 }
-fn vec_take<A: Clone>(vec: Vec<A>, taken_length: Int) -> Vec<A> {
+fn vec_take<A: Clone>(vec: Vec<A>, taken_length: Unt) -> Vec<A> {
     match std::rc::Rc::try_unwrap(vec) {
         std::result::Result::Ok(mut owned_vec) => {
-            owned_vec.truncate(taken_length as usize);
+            owned_vec.truncate(taken_length);
             std::rc::Rc::new(owned_vec)
         }
         std::result::Result::Err(vec_rc) => std::rc::Rc::new(
             vec_rc
-                .get(..(taken_length as usize))
+                .get(..taken_length)
                 .map(std::convert::Into::<std::vec::Vec<A>>::into)
                 .unwrap_or_else(|| std::vec![]),
         ),
     }
 }
-fn vec_increase_capacity_by<A: Clone>(vec: Vec<A>, capacity_increase: Int) -> Vec<A> {
+fn vec_increase_capacity_by<A: Clone>(vec: Vec<A>, capacity_increase: Unt) -> Vec<A> {
     let mut owned_vec: std::vec::Vec<A> = std::rc::Rc::unwrap_or_clone(vec);
-    owned_vec.reserve(capacity_increase as usize);
+    owned_vec.reserve(capacity_increase);
     std::rc::Rc::new(owned_vec)
 }
 fn vec_sort<A: Clone>(vec: Vec<A>, element_order: impl Fn(A, A) -> Order) -> Vec<A> {
