@@ -3056,6 +3056,11 @@ const still_syntax_type_str: StillSyntaxType = StillSyntaxType::Construct {
     name: still_syntax_node_empty(StillName::const_new(still_type_str_name)),
     arguments: vec![],
 };
+const still_type_order_name: &str = "order";
+const still_type_order: StillType = StillType::ChoiceConstruct {
+    name: StillName::const_new(still_type_order_name),
+    arguments: vec![],
+};
 const still_type_vec_name: &str = "vec";
 fn still_type_vec(element_type: StillType) -> StillType {
     StillType::ChoiceConstruct {
@@ -3067,6 +3072,20 @@ fn still_syntax_type_vec(element_type: StillSyntaxNode<StillSyntaxType>) -> Stil
     StillSyntaxType::Construct {
         name: still_syntax_node_empty(StillName::new(still_type_vec_name)),
         arguments: vec![element_type],
+    }
+}
+const still_type_opt_name: &str = "opt";
+fn still_type_opt(value_type: StillType) -> StillType {
+    StillType::ChoiceConstruct {
+        name: StillName::new(still_type_opt_name),
+        arguments: vec![value_type],
+    }
+}
+const still_type_continue_or_exit_name: &str = "continue-or-exit";
+fn still_type_continue_or_exit(continue_type: StillType, exit_type: StillType) -> StillType {
+    StillType::ChoiceConstruct {
+        name: StillName::new(still_type_opt_name),
+        arguments: vec![continue_type, exit_type],
     }
 }
 const fn still_syntax_node_empty<A>(value: A) -> StillSyntaxNode<A> {
@@ -8626,22 +8645,16 @@ struct CompiledVariableDeclarationInfo {
 static core_variable_declaration_infos: std::sync::LazyLock<
     std::collections::HashMap<StillName, CompiledVariableDeclarationInfo>,
 > = {
+    fn variable(name: &'static str) -> StillType {
+        StillType::Variable(StillName::from(name))
+    }
+    fn function(inputs: impl IntoIterator<Item = StillType>, output: StillType) -> StillType {
+        StillType::Function {
+            inputs: inputs.into_iter().collect::<Vec<_>>(),
+            output: Box::new(output),
+        }
+    }
     std::sync::LazyLock::new(|| {
-        fn variable(name: &'static str) -> StillType {
-            StillType::Variable(StillName::from(name))
-        }
-        fn function(inputs: impl IntoIterator<Item = StillType>, output: StillType) -> StillType {
-            StillType::Function {
-                inputs: inputs.into_iter().collect::<Vec<_>>(),
-                output: Box::new(output),
-            }
-        }
-        fn opt(value: StillType) -> StillType {
-            StillType::ChoiceConstruct {
-                name: StillName::const_new("opt"),
-                arguments: vec![value],
-            }
-        }
         std::collections::HashMap::from(
         [
             (
@@ -8677,7 +8690,14 @@ static core_variable_declaration_infos: std::sync::LazyLock<
                 RustVariableItemKind::Fn,
                 false,
                 function([still_type_int,still_type_int], still_type_int),
-                "Integer division operation (`/`), discarding any remainder",
+                "Integer division operation (`/`), discarding any remainder. Try not to divide by 0, as 0 will be returned which is not mathematically correct. This behaviour is consistent with gleam, pony, coq, lean",
+            ),
+            (
+                StillName::from("int-order"),
+                RustVariableItemKind::Fn,
+                false,
+                function([still_type_int,still_type_int], still_type_order),
+                "Compare `int` values",
             ),
             (
                 StillName::from("int-to-str"),
@@ -8690,7 +8710,7 @@ static core_variable_declaration_infos: std::sync::LazyLock<
                 StillName::from("str-to-int"),
                 RustVariableItemKind::Fn,
                 false,
-                function([still_type_str], opt(still_type_int)),
+                function([still_type_str], still_type_opt(still_type_int)),
                 "Parse a complete `str` into an `int`, returning :opt int:Absent otherwise",
             ),
             (
@@ -8726,7 +8746,7 @@ static core_variable_declaration_infos: std::sync::LazyLock<
                 RustVariableItemKind::Fn,
                 false,
                 function([still_type_dec,still_type_dec], still_type_dec),
-                "Division operation (`/`)",
+                "Division operation (`/`). Try not to divide by 0.0, as 0.0 will be returned which is not mathematically correct. This behaviour is consistent with gleam, pony, coq, lean.",
             ),
             (
                 StillName::from("dec-to-power-of"),
@@ -8764,6 +8784,13 @@ static core_variable_declaration_infos: std::sync::LazyLock<
                 "Its nearest integer. If the input ends in .5, round away from 0.0",
             ),
             (
+                StillName::from("dec-order"),
+                RustVariableItemKind::Fn,
+                false,
+                function([still_type_dec,still_type_dec], still_type_order),
+                "Compare `dec` values",
+            ),
+            (
                 StillName::from("dec-to-str"),
                 RustVariableItemKind::Fn,
                 true,
@@ -8774,7 +8801,7 @@ static core_variable_declaration_infos: std::sync::LazyLock<
                 StillName::from("str-to-dec"),
                 RustVariableItemKind::Fn,
                 false,
-                function([still_type_str], opt(still_type_dec)),
+                function([still_type_str], still_type_opt(still_type_dec)),
                 "Parse a complete `str` into an `dec`, returning :opt dec:Absent otherwise",
             ),
             (
@@ -8783,6 +8810,13 @@ static core_variable_declaration_infos: std::sync::LazyLock<
                 false,
                 function([still_type_chr], still_type_int),
                 "Encoded as UTF-8, how many bytes the `chr` spans, between 1 and 4",
+            ),
+            (
+                StillName::from("chr-order"),
+                RustVariableItemKind::Fn,
+                false,
+                function([still_type_chr,still_type_chr], still_type_order),
+                "Compare `chr` values by their unicode code point",
             ),
             (
                 StillName::from("chr-to-str"),
@@ -8804,7 +8838,7 @@ static core_variable_declaration_infos: std::sync::LazyLock<
                 false,
                 function(
                     [still_type_str, still_type_int],
-                    opt(still_type_chr),
+                    still_type_opt(still_type_chr),
                 ),
                 "The `chr` at the nearest lower character boundary of a given UTF-8 index. If it lands out of bounds, results in :option Element:Absent",
             ),
@@ -8814,7 +8848,7 @@ static core_variable_declaration_infos: std::sync::LazyLock<
                 false,
                 function(
                     [still_type_str, still_type_int,still_type_int],
-                    opt(still_type_str),
+                    still_type_opt(still_type_str),
                 ),
                 "Create a sub-slice starting at the floor character boundary of a given UTF-8 index, spanning for a given count of UTF-8 bytes until before the nearest higher character boundary",
             ),
@@ -8831,6 +8865,52 @@ static core_variable_declaration_infos: std::sync::LazyLock<
                 true,
                 function([still_type_vec(still_type_chr)], still_type_str),
                 "Concatenate a `vec` of `chr`s into one `str`",
+            ),
+            (
+                StillName::from("str-order"),
+                RustVariableItemKind::Fn,
+                false,
+                function([still_type_str,still_type_str], still_type_order),
+                "Compare `str` values lexicographically (chr-wise comparison, then longer is greater). A detailed definition: https://doc.rust-lang.org/std/cmp/trait.Ord.html#lexicographical-comparison",
+            ),
+            (
+                StillName::from("str-walk-chrs-from"),
+                RustVariableItemKind::Fn,
+                false,
+                function(
+                 [still_type_str,
+                  function([variable("State"), still_type_chr], still_type_continue_or_exit(variable("State"), variable("Exit")))
+                 ],
+                 still_type_continue_or_exit(variable("State"), variable("Exit"))
+                ),
+                r"Loop through all of its `chr`s first to last, collecting state or exiting early
+```still
+str-find-spaces-in-first-line \:str:str >
+    str-walk-chrs-from str
+        0
+        (\:int:space-count-so-far, :chr:chr >
+            chr
+            | '\n' > :continue-or-exit int int:Exit space-count-so-far
+            | ' ' > 
+                :continue-or-exit int int:
+                Continue int-add space-count-so-far 1
+            | :chr:_ >
+                :continue-or-exit int int:Continue space-count-so-far
+        )
+    | :continue-or-exit int int:Continue :int:result > result
+    | :continue-or-exit int int:Exit :int:result > result
+```
+As you're probably realizing, this is powerful but
+both inconvenient and not very declarative (similar to a for each in loop in other languages).
+I recommend creating helpers for common cases like mapping to an `opt` and keeping the `Present` ones.
+",
+            ),
+            (
+                StillName::from("strs-flatten"),
+                RustVariableItemKind::Fn,
+                true,
+                function([still_type_vec(still_type_str)], still_type_str),
+                "Concatenate all the string elements",
             ),
             (
                 StillName::from("vec-repeat"),
@@ -8852,9 +8932,19 @@ static core_variable_declaration_infos: std::sync::LazyLock<
                 false,
                 function(
                     [still_type_vec(variable("A")),still_type_int],
-                    opt(variable("A")),
+                    still_type_opt(variable("A")),
                 ),
                 "The element at a given index. If it lands out of bounds, results in :option Element:Absent",
+            ),
+            (
+                StillName::from("vec-take"),
+                RustVariableItemKind::Fn,
+                false,
+                function(
+                    [still_type_vec(variable("A")), still_type_int],
+                    still_type_vec(variable("A")),
+                ),
+                "Truncate to at most a given length",
             ),
             (
                 StillName::from("vec-increase-capacity-by"),
@@ -8867,14 +8957,16 @@ static core_variable_declaration_infos: std::sync::LazyLock<
                 "Reserve capacity for at least a given count of additional elements to be inserted in the given vec (reserving space is done automatically when inserting elements but when knowing more about the final size, we can avoid reallocations).",
             ),
             (
-                StillName::from("vec-take"),
+                StillName::from("vec-sort"),
                 RustVariableItemKind::Fn,
                 false,
                 function(
-                    [still_type_vec(variable("A")), still_type_int],
+                    [still_type_vec(variable("A")),
+                     function([variable("A"),variable("A")], still_type_order)
+                    ],
                     still_type_vec(variable("A")),
                 ),
-                "Truncate to at most a given length",
+                "Reserve capacity for at least a given count of additional elements to be inserted in the given vec (reserving space is done automatically when inserting elements but when knowing more about the final size, we can avoid reallocations).",
             ),
             (
                 StillName::from("vec-attach"),
@@ -8891,11 +8983,45 @@ static core_variable_declaration_infos: std::sync::LazyLock<
                 "Concatenate all the elements nested inside the inner `vec`s",
             ),
             (
-                StillName::from("strs-flatten"),
+                StillName::from("vec-walk-from"),
                 RustVariableItemKind::Fn,
-                true,
-                function([still_type_vec(still_type_str)], still_type_str),
-                "Concatenate all the string elements",
+                false,
+                function(
+                 [still_type_vec(variable("A")),
+                  function([variable("State"),variable("A")], still_type_continue_or_exit(variable("State"), variable("Exit")))
+                 ],
+                 still_type_continue_or_exit(variable("State"), variable("Exit"))
+                ),
+                r"Loop through all of its elements first to last, collecting state or exiting early
+```still
+# if you aren't using any state in Continue, just use {}
+vec-first-present \:vec (opt A):vec >
+    vec-walk-from vec
+        {}
+        (\:opt A:element, {} >
+            element
+            | :opt A:Absent >
+                :continue-or-exit {} A:Continue {}
+            | :opt A:Present :A:found >
+                :continue-or-exit {} A:Exit found
+        )
+    | :continue-or-exit {} A:Continue {} > :opt A:Absent
+    | :continue-or-exit {} A:Exit :A:found > :opt A:Present found
+
+# if you aren't calling Exit, you can use the same type as for the state
+ints-sum \:vec int:vec >
+    vec-walk-from vec
+        0
+        (\:int:sum-so-far, :int:element > :continue-or-exit int int:
+            Continue int-add sum-so-far element
+        )
+    | :continue-or-exit int int:Continue :int:result > result
+    | :continue-or-exit int int:Exit :int:result > result
+```
+As you're probably realizing, this is powerful but
+both inconvenient and not very declarative (similar to a for each in loop in other languages).
+I recommend creating helpers for common cases like mapping to an `opt` and keeping the `Present` ones.
+",
             ),
         ]
         .map(|(name, kind, has_allocator_parameter, type_, documentation)| {
@@ -9033,7 +9159,75 @@ Do not use plain `str` to build a big string.
             },
         ),
         (
-            StillName::from("opt"),
+            StillName::from(still_type_order_name),
+            ChoiceTypeInfo {
+                name_range: None,
+                documentation: Some(Box::from(
+                    r#"The result of a comparison.
+```still
+int-cmp 1 2
+# = :order:Less
+
+dec-cmp 0.0 0.0
+# = :order:Equal
+
+chr-cmp 'b' 'a'
+# = :order:Greater
+
+# typically used with pattern matching
+int-order x 5
+| :order:Less >
+    "must be >= 5"
+| :order:_ >
+int-order x 10
+| :order:Greater >
+    "must be <= 10"
+| :order:_
+    "valid"
+
+# and is used for sorting
+vec
+```
+If necessary you can create order functions for your specific types,
+still does not have "traits"/"type classes" or similar, functions are always passed explicitly.
+"#
+                )),
+                parameters: vec![still_syntax_node_empty(StillName::from("A"))],
+                type_variants: vec![
+                    StillChoiceTypeVariantInfo{
+                        name:StillName::from("Absent"),
+                        value: None
+                    },
+                    StillChoiceTypeVariantInfo{
+                        name:StillName::from("Present"),
+                        value: Some(StillChoiceTypeVariantValueInfo {
+                            type_: StillType::Variable(StillName::from("A")),
+                            constructs_recursive_type: false
+                        })
+                    }
+                ],
+                is_copy: true,
+                has_owned_representation: true,
+                has_lifetime_parameter: false,
+                // should be able to be omitted
+                variants: vec![
+                    StillSyntaxChoiceTypeVariant {
+                        or_key_symbol_range: lsp_types::Range::default(),
+                        name: Some(still_syntax_node_empty(StillName::from("Absent"))),
+                        value: None,
+                    },
+                    StillSyntaxChoiceTypeVariant {
+                        or_key_symbol_range: lsp_types::Range::default(),
+                        name: Some(still_syntax_node_empty(StillName::from("Present"))),
+                        value: Some(still_syntax_node_empty(StillSyntaxType::Variable(
+                            StillName::from("A"),
+                        ))),
+                    }
+                ],
+            },
+        ),
+        (
+            StillName::from(still_type_opt_name),
             ChoiceTypeInfo {
                 name_range: None,
                 documentation: Some(Box::from(
@@ -9049,6 +9243,85 @@ Do not use plain `str` to build a big string.
                         name:StillName::from("Present"),
                         value: Some(StillChoiceTypeVariantValueInfo {
                             type_: StillType::Variable(StillName::from("A")),
+                            constructs_recursive_type: false
+                        })
+                    }
+                ],
+                is_copy: true,
+                has_owned_representation: true,
+                has_lifetime_parameter: false,
+                // should be able to be omitted
+                variants: vec![
+                    StillSyntaxChoiceTypeVariant {
+                        or_key_symbol_range: lsp_types::Range::default(),
+                        name: Some(still_syntax_node_empty(StillName::from("Absent"))),
+                        value: None,
+                    },
+                    StillSyntaxChoiceTypeVariant {
+                        or_key_symbol_range: lsp_types::Range::default(),
+                        name: Some(still_syntax_node_empty(StillName::from("Present"))),
+                        value: Some(still_syntax_node_empty(StillSyntaxType::Variable(
+                            StillName::from("A"),
+                        ))),
+                    }
+                ],
+            },
+        ),
+        (
+            StillName::from(still_type_continue_or_exit_name),
+            ChoiceTypeInfo {
+                name_range: None,
+                documentation: Some(Box::from(
+                    r"Either done with a final result or continuing with a partial result.
+Typically used for operations that can shortcut.
+```still
+# If you aren't using any state in Continue, just use {}
+vec-first-present \:vec (opt A):vec >
+    vec-walk-from vec
+        {}
+        (\:opt A:element, {} >
+            element
+            | :opt A:Absent >
+                :continue-or-exit {} A:Continue {}
+            | :opt A:Present :A:found >
+                :continue-or-exit {} A:Exit found
+        )
+    | :continue-or-exit {} A:Continue {} > :opt A:Absent
+    | :continue-or-exit {} A:Exit :A:found > :opt A:Present found
+
+loop-from \:State:state, :\State > continue-or-exit State Exit: step >
+    step state
+    | :continue-or-exit State Exit:Exit :Exit:exit > exit
+    | :continue-or-exit State Exit:Continue :Continue:updated_state >
+        loop_from updated_state step
+
+numbers0-9
+    loop_from { index 0, vec vec-increase-capacity-by (:vec int:[]) 10 }
+        (\{ index i, vec vec } >
+            int-order i 10
+            | :order:Less >
+                :continue-or-exit { index int, vec vec int } (vec int):
+                Continue { index int-add i 1, vec vec-attach vec [ i ] }
+            | :order:_ >
+                :continue-or-exit { index int, vec vec int } (vec int):
+                Exit vec
+        )
+```
+"
+                )),
+                parameters: vec![still_syntax_node_empty(StillName::from("Continue")), still_syntax_node_empty(StillName::from("Exit"))],
+                type_variants: vec![
+                    StillChoiceTypeVariantInfo{
+                        name:StillName::from("Continue"),
+                        value: Some(StillChoiceTypeVariantValueInfo {
+                            type_: StillType::Variable(StillName::from("Continue")),
+                            constructs_recursive_type: false
+                        })
+                    },
+                    StillChoiceTypeVariantInfo{
+                        name:StillName::from("Exit"),
+                        value: Some(StillChoiceTypeVariantValueInfo {
+                            type_: StillType::Variable(StillName::from("Exit")),
                             constructs_recursive_type: false
                         })
                     }
@@ -14340,6 +14613,14 @@ fn still_name_to_uppercase_rust(name: &str) -> String {
         "StillIntoOwned",
         "OwnedToStill",
         "Fn",
+        // type variables used in core
+        "A",
+        "N",
+        "Continue",
+        "Exit",
+        "Inputs",
+        "Output",
+        "State",
     ]
     .contains(&sanitized.as_str())
     {

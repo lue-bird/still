@@ -44,8 +44,8 @@ fn alloc_fn_as_dyn<'a, Inputs, Output>(
 /// `Vec<'_, { x: Str<'_>, y: isize }>`
 /// will get turned into
 /// `std::vec::Vec<{ x: Box<str>, y: isize }`
-/// Notice how all _inner_ values are also turned into still values,
-/// making this operation more expensive than `into_owned` or `clone`
+/// Notice how all _inner_ values are also converted,
+/// making this operation more expensive than `to_owned`/`clone`
 ///
 /// ```
 /// let mut still_state: Some_still_type::Owned = StillIntoOwned::into_owned(...);
@@ -101,6 +101,56 @@ impl<T: StillIntoOwned + Clone> StillIntoOwned for &T {
     // TODO once std::boxed::Box::map becomes stable, use that to optimize into_owned_overwriting
 }
 
+#[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash, Debug)]
+pub struct Blank {}
+impl StillIntoOwned for Blank {
+    type Owned = Blank;
+    fn into_owned(self) -> Self::Owned {
+        self
+    }
+}
+impl OwnedToStill for Blank {
+    type Still<'a> = Blank;
+    fn to_still<'a>(&'a self, _: &'a impl Alloc) -> Self::Still<'a> {
+        *self
+    }
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash, Debug)]
+pub enum Order {
+    Less = -1,
+    Equal = 0,
+    Greater = 1,
+}
+impl OwnedToStill for Order {
+    type Still<'a> = Order;
+    fn to_still<'a>(&'a self, _: &'a impl Alloc) -> Self::Still<'a> {
+        *self
+    }
+}
+impl StillIntoOwned for Order {
+    type Owned = Order;
+    fn into_owned(self) -> Self::Owned {
+        self
+    }
+}
+impl Order {
+    pub fn to_ordering(self) -> std::cmp::Ordering {
+        match self {
+            Order::Less => std::cmp::Ordering::Less,
+            Order::Equal => std::cmp::Ordering::Equal,
+            Order::Greater => std::cmp::Ordering::Greater,
+        }
+    }
+    pub fn from_ordering(order: std::cmp::Ordering) -> Order {
+        match order {
+            std::cmp::Ordering::Less => Order::Less,
+            std::cmp::Ordering::Equal => Order::Equal,
+            std::cmp::Ordering::Greater => Order::Greater,
+        }
+    }
+}
+
 pub type Int = isize;
 impl OwnedToStill for Int {
     type Still<'a> = Int;
@@ -128,7 +178,14 @@ fn int_mul(a: Int, b: Int) -> Int {
     a * b
 }
 fn int_div(to_divide: Int, to_divide_by: Int) -> Int {
-    to_divide / to_divide_by
+    if to_divide_by == 0 {
+        0
+    } else {
+        to_divide / to_divide_by
+    }
+}
+fn int_order(left: Int, right: Int) -> Order {
+    Order::from_ordering(left.cmp(&right))
 }
 fn int_to_str(allocator: &impl Alloc, int: Int) -> Str<'_> {
     allocator.alloc(std::format!("{}", int))
@@ -167,7 +224,11 @@ fn dec_mul(a: Dec, b: Dec) -> Dec {
     a * b
 }
 fn dec_div(to_divide: Dec, to_divide_by: Dec) -> Dec {
-    to_divide / to_divide_by
+    if to_divide_by == 0.0 {
+        0.0
+    } else {
+        to_divide / to_divide_by
+    }
 }
 fn dec_to_power_of(dec: Dec, exponent: Dec) -> Dec {
     Dec::powf(dec, exponent)
@@ -183,6 +244,12 @@ fn dec_ceiling(dec: Dec) -> Int {
 }
 fn dec_round(dec: Dec) -> Int {
     Dec::round(dec) as Int
+}
+fn dec_order(left: Dec, right: Dec) -> Order {
+    match left.partial_cmp(&right) {
+        std::option::Option::Some(ordering) => Order::from_ordering(ordering),
+        std::option::Option::None => Order::Equal,
+    }
 }
 fn dec_to_str(allocator: &impl Alloc, dec: Dec) -> Str<'_> {
     allocator.alloc(std::format!("{}", dec))
@@ -244,18 +311,67 @@ impl<A> Opt<A> {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash, Debug)]
-pub struct Blank {}
-impl StillIntoOwned for Blank {
-    type Owned = Blank;
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub enum ContinueOrExit<Continue, Exit> {
+    Continue(Continue),
+    Exit(Exit),
+}
+impl<Continue: StillIntoOwned + Clone, Exit: StillIntoOwned + Clone> StillIntoOwned
+    for ContinueOrExit<Continue, Exit>
+{
+    type Owned = ContinueOrExit<Continue::Owned, Exit::Owned>;
     fn into_owned(self) -> Self::Owned {
-        self
+        match self {
+            ContinueOrExit::Continue(continue_) => {
+                ContinueOrExit::Continue(Continue::into_owned(continue_))
+            }
+            ContinueOrExit::Exit(exit) => ContinueOrExit::Exit(Exit::into_owned(exit)),
+        }
+    }
+    fn into_owned_overwriting(self, allocation_to_reuse: &mut Self::Owned) {
+        match (self, allocation_to_reuse) {
+            (
+                ContinueOrExit::Continue(continue_),
+                ContinueOrExit::Continue(continue_allocation_to_reuse),
+            ) => {
+                Continue::into_owned_overwriting(continue_, continue_allocation_to_reuse);
+            }
+            (ContinueOrExit::Exit(exit), ContinueOrExit::Exit(exit_allocation_to_reuse)) => {
+                Exit::into_owned_overwriting(exit, exit_allocation_to_reuse);
+            }
+            (self_, allocation_to_reuse) => {
+                *allocation_to_reuse = Self::into_owned(self_);
+            }
+        }
     }
 }
-impl OwnedToStill for Blank {
-    type Still<'a> = Blank;
-    fn to_still<'a>(&'a self, _: &'a impl Alloc) -> Self::Still<'a> {
-        *self
+impl<Continue: OwnedToStill, Exit: OwnedToStill> OwnedToStill for ContinueOrExit<Continue, Exit> {
+    type Still<'a>
+        = ContinueOrExit<Continue::Still<'a>, Exit::Still<'a>>
+    where
+        Continue: 'a,
+        Exit: 'a;
+    fn to_still<'a>(&'a self, allocator: &'a impl Alloc) -> Self::Still<'a> {
+        match self {
+            ContinueOrExit::Continue(continue_) => {
+                ContinueOrExit::Continue(Continue::to_still(continue_, allocator))
+            }
+            ContinueOrExit::Exit(exit) => ContinueOrExit::Exit(Exit::to_still(exit, allocator)),
+        }
+    }
+}
+impl<Continue, Exit> ContinueOrExit<Continue, Exit> {
+    fn to_control_flow(self) -> std::ops::ControlFlow<Exit, Continue> {
+        match self {
+            ContinueOrExit::Continue(continue_) => std::ops::ControlFlow::Continue(continue_),
+            ContinueOrExit::Exit(exit) => std::ops::ControlFlow::Break(exit),
+        }
+    }
+    fn from_control_flow(control_flow: std::ops::ControlFlow<Exit, Continue>) -> Self {
+        match control_flow {
+            std::ops::ControlFlow::Continue(continue_) => ContinueOrExit::Continue(continue_),
+            std::ops::ControlFlow::Break(exit) => ContinueOrExit::Exit(exit),
+        }
     }
 }
 
@@ -275,6 +391,9 @@ impl StillIntoOwned for Chr {
 
 fn chr_byte_count(chr: Chr) -> Int {
     chr.len_utf8() as Int
+}
+fn chr_order(left: Chr, right: Chr) -> Order {
+    Order::from_ordering(left.cmp(&right))
 }
 fn chr_to_str(allocator: &impl Alloc, chr: Chr) -> Str<'_> {
     allocator.alloc(std::format!("{}", chr))
@@ -321,6 +440,25 @@ fn str_to_chrs(str: Str) -> Vec<Chr> {
 fn chrs_to_str<'a>(allocator: &'a impl Alloc, chars: Vec<Chr>) -> Str<'a> {
     let string: std::string::String =
         std::iter::Iterator::collect(std::iter::Iterator::copied(chars.iter()));
+    allocator.alloc(string)
+}
+fn str_order(left: Str, right: Str) -> Order {
+    Order::from_ordering(left.cmp(right))
+}
+fn str_walk_chrs_from<Exit, State>(
+    str: Str,
+    initial_state: State,
+    on_element: impl Fn(State, Chr) -> ContinueOrExit<State, Exit>,
+) -> ContinueOrExit<State, Exit> {
+    ContinueOrExit::from_control_flow(std::iter::Iterator::try_fold(
+        &mut str.chars(),
+        initial_state,
+        |state, element| on_element(state, element).to_control_flow(),
+    ))
+}
+fn strs_flatten<'a>(allocator: &'a impl Alloc, vec_of_str: Vec<Str>) -> Str<'a> {
+    let string: std::string::String =
+        std::iter::Iterator::collect(std::iter::Iterator::copied(vec_of_str.iter()));
     allocator.alloc(string)
 }
 
@@ -428,6 +566,11 @@ fn vec_increase_capacity_by<A: Clone>(vec: Vec<A>, capacity_increase: Int) -> Ve
     owned_vec.reserve(capacity_increase as usize);
     std::rc::Rc::new(owned_vec)
 }
+fn vec_sort<A: Clone>(vec: Vec<A>, element_order: impl Fn(A, A) -> Order) -> Vec<A> {
+    let mut owned_vec: std::vec::Vec<A> = std::rc::Rc::unwrap_or_clone(vec);
+    owned_vec.sort_unstable_by(|a, b| element_order(a.clone(), b.clone()).to_ordering());
+    std::rc::Rc::new(owned_vec)
+}
 fn vec_attach<A: Clone>(left: Vec<A>, right: Vec<A>) -> Vec<A> {
     let mut combined: std::vec::Vec<A> = std::rc::Rc::unwrap_or_clone(left);
     match std::rc::Rc::try_unwrap(right) {
@@ -463,8 +606,25 @@ fn vec_flatten<A: Clone>(vec_vec: Vec<Vec<A>>) -> Vec<A> {
         }
     })
 }
-fn strs_flatten<'a>(allocator: &'a impl Alloc, vec_of_str: Vec<Str>) -> Str<'a> {
-    let string: std::string::String =
-        std::iter::Iterator::collect(std::iter::Iterator::copied(vec_of_str.iter()));
-    allocator.alloc(string)
+fn vec_walk_from<A: Clone, Exit, State>(
+    vec: Vec<A>,
+    state: State,
+    on_element: impl Fn(State, A) -> ContinueOrExit<State, Exit>,
+) -> ContinueOrExit<State, Exit> {
+    match std::rc::Rc::try_unwrap(vec) {
+        std::result::Result::Err(vec) => {
+            ContinueOrExit::from_control_flow(std::iter::Iterator::try_fold(
+                &mut std::iter::Iterator::cloned(vec.iter()),
+                state,
+                |state, element| on_element(state, element).to_control_flow(),
+            ))
+        }
+        std::result::Result::Ok(vec) => {
+            ContinueOrExit::from_control_flow(std::iter::Iterator::try_fold(
+                &mut std::iter::IntoIterator::into_iter(vec),
+                state,
+                |state, element| on_element(state, element).to_control_flow(),
+            ))
+        }
+    }
 }
