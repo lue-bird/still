@@ -169,6 +169,21 @@ fn dec_mul(a: Dec, b: Dec) -> Dec {
 fn dec_div(to_divide: Dec, to_divide_by: Dec) -> Dec {
     to_divide / to_divide_by
 }
+fn dec_to_power_of(dec: Dec, exponent: Dec) -> Dec {
+    Dec::powf(dec, exponent)
+}
+fn dec_truncate(dec: Dec) -> Int {
+    Dec::trunc(dec) as Int
+}
+fn dec_floor(dec: Dec) -> Int {
+    Dec::floor(dec) as Int
+}
+fn dec_ceiling(dec: Dec) -> Int {
+    Dec::ceil(dec) as Int
+}
+fn dec_round(dec: Dec) -> Int {
+    Dec::round(dec) as Int
+}
 fn dec_to_str(allocator: &impl Alloc, dec: Dec) -> Str<'_> {
     allocator.alloc(std::format!("{}", dec))
 }
@@ -282,12 +297,23 @@ impl OwnedToStill for std::boxed::Box<str> {
 fn str_byte_count(str: Str) -> Int {
     str.len() as Int
 }
-// TODO fn str_slice_from_byte_index_for_byte_count(start_index, slice_byte_count, str: Str) -> Str
-fn str_chr_at_byte_index(byte_index: Int, str: Str) -> Opt<Chr> {
+fn str_chr_at_byte_index(str: Str, byte_index: Int) -> Opt<Chr> {
     Opt::from_option(
         str.get(str.ceil_char_boundary(byte_index as usize)..)
             .and_then(|chr_sub| std::iter::Iterator::next(&mut chr_sub.chars())),
     )
+}
+fn str_slice_from_byte_index_with_byte_length<'a>(
+    str: Str<'a>,
+    start_index: Int,
+    slice_byte_length: Int,
+) -> Str<'a> {
+    let start_index: usize = start_index.max(0) as usize;
+    str.get(
+        str.floor_char_boundary(start_index)
+            ..str.ceil_char_boundary(start_index + slice_byte_length.max(0) as usize),
+    )
+    .unwrap_or("")
 }
 fn str_to_chrs(str: Str) -> Vec<Chr> {
     std::rc::Rc::new(std::iter::Iterator::collect(str.chars()))
@@ -377,13 +403,13 @@ fn vec_repeat<A: Clone>(length: Int, element: A) -> Vec<A> {
 fn vec_length<A>(vec: Vec<A>) -> Int {
     vec.len() as Int
 }
-fn vec_element<A: Clone>(index: Int, vec: Vec<A>) -> Opt<A> {
+fn vec_element<A: Clone>(vec: Vec<A>, index: Int) -> Opt<A> {
     match vec.get(index as usize) {
         std::option::Option::None => Opt::Absent,
         std::option::Option::Some(element) => Opt::Present(element.clone()),
     }
 }
-fn vec_take<A: Clone>(taken_length: Int, vec: Vec<A>) -> Vec<A> {
+fn vec_take<A: Clone>(vec: Vec<A>, taken_length: Int) -> Vec<A> {
     match std::rc::Rc::try_unwrap(vec) {
         std::result::Result::Ok(mut owned_vec) => {
             owned_vec.truncate(taken_length as usize);
@@ -396,6 +422,11 @@ fn vec_take<A: Clone>(taken_length: Int, vec: Vec<A>) -> Vec<A> {
                 .unwrap_or_else(|| std::vec![]),
         ),
     }
+}
+fn vec_increase_capacity_by<A: Clone>(vec: Vec<A>, capacity_increase: Int) -> Vec<A> {
+    let mut owned_vec: std::vec::Vec<A> = std::rc::Rc::unwrap_or_clone(vec);
+    owned_vec.reserve(capacity_increase as usize);
+    std::rc::Rc::new(owned_vec)
 }
 fn vec_attach<A: Clone>(left: Vec<A>, right: Vec<A>) -> Vec<A> {
     let mut combined: std::vec::Vec<A> = std::rc::Rc::unwrap_or_clone(left);

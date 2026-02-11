@@ -58,7 +58,7 @@ Then point your editor to `still lsp`, see also [specific setups](#editor-setups
 
 ## TODO
 - type checking (vec elements equal, case results equal, function arguments equal to parameters, typed, variant value) (notably also: check that each function output type only ever uses type variables used in the input type, and similarly: on non-function types, forbid the use of any new variables; in the error say "unknown type variable")
-- complete small standard library in rust: `order`, `dec-power`, `str-compare`, `int-compare`, `dec-compare`, `dec-floor`, `dec-ceiling`, `dec-round`, `vec-sort`, `vec-add-capacity`, `done-or-continue`, `vec-walk(Fn(Element, State) -> DoneOrContinue<Done, State>) -> DoneOrContinue<Done, State>`
+- complete small standard library in rust: `order`, `str-compare`, `int-compare`, `dec-compare`, `vec-sort`, `done-or-continue`, `vec-walk(Fn(Element, State) -> DoneOrContinue<Done, State>) -> DoneOrContinue<Done, State>`
 - remove `alloc.alloc(|_| _)` when used as direct function parameter to a project variable
 - introduce `nat` type (`usize`) and require regular ints to be prefixed with `+`/`-`
 - simple io (`standard-in-read-line`, `standard-out-write`)
