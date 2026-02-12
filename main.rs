@@ -8764,13 +8764,13 @@ static core_variable_declaration_infos: std::sync::LazyLock<
             ),
             (
                 StillName::from("unt-to-int"),
-                true,
+                false,
                 function([still_type_unt], still_type_int),
                 "Convert `unt` to `int`",
             ),
             (
                 StillName::from("unt-to-dec"),
-                true,
+                false,
                 function([still_type_unt], still_type_dec),
                 "Convert `unt` to `dec`",
             ),
@@ -8824,7 +8824,7 @@ static core_variable_declaration_infos: std::sync::LazyLock<
             ),
             (
                 StillName::from("int-to-dec"),
-                true,
+                false,
                 function([still_type_int], still_type_dec),
                 "Convert `int` to `dec`",
             ),
@@ -8836,8 +8836,8 @@ static core_variable_declaration_infos: std::sync::LazyLock<
             ),
             (
                 StillName::from("int-to-unt"),
-                true,
-                function([still_type_int], still_type_opt(still_type_dec)),
+                false,
+                function([still_type_int], still_type_opt(still_type_unt)),
                 "Convert the `int` to `unt` if >= 0, returning :opt unt:Absent otherwise",
             ),
             (
@@ -8884,25 +8884,25 @@ static core_variable_declaration_infos: std::sync::LazyLock<
             ),
             (
                 StillName::from("dec-truncate"),
-                true,
+                false,
                 function([still_type_dec], still_type_int),
                 "Its integer part, stripping away anything after the decimal point. Its like floor for positive inputs and ceiling for negative inputs",
             ),
             (
                 StillName::from("dec-floor"),
-                true,
+                false,
                 function([still_type_dec], still_type_int),
                 "Its nearest smaller integer",
             ),
             (
                 StillName::from("dec-ceiling"),
-                true,
+                false,
                 function([still_type_dec], still_type_int),
                 "Its nearest greater integer",
             ),
             (
                 StillName::from("dec-round"),
-                true,
+                false,
                 function([still_type_dec], still_type_int),
                 "Its nearest integer. If the input ends in .5, round away from 0.0",
             ),
@@ -8968,7 +8968,7 @@ static core_variable_declaration_infos: std::sync::LazyLock<
             ),
             (
                 StillName::from("str-to-chrs"),
-                true,
+                false,
                 function([still_type_str], still_type_vec(still_type_chr)),
                 "Split the `str` into a `vec` of `chr`s",
             ),
@@ -9023,7 +9023,7 @@ I recommend creating helpers for common cases like mapping to an `opt` and keepi
             ),
             (
                 StillName::from("vec-repeat"),
-                true,
+                false,
                 function([still_type_unt, variable("A")], still_type_vec(variable("A"))),
                 "Build a `vec` with a given length and a given element at each index",
             ),
@@ -11946,6 +11946,7 @@ struct ChoiceTypeInfo {
     has_owned_representation: bool,
     has_lifetime_parameter: bool,
 }
+
 /// Keep peeling until the type is not a type alias anymore.
 /// _Inner_ type aliases in a sub-part will not be resolved.
 /// This will also not check for aliases inside parenthesized types or after comments
@@ -12106,6 +12107,7 @@ fn still_type_collect_variables_that_are_concrete_into(
 ) {
     match type_with_variables {
         StillType::Variable(variable_name) => {
+            // TODO check that previous replacement type equals current one
             type_parameter_replacements.insert(Box::from(variable_name.as_str()), concrete_type);
         }
         StillType::Function {
@@ -12302,6 +12304,356 @@ fn still_syntax_type_collect_variables_that_are_concrete_into(
                 }
             }
         }
+    }
+}
+
+/// Fully validated type
+#[derive(Clone, Debug)]
+enum StillTypeDiff {
+    Variable(StillName),
+    Conflict {
+        expected: StillType,
+        actual: StillType,
+    },
+    Function {
+        inputs: Vec<StillTypeDiff>,
+        output: Box<StillTypeDiff>,
+    },
+    ChoiceConstruct {
+        name: StillName,
+        arguments: Vec<StillTypeDiff>,
+    },
+    Record(Vec<StillTypeDiffField>),
+}
+#[derive(Clone, Debug)]
+struct StillTypeDiffField {
+    name: StillName,
+    value: StillTypeDiff,
+}
+fn still_type_diff_error_message(type_diff: &StillTypeDiff) -> String {
+    let mut builder: String = String::from("type mismatch:\n");
+    still_type_diff_into(&mut builder, 0, type_diff);
+    builder
+}
+fn still_type_diff_into(so_far: &mut String, indent: usize, type_diff: &StillTypeDiff) {
+    match type_diff {
+        StillTypeDiff::Conflict { expected, actual } => {
+            so_far.push_str("expected:");
+            linebreak_indented_into(so_far, next_indent(indent));
+            still_type_into(so_far, next_indent(indent), expected);
+            linebreak_indented_into(so_far, indent);
+            so_far.push_str("actual:");
+            linebreak_indented_into(so_far, next_indent(indent));
+            still_type_into(so_far, next_indent(indent), actual);
+        }
+        StillTypeDiff::Variable(name) => {
+            so_far.push_str(name);
+        }
+        StillTypeDiff::Function { inputs, output } => {
+            so_far.push_str("\\ ");
+            if let Some((input0, input1_up)) = inputs.split_first() {
+                still_type_diff_into(so_far, indent + 2, input0);
+                for input in input1_up {
+                    linebreak_indented_into(so_far, indent);
+                    so_far.push_str(", ");
+                    still_type_diff_into(so_far, indent + 2, input);
+                }
+            }
+            linebreak_indented_into(so_far, indent);
+            so_far.push('>');
+            linebreak_indented_into(so_far, next_indent(indent));
+            still_type_diff_into(so_far, next_indent(indent), output);
+        }
+        StillTypeDiff::ChoiceConstruct { name, arguments } => {
+            so_far.push_str(name);
+            for argument in arguments {
+                linebreak_indented_into(so_far, next_indent(indent));
+                let should_parenthesize_argument: bool = match argument {
+                    StillTypeDiff::Variable(_) => true,
+                    StillTypeDiff::Conflict { .. } => true,
+                    StillTypeDiff::Function { .. } => true,
+                    StillTypeDiff::ChoiceConstruct {
+                        name: _,
+                        arguments: argument_arguments,
+                    } => argument_arguments.is_empty(),
+                    StillTypeDiff::Record(_) => false,
+                };
+                if should_parenthesize_argument {
+                    so_far.push('(');
+                    still_type_diff_into(so_far, next_indent(indent) + 1, argument);
+                    linebreak_indented_into(so_far, next_indent(indent));
+                    so_far.push(')');
+                } else {
+                    still_type_diff_into(so_far, next_indent(indent), argument);
+                }
+            }
+        }
+        StillTypeDiff::Record(fields) => match fields.as_slice() {
+            [] => {
+                so_far.push_str("{}");
+            }
+            [field0, field1_up @ ..] => {
+                so_far.push_str("{ ");
+                still_type_diff_field_into(so_far, indent, field0);
+                for field in field1_up {
+                    linebreak_indented_into(so_far, indent);
+                    so_far.push_str(", ");
+                    still_type_diff_field_into(so_far, indent, field);
+                }
+                linebreak_indented_into(so_far, indent);
+                so_far.push('}');
+            }
+        },
+    }
+}
+fn still_type_diff_field_into(
+    so_far: &mut String,
+    indent: usize,
+    type_diff_field: &StillTypeDiffField,
+) {
+    so_far.push_str(&type_diff_field.name);
+    linebreak_indented_into(so_far, next_indent(indent));
+    still_type_diff_into(so_far, next_indent(indent), &type_diff_field.value);
+}
+fn still_type_into(so_far: &mut String, indent: usize, type_: &StillType) {
+    match type_ {
+        StillType::Variable(name) => {
+            so_far.push_str(name);
+        }
+        StillType::Function { inputs, output } => {
+            so_far.push_str("\\ ");
+            if let Some((input0, input1_up)) = inputs.split_first() {
+                still_type_into(so_far, indent + 2, input0);
+                for input in input1_up {
+                    linebreak_indented_into(so_far, indent);
+                    so_far.push_str(", ");
+                    still_type_into(so_far, indent + 2, input);
+                }
+            }
+            linebreak_indented_into(so_far, indent);
+            so_far.push('>');
+            linebreak_indented_into(so_far, next_indent(indent));
+            still_type_into(so_far, next_indent(indent), output);
+        }
+        StillType::ChoiceConstruct { name, arguments } => {
+            so_far.push_str(name);
+            for argument in arguments {
+                linebreak_indented_into(so_far, next_indent(indent));
+                let should_parenthesize_argument: bool = match argument {
+                    StillType::Variable(_) => true,
+                    StillType::Function { .. } => true,
+                    StillType::ChoiceConstruct {
+                        name: _,
+                        arguments: argument_arguments,
+                    } => argument_arguments.is_empty(),
+                    StillType::Record(_) => false,
+                };
+                if should_parenthesize_argument {
+                    so_far.push('(');
+                    still_type_into(so_far, next_indent(indent) + 1, argument);
+                    linebreak_indented_into(so_far, next_indent(indent));
+                    so_far.push(')');
+                } else {
+                    still_type_into(so_far, next_indent(indent), argument);
+                }
+            }
+        }
+        StillType::Record(fields) => match fields.as_slice() {
+            [] => {
+                so_far.push_str("{}");
+            }
+            [field0, field1_up @ ..] => {
+                so_far.push_str("{ ");
+                still_type_field_into(so_far, indent, field0);
+                for field in field1_up {
+                    linebreak_indented_into(so_far, indent);
+                    so_far.push_str(", ");
+                    still_type_field_into(so_far, indent, field);
+                }
+                linebreak_indented_into(so_far, indent);
+                so_far.push('}');
+            }
+        },
+    }
+}
+fn still_type_field_into(so_far: &mut String, indent: usize, type_field: &StillTypeField) {
+    so_far.push_str(&type_field.name);
+    linebreak_indented_into(so_far, next_indent(indent));
+    still_type_into(so_far, next_indent(indent), &type_field.value);
+}
+/// None means the types are equal
+fn still_type_diff(expected_type: &StillType, actual_type: &StillType) -> Option<StillTypeDiff> {
+    match expected_type {
+        StillType::Variable(expected_variable) => {
+            if let StillType::Variable(actual_variable) = actual_type
+                && expected_variable == actual_variable
+            {
+                None
+            } else {
+                Some(StillTypeDiff::Conflict {
+                    expected: expected_type.clone(),
+                    actual: actual_type.clone(),
+                })
+            }
+        }
+        StillType::Function {
+            inputs: expected_inputs,
+            output: expected_output,
+        } => {
+            if let StillType::Function {
+                inputs: actual_inputs,
+                output: actual_output,
+            } = actual_type
+                && expected_inputs.len() == actual_inputs.len()
+            {
+                let maybe_output_diff: Option<StillTypeDiff> =
+                    still_type_diff(expected_output, actual_output);
+                if maybe_output_diff.is_none()
+                    && expected_inputs.iter().zip(actual_inputs.iter()).all(
+                        |(expected_input, actual_input)| {
+                            still_type_diff(expected_input, actual_input).is_none()
+                        },
+                    )
+                {
+                    return None;
+                }
+                Some(StillTypeDiff::Function {
+                    inputs: expected_inputs
+                        .iter()
+                        .zip(actual_inputs.iter())
+                        .map(|(expected_input, actual_input)| {
+                            still_type_diff(expected_input, actual_input).unwrap_or_else(|| {
+                                still_type_to_diff_without_conflict(expected_input)
+                            })
+                        })
+                        .collect(),
+                    output: Box::new(
+                        maybe_output_diff.unwrap_or_else(|| {
+                            still_type_to_diff_without_conflict(expected_output)
+                        }),
+                    ),
+                })
+            } else {
+                Some(StillTypeDiff::Conflict {
+                    expected: expected_type.clone(),
+                    actual: actual_type.clone(),
+                })
+            }
+        }
+        StillType::ChoiceConstruct {
+            name: expected_name,
+            arguments: expected_arguments,
+        } => {
+            if let StillType::ChoiceConstruct {
+                name: actual_choice_type_construct_name,
+                arguments: actual_choice_type_construct_arguments,
+            } = actual_type
+                && expected_name == actual_choice_type_construct_name
+            {
+                if expected_arguments
+                    .iter()
+                    .zip(actual_choice_type_construct_arguments.iter())
+                    .all(|(expected_argument, actual_argument)| {
+                        still_type_diff(expected_argument, actual_argument).is_none()
+                    })
+                {
+                    return None;
+                }
+                Some(StillTypeDiff::ChoiceConstruct {
+                    name: expected_name.clone(),
+                    arguments: expected_arguments
+                        .iter()
+                        .zip(actual_choice_type_construct_arguments.iter())
+                        .map(|(expected_argument, actual_argument)| {
+                            still_type_diff(expected_argument, actual_argument).unwrap_or_else(
+                                || still_type_to_diff_without_conflict(expected_argument),
+                            )
+                        })
+                        .collect(),
+                })
+            } else {
+                Some(StillTypeDiff::Conflict {
+                    expected: expected_type.clone(),
+                    actual: actual_type.clone(),
+                })
+            }
+        }
+        StillType::Record(expected_fields) => {
+            if let StillType::Record(actual_fields) = actual_type
+                && expected_fields.len() == actual_fields.len()
+                && expected_fields.iter().all(|expected_field| {
+                    actual_fields
+                        .iter()
+                        .any(|actual_field| actual_field.name == expected_field.name)
+                })
+            {
+                if expected_fields
+                    .iter()
+                    .filter_map(|expected_field| {
+                        actual_fields
+                            .iter()
+                            .find(|actual_field| actual_field.name == expected_field.name)
+                            .map(|actual_field| (&expected_field.value, &actual_field.value))
+                    })
+                    .all(|(expected_field_value, actual_field_value)| {
+                        still_type_diff(expected_field_value, actual_field_value).is_none()
+                    })
+                {
+                    return None;
+                }
+                Some(StillTypeDiff::Record(
+                    expected_fields
+                        .iter()
+                        .filter_map(|expected_field| {
+                            actual_fields
+                                .iter()
+                                .find(|actual_field| actual_field.name == expected_field.name)
+                                .map(|actual_field| (expected_field, &actual_field.value))
+                        })
+                        .map(|(expected_field, actual_field_value)| StillTypeDiffField {
+                            name: expected_field.name.clone(),
+                            value: still_type_diff(&expected_field.value, actual_field_value)
+                                .unwrap_or_else(|| {
+                                    still_type_to_diff_without_conflict(&expected_field.value)
+                                }),
+                        })
+                        .collect(),
+                ))
+            } else {
+                Some(StillTypeDiff::Conflict {
+                    expected: expected_type.clone(),
+                    actual: actual_type.clone(),
+                })
+            }
+        }
+    }
+}
+fn still_type_to_diff_without_conflict(type_: &StillType) -> StillTypeDiff {
+    match type_ {
+        StillType::Variable(name) => StillTypeDiff::Variable(name.clone()),
+        StillType::Function { inputs, output } => StillTypeDiff::Function {
+            inputs: inputs
+                .iter()
+                .map(still_type_to_diff_without_conflict)
+                .collect(),
+            output: Box::new(still_type_to_diff_without_conflict(output)),
+        },
+        StillType::ChoiceConstruct { name, arguments } => StillTypeDiff::ChoiceConstruct {
+            name: name.clone(),
+            arguments: arguments
+                .iter()
+                .map(still_type_to_diff_without_conflict)
+                .collect(),
+        },
+        StillType::Record(fields) => StillTypeDiff::Record(
+            fields
+                .iter()
+                .map(|field| StillTypeDiffField {
+                    name: field.name.clone(),
+                    value: still_type_to_diff_without_conflict(&field.value),
+                })
+                .collect(),
+        ),
     }
 }
 
@@ -12899,13 +13251,11 @@ fn still_syntax_expression_to_rust<'a>(
                 });
             }
             let mut uses_allocator: bool = false;
-            let (rust_elements, element_type_maybes): (
-                syn::punctuated::Punctuated<syn::Expr, syn::token::Comma>,
-                Vec<Option<StillType>>,
-            ) = elements
+            let mut maybe_vec_element_type_or_conflicting: Option<Result<StillType, ()>> = None;
+            let rust_elements: syn::punctuated::Punctuated<syn::Expr, syn::token::Comma> = elements
                 .iter()
                 .map(|element_node| {
-                    let compiled: CompiledStillExpression = still_syntax_expression_to_rust(
+                    let compiled_element: CompiledStillExpression = still_syntax_expression_to_rust(
                         errors,
                         records_used,
                         type_aliases,
@@ -12915,20 +13265,47 @@ fn still_syntax_expression_to_rust<'a>(
                         FnRepresentation::RefDyn,
                         still_syntax_node_as_ref(element_node),
                     );
-                    uses_allocator = uses_allocator || compiled.uses_allocator;
-                    (compiled.rust, compiled.type_)
+                    uses_allocator = uses_allocator || compiled_element.uses_allocator;
+                    if let Some(element_type) = compiled_element.type_ {
+                        match &maybe_vec_element_type_or_conflicting {
+                            None => {
+                                maybe_vec_element_type_or_conflicting = Some(Ok(element_type));
+                            }
+                            Some(Err(())) => {}
+                            Some(Ok(vec_element_type)) => {
+                                if let Some(vec_element_element_type_diff) =
+                                    still_type_diff(vec_element_type, &element_type)
+                                {
+                                    errors.push(StillErrorNode {
+                                        range: element_node.range,
+                                        message: (still_type_diff_error_message(
+                                            &vec_element_element_type_diff,
+                                        ) + "\n\nAll vec elements must have the same type")
+                                            .into_boxed_str(),
+                                    });
+                                    maybe_vec_element_type_or_conflicting = Some(Err(()));
+                                }
+                            }
+                        }
+                    }
+                    compiled_element.rust
                 })
-                .unzip();
+                .collect();
+            let maybe_vec_element_type: Option<StillType> =
+                match maybe_vec_element_type_or_conflicting {
+                    None => None,
+                    Some(Ok(type_)) => Some(type_),
+                    Some(Err(())) => {
+                        return CompiledStillExpression {
+                            rust: syn_expr_todo(),
+                            uses_allocator: false,
+                            type_: None,
+                        };
+                    }
+                };
             CompiledStillExpression {
                 uses_allocator: uses_allocator,
-                type_: element_type_maybes
-                    .into_iter()
-                    .collect::<Option<Vec<StillType>>>()
-                    .and_then(|element_types| {
-                        // TODO verify all elements are equal
-                        let element_type: StillType = element_types.into_iter().next()?;
-                        Some(still_type_vec(element_type))
-                    }),
+                type_: maybe_vec_element_type.map(still_type_vec),
                 rust: syn::Expr::Call(syn::ExprCall {
                     attrs: vec![],
                     func: Box::new(syn_expr_reference(["vec_literal"])),
@@ -13030,150 +13407,232 @@ fn still_syntax_expression_to_rust<'a>(
                     None
                 }
             };
-            match maybe_in_typed {
-                None => {
-                    errors.push(StillErrorNode {
-                        range: expression_node.range,
-                        message: Box::from("missing expression after type :...: here"),
-                    });
-                    CompiledStillExpression {
-                        uses_allocator: false,
-                        type_: maybe_expected_type,
-                        rust: syn_expr_todo(),
-                    }
-                }
-                Some(untyped_node) => match &untyped_node.value {
-                    StillSyntaxExpressionUntyped::Variant {
-                        name: name_node,
-                        value: maybe_value,
-                    } => {
-                        let Some(type_) = maybe_expected_type else {
-                            return CompiledStillExpression {
-                                uses_allocator: false,
-                                rust: syn_expr_todo(),
-                                type_: None,
-                            };
+            let Some(untyped_node) = maybe_in_typed else {
+                errors.push(StillErrorNode {
+                    range: expression_node.range,
+                    message: Box::from("missing expression after type :...: here"),
+                });
+                return CompiledStillExpression {
+                    uses_allocator: false,
+                    type_: maybe_expected_type,
+                    rust: syn_expr_todo(),
+                };
+            };
+            match &untyped_node.value {
+                StillSyntaxExpressionUntyped::Variant {
+                    name: name_node,
+                    value: maybe_value,
+                } => {
+                    let Some(type_) = maybe_expected_type else {
+                        return CompiledStillExpression {
+                            uses_allocator: false,
+                            rust: syn_expr_todo(),
+                            type_: None,
                         };
-                        let StillType::ChoiceConstruct {
-                            name: origin_choice_type_name,
-                            arguments: origin_choice_type_arguments,
-                        } = type_
-                        else {
-                            errors.push(StillErrorNode {
+                    };
+                    let StillType::ChoiceConstruct {
+                        name: origin_choice_type_name,
+                        arguments: origin_choice_type_arguments,
+                    } = type_
+                    else {
+                        errors.push(StillErrorNode {
                                 range: maybe_type_node.as_ref().map(|n| n.range).unwrap_or(expression_node.range),
                                 message: Box::from("type in :here: is not a choice type which is necessary for a variant")
                             });
-                            return CompiledStillExpression {
+                        return CompiledStillExpression {
+                            uses_allocator: false,
+                            rust: syn_expr_todo(),
+                            type_: None,
+                        };
+                    };
+                    let Some(origin_choice_type_info) =
+                        choice_types.get(origin_choice_type_name.as_str())
+                    else {
+                        errors.push(StillErrorNode {
+                                range: maybe_type_node.as_ref().map(|n| n.range).unwrap_or(expression_node.range),
+                                message: format!("type in :here: references a choice type \"{}\" which is not declared", origin_choice_type_name).into_boxed_str()
+                            });
+                        return CompiledStillExpression {
+                            uses_allocator: false,
+                            rust: syn_expr_todo(),
+                            type_: None,
+                        };
+                    };
+                    let Some(origin_variant_info) = origin_choice_type_info
+                        .type_variants
+                        .iter()
+                        .find(|origin_choice_type_variant| {
+                            origin_choice_type_variant.name == name_node.value
+                        })
+                    else {
+                        errors.push(StillErrorNode {
+                                range: name_node.range,
+                                message: format!(
+                                    "the type in :here: is a choice type \"{}\" which is does not declare a variant with this name. Valid variant names are: {}. If you expected this variant name to be valid, check the origin choice type for errors",
+                                    origin_choice_type_name,
+                                    origin_choice_type_info.type_variants.iter().map(|variant| variant.name.as_str()).collect::<Vec<&str>>().join(", ")
+                                ).into_boxed_str()
+                            });
+                        return CompiledStillExpression {
+                            uses_allocator: false,
+                            rust: syn_expr_todo(),
+                            type_: None,
+                        };
+                    };
+                    let rust_variant_reference: syn::Expr = syn_expr_reference([
+                        &still_name_to_uppercase_rust(&origin_choice_type_name),
+                        &still_name_to_uppercase_rust(&name_node.value),
+                    ]);
+                    match maybe_value {
+                        None => {
+                            if let Some(variant_value_type) = &origin_variant_info.value {
+                                let mut error_message: String = String::from(
+                                    "this variant is missing its value. In the origin choice declaration, it's type is declared as\n",
+                                );
+                                still_type_into(&mut error_message, 0, &variant_value_type.type_);
+                                errors.push(StillErrorNode {
+                                    range: name_node.range,
+                                    message: error_message.into_boxed_str(),
+                                });
+                                return CompiledStillExpression {
+                                    uses_allocator: false,
+                                    rust: syn_expr_todo(),
+                                    type_: None,
+                                };
+                            }
+                            CompiledStillExpression {
                                 uses_allocator: false,
-                                rust: syn_expr_todo(),
-                                type_: None,
-                            };
-                        };
-                        let variant_value_needs_to_be_reference: bool = 'variant_value_is_reference: {
-                            let Some(origin_choice_type) =
-                                choice_types.get(origin_choice_type_name.as_str())
+                                type_: Some(StillType::ChoiceConstruct {
+                                    name: origin_choice_type_name,
+                                    arguments: origin_choice_type_arguments,
+                                }),
+                                rust: rust_variant_reference,
+                            }
+                        }
+                        Some(value_node) => {
+                            let Some(declared_variant_value_info) = &origin_variant_info.value
                             else {
-                                break 'variant_value_is_reference false;
-                            };
-                            let Some(variant_index_in_origin_choice_type) = origin_choice_type
-                                .variants
-                                .iter()
-                                .enumerate()
-                                .find(|(_, origin_choice_type_variant)| {
-                                    origin_choice_type_variant.name.as_ref().is_some_and(
-                                        |origin_choice_type_variant_name_node| {
-                                            origin_choice_type_variant_name_node.value
-                                                == name_node.value
-                                        },
-                                    )
-                                })
-                                .map(|(i, _)| i)
-                            else {
-                                break 'variant_value_is_reference false;
-                            };
-                            origin_choice_type
-                                .type_variants
-                                .get(variant_index_in_origin_choice_type)
-                                .and_then(|type_variant| type_variant.value.as_ref())
-                                .is_some_and(|variant_value| {
-                                    variant_value.constructs_recursive_type
-                                })
-                        };
-                        let rust_variant_reference: syn::Expr = syn_expr_reference([
-                            &still_name_to_uppercase_rust(&origin_choice_type_name),
-                            &still_name_to_uppercase_rust(&name_node.value),
-                        ]);
-                        match maybe_value {
-                            None => {
-                                // TODO check origin variant also has no value
-                                CompiledStillExpression {
+                                errors.push(StillErrorNode {
+                                        range: name_node.range,
+                                        message: Box::from(
+                                            "extraneous variant value. This variant's declaration has no declared value. Remove this extra value or correct its origin choice type declaration",
+                                        ),
+                                    });
+                                return CompiledStillExpression {
                                     uses_allocator: false,
                                     type_: Some(StillType::ChoiceConstruct {
                                         name: origin_choice_type_name,
                                         arguments: origin_choice_type_arguments,
                                     }),
                                     rust: rust_variant_reference,
-                                }
+                                };
+                            };
+                            let value_compiled: CompiledStillExpression =
+                                still_syntax_expression_to_rust(
+                                    errors,
+                                    records_used,
+                                    type_aliases,
+                                    choice_types,
+                                    project_variable_declarations,
+                                    local_bindings,
+                                    FnRepresentation::RefDyn,
+                                    still_syntax_node_unbox(value_node),
+                                );
+                            let mut variant_value_type: StillType =
+                                declared_variant_value_info.type_.clone();
+                            still_type_replace_variables(
+                                &origin_choice_type_info
+                                    .parameters
+                                    .iter()
+                                    .zip(origin_choice_type_arguments.iter())
+                                    .map(|(parameter_name_node, argument)| {
+                                        (parameter_name_node.value.as_str(), argument)
+                                    })
+                                    .collect(),
+                                &mut variant_value_type,
+                            );
+                            if let Some(actual_value_type) = &value_compiled.type_
+                                && let Some(variant_value_type_diff) =
+                                    still_type_diff(&variant_value_type, actual_value_type)
+                            {
+                                errors.push(StillErrorNode {
+                                    range: untyped_node.range,
+                                    message: still_type_diff_error_message(
+                                        &variant_value_type_diff,
+                                    )
+                                    .into_boxed_str(),
+                                });
+                                return CompiledStillExpression {
+                                    uses_allocator: false,
+                                    rust: syn_expr_todo(),
+                                    type_: None,
+                                };
                             }
-                            Some(value_node) => {
-                                let value_compiled: CompiledStillExpression =
-                                    still_syntax_expression_to_rust(
-                                        errors,
-                                        records_used,
-                                        type_aliases,
-                                        choice_types,
-                                        project_variable_declarations,
-                                        local_bindings,
-                                        FnRepresentation::RefDyn,
-                                        still_syntax_node_unbox(value_node),
-                                    );
-                                // TODO verify equal: origin choice type variant value with the type arguments inlined & value pattern type
-                                CompiledStillExpression {
-                                    uses_allocator: variant_value_needs_to_be_reference
-                                        || value_compiled.uses_allocator,
-                                    type_: Some(StillType::ChoiceConstruct {
-                                        name: origin_choice_type_name,
-                                        arguments: origin_choice_type_arguments,
-                                    }),
-                                    rust: syn::Expr::Call(syn::ExprCall {
-                                        attrs: vec![],
-                                        func: Box::new(rust_variant_reference),
-                                        paren_token: syn::token::Paren(syn_span()),
-                                        args: std::iter::once({
-                                            if variant_value_needs_to_be_reference {
-                                                syn_expr_call_alloc_method(value_compiled.rust)
-                                            } else {
-                                                value_compiled.rust
-                                            }
-                                        })
-                                        .collect(),
-                                    }),
-                                }
+                            CompiledStillExpression {
+                                uses_allocator: declared_variant_value_info
+                                    .constructs_recursive_type
+                                    || value_compiled.uses_allocator,
+                                type_: Some(StillType::ChoiceConstruct {
+                                    name: origin_choice_type_name,
+                                    arguments: origin_choice_type_arguments,
+                                }),
+                                rust: syn::Expr::Call(syn::ExprCall {
+                                    attrs: vec![],
+                                    func: Box::new(rust_variant_reference),
+                                    paren_token: syn::token::Paren(syn_span()),
+                                    args: std::iter::once({
+                                        if declared_variant_value_info.constructs_recursive_type {
+                                            syn_expr_call_alloc_method(value_compiled.rust)
+                                        } else {
+                                            value_compiled.rust
+                                        }
+                                    })
+                                    .collect(),
+                                }),
                             }
                         }
                     }
-                    StillSyntaxExpressionUntyped::Other(other_expression) => {
-                        if let StillSyntaxExpression::Vec(elements) = other_expression.as_ref()
-                            && elements.is_empty()
-                        {
-                            CompiledStillExpression {
-                                rust: syn::Expr::Call(syn::ExprCall {
-                                    attrs: vec![],
-                                    func: Box::new(syn_expr_reference(["vec_literal"])),
-                                    paren_token: syn::token::Paren(syn_span()),
-                                    args: std::iter::once(syn::Expr::Array(syn::ExprArray {
-                                        attrs: vec![],
-                                        bracket_token: syn::token::Bracket(syn_span()),
-                                        elems: syn::punctuated::Punctuated::new(),
-                                    }))
-                                    .collect(),
-                                }),
+                }
+                StillSyntaxExpressionUntyped::Other(other_expression) => {
+                    if let StillSyntaxExpression::Vec(elements) = other_expression.as_ref()
+                        && elements.is_empty()
+                    {
+                        let type_is_conflicting: bool = match &maybe_expected_type {
+                            None => false,
+                            Some(StillType::ChoiceConstruct {
+                                name: choice_type_name,
+                                arguments: _,
+                            }) => choice_type_name != "vec",
+                            Some(_) => true,
+                        };
+                        if type_is_conflicting {
+                            errors.push(StillErrorNode {
+                                range: expression_node.range,
+                                message: Box::from("type of an empty vec ([]) must be vec (or a type alias to vec), not its element type.")
+                            });
+                            return CompiledStillExpression {
                                 uses_allocator: false,
-                                // TODO check expected_type resolves to some vec
-                                type_: maybe_expected_type,
-                            }
-                        } else {
-                            // TODO verify equal to maybe_expected_type
+                                rust: syn_expr_todo(),
+                                type_: None,
+                            };
+                        }
+                        CompiledStillExpression {
+                            rust: syn::Expr::Call(syn::ExprCall {
+                                attrs: vec![],
+                                func: Box::new(syn_expr_reference(["vec_literal"])),
+                                paren_token: syn::token::Paren(syn_span()),
+                                args: std::iter::once(syn::Expr::Array(syn::ExprArray {
+                                    attrs: vec![],
+                                    bracket_token: syn::token::Bracket(syn_span()),
+                                    elems: syn::punctuated::Punctuated::new(),
+                                }))
+                                .collect(),
+                            }),
+                            uses_allocator: false,
+                            type_: maybe_expected_type,
+                        }
+                    } else {
+                        let compiled_other: CompiledStillExpression =
                             still_syntax_expression_to_rust(
                                 errors,
                                 records_used,
@@ -13186,10 +13645,24 @@ fn still_syntax_expression_to_rust<'a>(
                                     range: untyped_node.range,
                                     value: other_expression,
                                 },
-                            )
+                            );
+                        if let Some(expected_type) = maybe_expected_type
+                            && let Some(other_type) = &compiled_other.type_
+                            && let Some(type_diff) = still_type_diff(&expected_type, other_type)
+                        {
+                            errors.push(StillErrorNode {
+                                range: untyped_node.range,
+                                message: still_type_diff_error_message(&type_diff).into_boxed_str(),
+                            });
+                            return CompiledStillExpression {
+                                uses_allocator: false,
+                                rust: syn_expr_todo(),
+                                type_: None,
+                            };
                         }
+                        compiled_other
                     }
-                },
+                }
             }
         }
         StillSyntaxExpression::VariableOrCall {
@@ -13199,7 +13672,7 @@ fn still_syntax_expression_to_rust<'a>(
             match local_bindings.get(variable_node.value.as_str()) {
                 Some(variable_info) => {
                     let mut uses_allocator: bool = false;
-                    let (rust_arguments, _argument_maybe_types): (
+                    let (rust_arguments, argument_maybe_types): (
                         Vec<syn::Expr>,
                         Vec<Option<StillType>>,
                     ) = arguments
@@ -13258,7 +13731,35 @@ fn still_syntax_expression_to_rust<'a>(
                                         });
                                     }
                                 }
-                                // TODO check if argument_maybe_types are equal to variable_input_types
+                                let mut any_argument_type_conflicts_with_variable_input_type: bool =
+                                    false;
+                                for ((variable_input_type, maybe_argument_type), argument_node) in
+                                    variable_input_types
+                                        .iter()
+                                        .zip(argument_maybe_types.iter())
+                                        .zip(arguments.iter())
+                                {
+                                    if let Some(argument_type) = maybe_argument_type
+                                        && let Some(argument_variable_input_type_diff) =
+                                            still_type_diff(variable_input_type, argument_type)
+                                    {
+                                        errors.push(StillErrorNode {
+                                            range: argument_node.range,
+                                            message: still_type_diff_error_message(
+                                                &argument_variable_input_type_diff,
+                                            )
+                                            .into_boxed_str(),
+                                        });
+                                        any_argument_type_conflicts_with_variable_input_type = true;
+                                    }
+                                }
+                                if any_argument_type_conflicts_with_variable_input_type {
+                                    return CompiledStillExpression {
+                                        rust: syn_expr_todo(),
+                                        uses_allocator: false,
+                                        type_: None,
+                                    };
+                                }
                                 (**variable_output_type).clone()
                             }
                             _ => {
@@ -13441,8 +13942,16 @@ fn still_syntax_expression_to_rust<'a>(
                 FnRepresentation::RefDyn,
                 still_syntax_node_unbox(matched_node),
             );
+            let Some(matched_type) = compiled_matched.type_ else {
+                return CompiledStillExpression {
+                    rust: syn_expr_todo(),
+                    uses_allocator: false,
+                    type_: None,
+                };
+            };
             let mut arms_use_allocator: bool = false;
-            let (mut rust_arms, case_result_types): (Vec<syn::Arm>, Vec<Option<StillType>>) = cases
+            let mut maybe_match_result_type_or_conflicting: Option<Result<StillType, ()>> = None;
+            let mut rust_arms: Vec<syn::Arm> = cases
                 .iter()
                 .filter_map(|case| {
                     let Some(case_pattern_node) = &case.pattern else {
@@ -13484,6 +13993,21 @@ fn still_syntax_expression_to_rust<'a>(
                         // skip case with incomplete pattern
                         return None;
                     };
+                    let Some(pattern_type) = compiled_pattern.type_ else {
+                        // skip case with incomplete pattern
+                        return None;
+                    };
+                    if let Some(matched_pattern_type_diff) =
+                        still_type_diff(&matched_type, &pattern_type)
+                    {
+                        errors.push(StillErrorNode {
+                            range: case_pattern_node.range,
+                            message: (still_type_diff_error_message(&matched_pattern_type_diff)
+                                + "\n\nA case pattern must have the same type as the matched expression")
+                                    .into_boxed_str(),
+                        });
+                        return None;
+                    }
                     if let Some(case_result_node) = &case.result {
                         still_syntax_expression_uses_of_local_bindings_into(
                             &mut case_pattern_introduced_bindings,
@@ -13515,31 +14039,63 @@ fn still_syntax_expression_to_rust<'a>(
                             FnRepresentation::RefDyn,
                             case.result.as_ref().map(still_syntax_node_as_ref),
                         );
-                    // TODO check all pattern types are equal to matched type
                     arms_use_allocator = arms_use_allocator || compiled_case_result.uses_allocator;
                     let mut rust_stmts: Vec<syn::Stmt> = Vec::with_capacity(1);
                     bindings_to_clone_to_rust_into(&mut rust_stmts, bindings_to_clone);
                     rust_stmts.push(syn::Stmt::Expr(compiled_case_result.rust, None));
-                    Some((
-                        syn::Arm {
+                    if let Some(case_result_node) = &case.result
+                        && let Some(case_result_type) = compiled_case_result.type_
+                    {
+                        match &maybe_match_result_type_or_conflicting {
+                            None => {
+                                maybe_match_result_type_or_conflicting = Some(Ok(case_result_type));
+                            }
+                            Some(Err(())) => {}
+                            Some(Ok(match_result_type)) => {
+                                if let Some(match_result_case_result_type_diff) =
+                                    still_type_diff(match_result_type, &case_result_type)
+                                {
+                                    errors.push(StillErrorNode {
+                                        range: case_result_node.range,
+                                        message: (still_type_diff_error_message(
+                                            &match_result_case_result_type_diff,
+                                        ) + "\n\nAll case results must have the same type")
+                                            .into_boxed_str(),
+                                    });
+                                    maybe_match_result_type_or_conflicting = Some(Err(()));
+                                }
+                            }
+                        }
+                    }
+                    Some(syn::Arm {
+                        attrs: vec![],
+                        pat: rust_pattern,
+                        guard: None,
+                        fat_arrow_token: syn::token::FatArrow(syn_span()),
+                        body: Box::new(syn::Expr::Block(syn::ExprBlock {
                             attrs: vec![],
-                            pat: rust_pattern,
-                            guard: None,
-                            fat_arrow_token: syn::token::FatArrow(syn_span()),
-                            body: Box::new(syn::Expr::Block(syn::ExprBlock {
-                                attrs: vec![],
-                                label: None,
-                                block: syn::Block {
-                                    brace_token: syn::token::Brace(syn_span()),
-                                    stmts: rust_stmts,
-                                },
-                            })),
-                            comma: None,
-                        },
-                        compiled_case_result.type_,
-                    ))
+                            label: None,
+                            block: syn::Block {
+                                brace_token: syn::token::Brace(syn_span()),
+                                stmts: rust_stmts,
+                            },
+                        })),
+                        comma: None,
+                    })
                 })
-                .unzip();
+                .collect();
+            let maybe_match_result_type: Option<StillType> =
+                match maybe_match_result_type_or_conflicting {
+                    None => None,
+                    Some(Ok(type_)) => Some(type_),
+                    Some(Err(())) => {
+                        return CompiledStillExpression {
+                            rust: syn_expr_todo(),
+                            uses_allocator: false,
+                            type_: None,
+                        };
+                    }
+                };
             // _ => todo!() is appended to still make inexhaustive matching compile
             // and be able to be run, rust will emit a warning
             // TODO remove when can be determined to be exhaustive,
@@ -13563,10 +14119,7 @@ fn still_syntax_expression_to_rust<'a>(
                     brace_token: syn::token::Brace(syn_span()),
                     arms: rust_arms,
                 }),
-                type_: case_result_types
-                    .into_iter()
-                    // TODO check all result types are equal
-                    .find_map(|case_result_type| case_result_type),
+                type_: maybe_match_result_type,
                 uses_allocator: compiled_matched.uses_allocator || arms_use_allocator,
             }
         }

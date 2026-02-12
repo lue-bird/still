@@ -34,11 +34,11 @@ unfinished
     [ unt-to-str 3
     ]
 
-build-tree \:int:n >
-    n
-    | 0 > :tree {}:Leaf {}
-    | :int:not-0 >
-        :tree A:Branch [ build-tree (int-add not-0 -1) ]
+build-tree \:unt:n >
+    int-to-unt (int-add (unt-to-int n) -1)
+    | :opt unt:Absent > :tree {}:Leaf {}
+    | :opt unt:Present :unt:remaining >
+        :tree {}:Branch [ build-tree remaining ]
 
 choice result Ok Err
     | Ok Ok

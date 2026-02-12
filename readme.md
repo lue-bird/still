@@ -57,10 +57,10 @@ Then point your editor to `still lsp`, see also [specific setups](#editor-setups
 - no features that obfuscate ("shiny, cool features" that ruin languages in my opinion): infix operators, currying, lifetime tracking, traits/type classes, objects, task/async, hidden mutation, macros & reflection, side effects, modules, hidden context values, undefined
 
 ## TODO
-- remove `alloc.alloc(|_| _)` when used as direct function parameter to a project variable
 - pattern match exhaustiveness checking
 - unused checking for local variables (should trivial now)
-- type checking (vec elements equal, case results equal, function arguments equal to parameters, typed, variant value) (notably also: check that each function output type only ever uses type variables used in the input type, and similarly: on non-function types, forbid the use of any new variables; in the error say "unknown type variable")
+- type checking for pattern variant value (just like for expressions)
+- check that each function output type only ever uses type variables used in the input type, and similarly: on non-function types, forbid the use of any new variables; in the error say "new type variables can only introduced in input types"
 - simple io (`standard-in-read-line`, `standard-out-write`)
 - implement `StillIntoOwned::into_owned_overwriting` for generated structs and enums
 
