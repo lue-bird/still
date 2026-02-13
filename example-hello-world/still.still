@@ -1,0 +1,5 @@
+
+
+greet \:str:name >
+    strs-flatten [ "Hello, ", name, "\n" ]
+
