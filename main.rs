@@ -13061,24 +13061,23 @@ fn still_syntax_expression_to_rust<'a>(
                     )
                 })
                 .collect();
-            for (parameter_introduced_binding_name, parameter_introduced_binding_info) in
-                &parameter_introduced_bindings
-            {
-                push_error_if_name_collides(
-                    errors,
-                    project_variable_declarations,
-                    &local_bindings,
-                    StillSyntaxNode {
-                        range: parameter_introduced_binding_info.origin_range,
-                        value: parameter_introduced_binding_name,
-                    },
-                );
-            }
             if let Some(lambda_result_node) = maybe_lambda_result {
                 still_syntax_expression_uses_of_local_bindings_into(
                     &mut parameter_introduced_bindings,
                     None,
                     still_syntax_node_unbox(lambda_result_node),
+                );
+            }
+            for (parameter_introduced_binding_name, parameter_introduced_binding_info) in
+                &parameter_introduced_bindings
+            {
+                push_error_if_introduced_local_binding_collides_or_is_unused(
+                    errors,
+                    project_variable_declarations,
+                    &local_bindings,
+                    "replace this name by _ to explicitly ignore the incoming value",
+                    parameter_introduced_binding_name,
+                    parameter_introduced_binding_info,
                 );
             }
             let mut rust_clones_before_closure: Vec<syn::Stmt> = local_bindings
@@ -13976,19 +13975,6 @@ fn still_syntax_expression_to_rust<'a>(
                         false,
                         still_syntax_node_as_ref(case_pattern_node),
                     );
-                    for (parameter_introduced_binding_name, parameter_introduced_binding_info) in
-                        &case_pattern_introduced_bindings
-                    {
-                        push_error_if_name_collides(
-                            errors,
-                            project_variable_declarations,
-                            &local_bindings,
-                            StillSyntaxNode {
-                                range: parameter_introduced_binding_info.origin_range,
-                                value: parameter_introduced_binding_name,
-                            },
-                        );
-                    }
                     let Some(rust_pattern) = compiled_pattern.rust else {
                         // skip case with incomplete pattern
                         return None;
@@ -14013,6 +13999,18 @@ fn still_syntax_expression_to_rust<'a>(
                             &mut case_pattern_introduced_bindings,
                             None,
                             still_syntax_node_as_ref(case_result_node),
+                        );
+                    }
+                    for (parameter_introduced_binding_name, parameter_introduced_binding_info) in
+                        &case_pattern_introduced_bindings
+                    {
+                        push_error_if_introduced_local_binding_collides_or_is_unused(
+                            errors,
+                            project_variable_declarations,
+                            &local_bindings,
+                            "replace this name by _ to explicitly ignore the incoming value",
+                            parameter_introduced_binding_name,
+                            parameter_introduced_binding_info
                         );
                     }
                     let mut local_bindings: std::collections::HashMap<
@@ -14567,35 +14565,46 @@ fn still_syntax_expression_uses_of_local_bindings_into<'a>(
         }
     }
 }
-fn push_error_if_name_collides(
+fn push_error_if_introduced_local_binding_collides_or_is_unused(
     errors: &mut Vec<StillErrorNode>,
     project_variable_declarations: &std::collections::HashMap<
         StillName,
         CompiledVariableDeclarationInfo,
     >,
     local_bindings: &std::rc::Rc<std::collections::HashMap<&str, StillLocalBindingCompileInfo>>,
-    name_node: StillSyntaxNode<&str>,
+    remove_message: &'static str,
+    binding_name: &str,
+    binding_info: &StillLocalBindingCompileInfo,
 ) {
-    if project_variable_declarations.contains_key(name_node.value) {
-        if core_choice_type_infos.contains_key(name_node.value) {
+    if project_variable_declarations.contains_key(binding_name) {
+        if core_choice_type_infos.contains_key(binding_name) {
             errors.push(StillErrorNode {
-                range: name_node.range,
+                range: binding_info.origin_range,
                 message: Box::from("a variable with this name is already part of core (core variables are for example int-to-str or dec-add). Rename this variable")
             });
         } else {
             errors.push(StillErrorNode {
-                range: name_node.range,
+                range: binding_info.origin_range,
                 message: Box::from(
                     "a variable with this name is already declared in this project. Rename one of them",
                 ),
             });
         }
-    } else if local_bindings.contains_key(name_node.value) {
+    } else if local_bindings.contains_key(binding_name) {
         errors.push(StillErrorNode {
-            range: name_node.range,
+            range: binding_info.origin_range,
             message: Box::from(
                 "a variable with this name is already declared locally. Rename one of them",
             ),
+        });
+    } else if binding_info.last_uses.is_empty() {
+        errors.push(StillErrorNode {
+            range: binding_info.origin_range,
+            message: format!(
+                "variable not used in the resulting expression. Use it or {}",
+                remove_message
+            )
+            .into_boxed_str(),
         });
     }
 }
@@ -14613,12 +14622,6 @@ fn still_syntax_let_declaration_to_rust_into(
     declaration_node: StillSyntaxNode<&StillSyntaxLetDeclaration>,
     maybe_result: Option<StillSyntaxNode<&StillSyntaxExpression>>,
 ) -> CompiledStillExpression {
-    push_error_if_name_collides(
-        errors,
-        project_variable_declarations,
-        &local_bindings,
-        still_syntax_node_as_ref_map(&declaration_node.value.name, StillName::as_str),
-    );
     let compiled_declaration_result: CompiledStillExpression =
         maybe_still_syntax_expression_to_rust(
             errors,
@@ -14673,8 +14676,6 @@ fn still_syntax_let_declaration_to_rust_into(
         },
     ))
     .collect::<std::collections::HashMap<_, _>>();
-    let mut local_bindings: std::collections::HashMap<&str, StillLocalBindingCompileInfo> =
-        std::rc::Rc::unwrap_or_clone(local_bindings);
     if let Some(result_node) = maybe_result {
         still_syntax_expression_uses_of_local_bindings_into(
             &mut introduced_binding_infos,
@@ -14682,6 +14683,18 @@ fn still_syntax_let_declaration_to_rust_into(
             result_node,
         );
     }
+    for (introduced_binding_name, introduced_binding_info) in &introduced_binding_infos {
+        push_error_if_introduced_local_binding_collides_or_is_unused(
+            errors,
+            project_variable_declarations,
+            &local_bindings,
+            "remove this let variable declaration",
+            introduced_binding_name,
+            introduced_binding_info,
+        );
+    }
+    let mut local_bindings: std::collections::HashMap<&str, StillLocalBindingCompileInfo> =
+        std::rc::Rc::unwrap_or_clone(local_bindings);
     local_bindings.extend(introduced_binding_infos);
     let maybe_result_compiled: CompiledStillExpression = maybe_still_syntax_expression_to_rust(
         errors,

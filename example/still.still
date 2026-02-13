@@ -20,7 +20,7 @@ choice int-cons-list
 #
 greet \{ name :str:name } >
     let list
-        [ 1, 2, 3 ]
+        [ "1", "2", "3" ]
     let another
         vec-attach list
             list
@@ -28,7 +28,7 @@ greet \{ name :str:name } >
     | "me" >
         "Hello, you!"
     | :str:_ >
-        strs-flatten [ "Hello, ", name, "!" ]
+        strs-flatten (vec-attach [ "Hello, ", name, "!" ] another)
 
 unfinished
     [ unt-to-str 3
