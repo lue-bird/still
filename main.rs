@@ -13092,6 +13092,7 @@ fn still_syntax_expression_to_rust<'a>(
                 StillLocalBindingCompileInfo,
             > = std::collections::HashMap::new();
             let mut bindings_to_clone: Vec<BindingToClone> = Vec::new();
+            let mut has_inexhaustive_pattern: bool = false;
             let (rust_patterns, input_type_maybes): (
                 syn::punctuated::Punctuated<syn::Pat, syn::token::Comma>,
                 Vec<Option<StillType>>,
@@ -13108,6 +13109,13 @@ fn still_syntax_expression_to_rust<'a>(
                         false,
                         still_syntax_node_as_ref(parameter_node),
                     );
+                    match compiled_parameter.catch {
+                        None | Some(StillPatternCatch::Exhaustive) => {}
+                        Some(_) => {
+                            has_inexhaustive_pattern = true;
+                            errors.push(StillErrorNode { range: parameter_node.range, message: Box::from("inexhaustive pattern. Lambda parameters must always match any possible incoming value. To match using inexhaustive patterns, use a match expression (thing | pattern > result)") });
+                        },
+                    }
                     (
                         compiled_parameter.rust.unwrap_or_else(syn_pat_wild),
                         compiled_parameter.type_,
@@ -13196,6 +13204,13 @@ fn still_syntax_expression_to_rust<'a>(
                 FnRepresentation::RefDyn,
                 maybe_lambda_result.as_ref().map(still_syntax_node_unbox),
             );
+            if has_inexhaustive_pattern {
+                return CompiledStillExpression {
+                    rust: syn_expr_todo(),
+                    uses_allocator: false,
+                    type_: None,
+                };
+            }
             let rust_closure: syn::Expr = syn::Expr::Closure(syn::ExprClosure {
                 attrs: vec![],
                 lifetimes: None,
@@ -13500,10 +13515,6 @@ fn still_syntax_expression_to_rust<'a>(
                     let Some(origin_choice_type_info) =
                         choice_types.get(origin_choice_type_name.as_str())
                     else {
-                        errors.push(StillErrorNode {
-                                range: maybe_type_node.as_ref().map(|n| n.range).unwrap_or(expression_node.range),
-                                message: format!("type in :here: references a choice type \"{}\" which is not declared", origin_choice_type_name).into_boxed_str()
-                            });
                         return CompiledStillExpression {
                             uses_allocator: false,
                             rust: syn_expr_todo(),
@@ -13518,13 +13529,13 @@ fn still_syntax_expression_to_rust<'a>(
                         })
                     else {
                         errors.push(StillErrorNode {
-                                range: name_node.range,
-                                message: format!(
-                                    "the type in :here: is a choice type \"{}\" which is does not declare a variant with this name. Valid variant names are: {}. If you expected this variant name to be valid, check the origin choice type for errors",
-                                    origin_choice_type_name,
-                                    origin_choice_type_info.type_variants.iter().map(|variant| variant.name.as_str()).collect::<Vec<&str>>().join(", ")
-                                ).into_boxed_str()
-                            });
+                            range: name_node.range,
+                            message: format!(
+                                "the type in :here: is a choice type \"{}\" which is does not declare a variant with this name. Valid variant names are: {}. If you expected this variant name to be valid, check the origin choice type for errors",
+                                origin_choice_type_name,
+                                origin_choice_type_info.type_variants.iter().map(|variant| variant.name.as_str()).collect::<Vec<&str>>().join(", ")
+                            ).into_boxed_str()
+                        });
                         return CompiledStillExpression {
                             uses_allocator: false,
                             rust: syn_expr_todo(),
@@ -13537,11 +13548,15 @@ fn still_syntax_expression_to_rust<'a>(
                     ]);
                     match maybe_value {
                         None => {
-                            if let Some(variant_value_type) = &origin_variant_info.value {
+                            if let Some(declared_variant_value_type) = &origin_variant_info.value {
                                 let mut error_message: String = String::from(
                                     "this variant is missing its value. In the origin choice declaration, it's type is declared as\n",
                                 );
-                                still_type_into(&mut error_message, 0, &variant_value_type.type_);
+                                still_type_into(
+                                    &mut error_message,
+                                    0,
+                                    &declared_variant_value_type.type_,
+                                );
                                 errors.push(StillErrorNode {
                                     range: name_node.range,
                                     message: error_message.into_boxed_str(),
@@ -13608,7 +13623,7 @@ fn still_syntax_expression_to_rust<'a>(
                                     still_type_diff(&variant_value_type, actual_value_type)
                             {
                                 errors.push(StillErrorNode {
-                                    range: untyped_node.range,
+                                    range: value_node.range,
                                     message: still_type_diff_error_message(
                                         &variant_value_type_diff,
                                     )
@@ -14003,6 +14018,7 @@ fn still_syntax_expression_to_rust<'a>(
             };
             let mut arms_use_allocator: bool = false;
             let mut maybe_match_result_type_or_conflicting: Option<Result<StillType, ()>> = None;
+            let mut maybe_catch: Option<StilCasePatternsCatch> = None;
             let mut rust_arms: Vec<syn::Arm> = cases
                 .iter()
                 .filter_map(|case| {
@@ -14028,16 +14044,16 @@ fn still_syntax_expression_to_rust<'a>(
                         false,
                         still_syntax_node_as_ref(case_pattern_node),
                     );
-                    let Some(rust_pattern) = compiled_pattern.rust else {
+                    let Some(case_rust_pattern) = compiled_pattern.rust else {
                         // skip case with incomplete pattern
                         return None;
                     };
-                    let Some(pattern_type) = compiled_pattern.type_ else {
+                    let Some(case_pattern_type) = compiled_pattern.type_ else {
                         // skip case with incomplete pattern
                         return None;
                     };
                     if let Some(matched_pattern_type_diff) =
-                        still_type_diff(&matched_type, &pattern_type)
+                        still_type_diff(&matched_type, &case_pattern_type)
                     {
                         errors.push(StillErrorNode {
                             range: case_pattern_node.range,
@@ -14046,6 +14062,17 @@ fn still_syntax_expression_to_rust<'a>(
                                     .into_boxed_str(),
                         });
                         return None;
+                    }
+                    let Some(case_pattern_catch) = compiled_pattern.catch else {
+                        return None;
+                    };
+                    match maybe_catch {
+                        None => {
+                            maybe_catch = Some(still_pattern_catch_to_case_patterns_catch(case_pattern_catch));
+                        }
+                        Some(ref mut catch) => {
+                            still_pattern_catch_merge_with(errors,  case_pattern_node.range, catch, case_pattern_catch);
+                        }
                     }
                     if let Some(case_result_node) = &case.result {
                         still_syntax_expression_uses_of_local_bindings_into(
@@ -14120,7 +14147,7 @@ fn still_syntax_expression_to_rust<'a>(
                     }
                     Some(syn::Arm {
                         attrs: vec![],
-                        pat: rust_pattern,
+                        pat: case_rust_pattern,
                         guard: None,
                         fat_arrow_token: syn::token::FatArrow(syn_span()),
                         body: Box::new(syn::Expr::Block(syn::ExprBlock {
@@ -14793,6 +14820,494 @@ fn still_syntax_let_declaration_to_rust_into(
         },
     }
 }
+#[derive(PartialEq, Eq, Debug)]
+enum StillPatternCatch {
+    Exhaustive,
+    Unt(usize),
+    Int(isize),
+    Char(char),
+    String(String),
+    /// invariant: all variants are never exhaustive
+    // and len is >= 2
+    // and only a single variant value is VariantCatch::Caught
+    Variant(std::collections::HashMap<StillName, VariantCatch<StillPatternCatch>>),
+    /// invariant: all fields are never exhaustive
+    // and field count is >= 2
+    Record(std::collections::HashMap<StillName, StillPatternCatch>),
+}
+#[derive(PartialEq, Eq, Debug)]
+enum VariantCatch<Catch> {
+    Caught(Catch),
+    Uncaught { has_value: bool },
+}
+#[derive(PartialEq, Eq, Debug)]
+enum StilCasePatternsCatch {
+    Exhaustive,
+    Unts(Vec<usize>),
+    Ints(Vec<isize>),
+    Chars(Vec<char>),
+    Strings(Vec<String>),
+    /// invariant: all variants are never exhaustive
+    // and choice_type_variant_count is >= 2
+    Variants(std::collections::HashMap<StillName, VariantCatch<StilCasePatternsCatch>>),
+    /// invariant: all fields are never exhaustive
+    // and field count is >= 2
+    Record(Vec<std::collections::HashMap<StillName, StillPatternCatch>>),
+}
+fn still_pattern_catch_to_case_patterns_catch(
+    pattern_catch: StillPatternCatch,
+) -> StilCasePatternsCatch {
+    match pattern_catch {
+        StillPatternCatch::Exhaustive => StilCasePatternsCatch::Exhaustive,
+        StillPatternCatch::Unt(unt) => StilCasePatternsCatch::Unts(vec![unt]),
+        StillPatternCatch::Int(int) => StilCasePatternsCatch::Ints(vec![int]),
+        StillPatternCatch::Char(chr) => StilCasePatternsCatch::Chars(vec![chr]),
+        StillPatternCatch::String(string) => StilCasePatternsCatch::Strings(vec![string]),
+        StillPatternCatch::Variant(variants) => StilCasePatternsCatch::Variants(
+            variants
+                .into_iter()
+                .map(|(name, variant_catch)| {
+                    (
+                        name,
+                        match variant_catch {
+                            VariantCatch::Uncaught { has_value } => VariantCatch::Uncaught {
+                                has_value: has_value,
+                            },
+                            VariantCatch::Caught(value_catch) => VariantCatch::Caught(
+                                still_pattern_catch_to_case_patterns_catch(value_catch),
+                            ),
+                        },
+                    )
+                })
+                .collect(),
+        ),
+        StillPatternCatch::Record(fields) => StilCasePatternsCatch::Record(vec![fields]),
+    }
+}
+fn still_pattern_catch_merge_with(
+    errors: &mut Vec<StillErrorNode>,
+    pattern_range: lsp_types::Range,
+    catch: &mut StilCasePatternsCatch,
+    new_catch: StillPatternCatch,
+) {
+    match catch {
+        StilCasePatternsCatch::Exhaustive => {
+            errors.push(StillErrorNode { range: pattern_range, message: Box::from("unreachable pattern. All previous case patterns already exhaustively match any possible value") });
+        }
+        StilCasePatternsCatch::Unts(unts) => {
+            if let StillPatternCatch::Unt(new_unt) = new_catch {
+                if unts.contains(&new_unt) {
+                    errors.push(StillErrorNode {
+                        range: pattern_range,
+                        message: Box::from("unreachable pattern. This unt is already matched by a previous case pattern"),
+                    });
+                } else {
+                    unts.push(new_unt);
+                }
+            }
+        }
+        StilCasePatternsCatch::Ints(ints) => {
+            if let StillPatternCatch::Int(new_int) = new_catch {
+                if ints.contains(&new_int) {
+                    errors.push(StillErrorNode {
+                        range: pattern_range,
+                        message: Box::from("unreachable pattern. This int is already matched by a previous case pattern"),
+                    });
+                } else {
+                    ints.push(new_int);
+                }
+            }
+        }
+        StilCasePatternsCatch::Chars(chars) => {
+            if let StillPatternCatch::Char(new_char) = new_catch {
+                if chars.contains(&new_char) {
+                    errors.push(StillErrorNode {
+                        range: pattern_range,
+                        message: Box::from("unreachable pattern. This char is already matched by a previous case pattern"),
+                    });
+                } else {
+                    chars.push(new_char);
+                }
+            }
+        }
+        StilCasePatternsCatch::Strings(strings) => {
+            if let StillPatternCatch::String(new_string) = new_catch {
+                if strings.contains(&new_string) {
+                    errors.push(StillErrorNode {
+                        range: pattern_range,
+                        message: Box::from("unreachable pattern. This string is already matched by a previous case pattern"),
+                    });
+                } else {
+                    strings.push(new_string);
+                }
+            }
+        }
+        StilCasePatternsCatch::Variants(variants) => {
+            if let StillPatternCatch::Variant(new_variants) = new_catch
+                && let Some((new_variant_name, new_variant_caught)) = new_variants
+                    .into_iter()
+                    .find_map(
+                        |(new_variant_name, new_variant_catch)| match new_variant_catch {
+                            VariantCatch::Caught(new_variant_caught) => {
+                                Some((new_variant_name, new_variant_caught))
+                            }
+                            VariantCatch::Uncaught { .. } => None,
+                        },
+                    )
+                && let Some(previous_catch_of_new_variant) = variants.get_mut(&new_variant_name)
+            {
+                match previous_catch_of_new_variant {
+                    VariantCatch::Caught(StilCasePatternsCatch::Exhaustive) => {
+                        println!("new_variant_name {new_variant_name}, variants: {variants:?}"); // TODO remove
+                        errors.push(StillErrorNode {
+                            range: pattern_range,
+                            message: Box::from("this pattern is unreachable as it's already matched by a previous case pattern"),
+                        });
+                    }
+                    VariantCatch::Caught(previous_caught_of_new_variant) => {
+                        still_pattern_catch_merge_with(
+                            errors,
+                            pattern_range,
+                            previous_caught_of_new_variant,
+                            new_variant_caught,
+                        );
+                    }
+                    VariantCatch::Uncaught { .. } => {
+                        *previous_catch_of_new_variant = VariantCatch::Caught(
+                            still_pattern_catch_to_case_patterns_catch(new_variant_caught),
+                        );
+                    }
+                }
+            }
+        }
+        StilCasePatternsCatch::Record(possibilities) => {
+            if let StillPatternCatch::Record(new_possibility) = new_catch {
+                if possibilities.iter().any(|record_possibility| {
+                    record_possibility
+                        .values()
+                        .zip(new_possibility.values())
+                        .all(|(possibility_field_value, new_possibility_field_value)| {
+                            still_pattern_catch_catches_all_of_still_pattern_catch(
+                                possibility_field_value,
+                                new_possibility_field_value,
+                            )
+                        })
+                }) {
+                    errors.push(StillErrorNode {
+                        range: pattern_range,
+                        message: Box::from("this pattern is unreachable as it's already matched by a previous case pattern"),
+                    });
+                } else {
+                    possibilities.push(new_possibility);
+                    if still_case_patterns_catch_record_is_exhaustive(possibilities) {
+                        *catch = StilCasePatternsCatch::Exhaustive;
+                    }
+                }
+            }
+        }
+    }
+}
+fn still_pattern_catch_catches_all_of_still_pattern_catch(
+    catch: &StillPatternCatch,
+    to_check: &StillPatternCatch,
+) -> bool {
+    match catch {
+        StillPatternCatch::Exhaustive => true,
+        StillPatternCatch::Unt(unt) => to_check == &StillPatternCatch::Unt(*unt),
+        StillPatternCatch::Int(int) => to_check == &StillPatternCatch::Int(*int),
+        StillPatternCatch::Char(chr) => to_check == &StillPatternCatch::Char(*chr),
+        StillPatternCatch::String(string) => {
+            if let StillPatternCatch::String(string_to_check) = to_check {
+                string_to_check == string
+            } else {
+                false
+            }
+        }
+        StillPatternCatch::Variant(variants) => {
+            if let StillPatternCatch::Variant(variants_to_check) = to_check {
+                variants.values().zip(variants_to_check.values()).all(
+                    |(variant_catch, variant_catch_to_check)| match (
+                        variant_catch,
+                        variant_catch_to_check,
+                    ) {
+                        (VariantCatch::Uncaught { .. }, VariantCatch::Caught(_)) => false,
+                        (VariantCatch::Uncaught { .. }, VariantCatch::Uncaught { .. }) => true,
+                        (VariantCatch::Caught(_), VariantCatch::Uncaught { .. }) => true,
+                        (
+                            VariantCatch::Caught(variant_value),
+                            VariantCatch::Caught(variant_value_to_check),
+                        ) => still_pattern_catch_catches_all_of_still_pattern_catch(
+                            variant_value,
+                            variant_value_to_check,
+                        ),
+                    },
+                )
+            } else {
+                false
+            }
+        }
+        StillPatternCatch::Record(fields) => {
+            if let StillPatternCatch::Record(fields_to_check) = to_check {
+                fields.values().zip(fields_to_check.values()).all(
+                    |(field_value, field_value_to_check)| {
+                        still_pattern_catch_catches_all_of_still_pattern_catch(
+                            field_value,
+                            field_value_to_check,
+                        )
+                    },
+                )
+            } else {
+                false
+            }
+        }
+    }
+}
+
+enum StillPatternCatchPossibilitiesSplit<'a> {
+    Infinite,
+    // consider adding example pattern
+    ByVariant(std::collections::HashMap<StillName, Vec<Vec<&'a StillPatternCatch>>>),
+    WithAdditionalFieldValues {
+        field_count: usize,
+        possibilities: Vec<Vec<&'a StillPatternCatch>>,
+    },
+    AllExhaustive(Vec<Vec<&'a StillPatternCatch>>),
+}
+fn still_case_patterns_catch_record_is_exhaustive(
+    record_possibilities: &[std::collections::HashMap<StillName, StillPatternCatch>],
+) -> bool {
+    still_possibilities_of_pattern_catches_are_exhaustive(
+        // it's unfortunate that we need to allocate here,
+        // since rust runs into an "reached the recursion limit while instantiating"
+        // error when instantiatin Iterators (recursively)
+        &record_possibilities
+            .iter()
+            .map(|record_possibility| record_possibility.values().collect())
+            .collect::<Vec<_>>(),
+    )
+}
+/// don't ask wtf this algorithm is, I'm too dumb to undertand the existing literature.
+/// Here's what I've come up with:
+///
+/// Assume the case shape
+///   [  ( a0, a1, a2, a3 )
+///   or ( b0, b1, b2, b3 )
+///   or ... ]
+/// where we know the pattern at each index has the same type.
+/// We then look at each pattern at index 0:
+///
+///    when this pattern type is a choice type, chategorize by
+///    variant name, and check the value + remaining indices individually for exhaustiveness
+///    for example:
+///      ( None, a1 ) or ( Some v0, b1 ) or ( None, c1 )
+///      → is_exhaustive [ ( _, a1 ) or ( _, c1 ) ] && is_exhaustive [ ( v0, b1 ) ]
+///    if we encounter a variable or ignore pattern, we copy it's possibilities
+///    to all "by variant" possibilities
+///
+///   when this pattern type is a record, spread (flatten) its field values into the original possibilities
+///   for example:
+///      ( { x ax0, y ay0 }, a1 ) or ( { x ax0, y ay0 }, b1 )
+///      → is_exhaustive [ ( ax0, ay0, a1 ) or ( ax0, ay0, b1 ) ]
+///
+/// when all patterns on index 0 are variable or ignore patterns
+/// repeat until the patterns on index 0 together aren't exhaustive (return false) or
+/// all remaining cases are exhaustive (return true)
+fn still_possibilities_of_pattern_catches_are_exhaustive<'a>(
+    possibilities_of_pattern_catches: &'a [Vec<&'a StillPatternCatch>],
+) -> bool {
+    let maybe_split: Option<StillPatternCatchPossibilitiesSplit> = possibilities_of_pattern_catches.iter()
+        .fold(None, |mut maybe_so_far, possibility_values| {
+            let mut possibility_values_iterator = possibility_values.iter().copied();
+            match possibility_values_iterator.next() {
+                None => maybe_so_far,
+                Some(first_value_catch) => {
+                    match first_value_catch {
+                        StillPatternCatch::Exhaustive => {
+                            match &mut maybe_so_far {
+                                None | Some(StillPatternCatchPossibilitiesSplit::Infinite) => {
+                                    Some(StillPatternCatchPossibilitiesSplit::AllExhaustive(vec![possibility_values_iterator.collect()]))
+                                }
+                                Some(StillPatternCatchPossibilitiesSplit::AllExhaustive(possibilities)) => {
+                                    possibilities.push(possibility_values_iterator.collect());
+                                    maybe_so_far
+                                }
+                                Some(StillPatternCatchPossibilitiesSplit::WithAdditionalFieldValues { field_count, possibilities }) => {
+                                    possibilities.push(std::iter::repeat_n(&StillPatternCatch::Exhaustive, *field_count).chain(possibility_values_iterator).collect());
+                                    maybe_so_far
+                                }
+                                Some(StillPatternCatchPossibilitiesSplit::ByVariant(possibilities_by_variant)) => {
+                                    let new_possibilities_with_exhaustive_first: Vec<&StillPatternCatch> = std::iter::once(&StillPatternCatch::Exhaustive).chain(possibility_values_iterator).collect();
+                                    for possibilities_for_variant in possibilities_by_variant.values_mut() {
+                                        possibilities_for_variant.push(new_possibilities_with_exhaustive_first.clone());
+                                    }
+                                    maybe_so_far
+                                }
+                            }
+                        }
+                        StillPatternCatch::Unt(_)
+                        | StillPatternCatch::Int(_)
+                        | StillPatternCatch::Char(_)
+                        | StillPatternCatch::String(_) => {
+                            // discard any possibilities where first is in Infinite,
+                            // as only possibilities which matche all of the Infinite possible values
+                            // is relevant one for exhaustiveness checking
+                            Some(StillPatternCatchPossibilitiesSplit::Infinite)
+                        }
+                        StillPatternCatch::Variant(first_field_value_variants) => {
+                            let Some((
+                                first_field_value_variant_name,
+                                first_field_value_variant_value_catch,
+                            )) = first_field_value_variants.iter().find_map(
+                                |(
+                                    first_field_value_variant_name,
+                                    first_field_value_variant_catch,
+                                )| {
+                                    match first_field_value_variant_catch {
+                                        VariantCatch::Uncaught { .. } => None,
+                                        VariantCatch::Caught(value_caught) => {
+                                            Some((first_field_value_variant_name, value_caught))
+                                        }
+                                    }
+                                },
+                            )
+                            else {
+                                return maybe_so_far;
+                            };
+                            let new_possibility_for_variant: Vec<&StillPatternCatch> =
+                                std::iter::once(first_field_value_variant_value_catch)
+                                    .chain(possibility_values_iterator)
+                                    .collect();
+                            match &mut maybe_so_far {
+                                None => {
+                                    let mut by_variant_empty: std::collections::HashMap<
+                                        StillName,
+                                        Vec<Vec<&StillPatternCatch>>,
+                                    > = first_field_value_variants
+                                        .keys()
+                                        .map(|variant_name| (variant_name.clone(), vec![]))
+                                        .collect();
+                                    if let Some(first_field_value_variant_possibilities) =
+                                        by_variant_empty.get_mut(first_field_value_variant_name)
+                                    {
+                                        first_field_value_variant_possibilities
+                                            .push(new_possibility_for_variant);
+                                    }
+                                    Some(StillPatternCatchPossibilitiesSplit::ByVariant(
+                                        by_variant_empty,
+                                    ))
+                                }
+                                Some(StillPatternCatchPossibilitiesSplit::ByVariant(
+                                    so_far_by_variant,
+                                )) => {
+                                    if let Some(variant_possibilities_so_far) =
+                                        so_far_by_variant.get_mut(first_field_value_variant_name)
+                                    {
+                                        variant_possibilities_so_far
+                                            .push(new_possibility_for_variant);
+                                    }
+                                    maybe_so_far
+                                }
+                                Some(StillPatternCatchPossibilitiesSplit::AllExhaustive(possibilities)) => {
+                                    let possibilities_for_each_variant: Vec<Vec<&StillPatternCatch>> =
+                                        possibilities.iter().map(|possibility|
+                                            std::iter::once(&StillPatternCatch::Exhaustive)
+                                                .chain(possibility.iter().copied())
+                                                .collect()
+                                        )
+                                        .collect();
+                                    let mut by_variant_empty: std::collections::HashMap<
+                                        StillName,
+                                        Vec<Vec<&StillPatternCatch>>,
+                                    > = first_field_value_variants
+                                        .keys()
+                                        .map(|variant_name| (variant_name.clone(), possibilities_for_each_variant.clone()))
+                                        .collect();
+                                    if let Some(first_field_value_variant_possibilities) =
+                                        by_variant_empty.get_mut(first_field_value_variant_name)
+                                    {
+                                        first_field_value_variant_possibilities
+                                            .push(new_possibility_for_variant);
+                                    }
+                                    Some(StillPatternCatchPossibilitiesSplit::ByVariant(
+                                        by_variant_empty,
+                                    ))
+                                }
+                                // type error
+                                Some(StillPatternCatchPossibilitiesSplit::WithAdditionalFieldValues {..}) => maybe_so_far,
+                                Some(StillPatternCatchPossibilitiesSplit::Infinite) => maybe_so_far,
+                            }
+                        }
+                        StillPatternCatch::Record(first_field_value_fields) => {
+                            let new_possibility_for_variant: Vec<&StillPatternCatch> =
+                                first_field_value_fields.values()
+                                    .chain(possibility_values_iterator)
+                                    .collect();
+                            match &mut maybe_so_far {
+                                None => {
+                                    Some(StillPatternCatchPossibilitiesSplit::WithAdditionalFieldValues {
+                                        field_count: first_field_value_fields.len(),
+                                        possibilities: vec![new_possibility_for_variant],
+                                    })
+                                }
+                                Some(StillPatternCatchPossibilitiesSplit::WithAdditionalFieldValues
+                                    {possibilities: with_record_field_values_possibilities_so_far, field_count:_},
+                                ) => {
+                                    with_record_field_values_possibilities_so_far
+                                        .push(new_possibility_for_variant);
+                                    maybe_so_far
+                                }
+                                Some(StillPatternCatchPossibilitiesSplit::AllExhaustive(possibilities)) => {
+                                    Some(StillPatternCatchPossibilitiesSplit::WithAdditionalFieldValues {
+                                        field_count: first_field_value_fields.len(),
+                                        possibilities: std::iter::once(new_possibility_for_variant)
+                                            .chain(possibilities.iter().map(|possibility|
+                                                std::iter::repeat_n(&StillPatternCatch::Exhaustive, first_field_value_fields.len())
+                                                    .chain(possibility.iter().copied())
+                                                    .collect()
+                                            ))
+                                            .collect(),
+                                    })
+                                }
+                                // type error
+                                Some(StillPatternCatchPossibilitiesSplit::ByVariant(_)) => maybe_so_far,
+                                Some(StillPatternCatchPossibilitiesSplit::Infinite) => maybe_so_far,
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    match maybe_split {
+        None => {
+            // no possibilities at all. This case is hit when e.g. a variant never occurs
+            false
+        }
+        Some(split) => match split {
+            StillPatternCatchPossibilitiesSplit::Infinite => false,
+            StillPatternCatchPossibilitiesSplit::ByVariant(possibilities_by_variant) => {
+                possibilities_by_variant
+                    .values()
+                    .all(|possibilities_for_variant| {
+                        still_possibilities_of_pattern_catches_are_exhaustive(
+                            possibilities_for_variant,
+                        )
+                    })
+            }
+            StillPatternCatchPossibilitiesSplit::AllExhaustive(possibilities) => {
+                // a more performant way to check this
+                // would be setting an "input was empty" bool
+                if possibilities.iter().all(Vec::is_empty) {
+                    return true;
+                }
+                still_possibilities_of_pattern_catches_are_exhaustive(&possibilities)
+            }
+            StillPatternCatchPossibilitiesSplit::WithAdditionalFieldValues {
+                field_count: _,
+                possibilities,
+            } => still_possibilities_of_pattern_catches_are_exhaustive(&possibilities),
+        },
+    }
+}
 
 fn maybe_still_syntax_pattern_to_rust<'a>(
     errors: &mut Vec<StillErrorNode>,
@@ -14811,6 +15326,7 @@ fn maybe_still_syntax_pattern_to_rust<'a>(
             CompiledStillPattern {
                 rust: None,
                 type_: None,
+                catch: None,
             }
         }
         Some(pattern_node) => still_syntax_pattern_to_rust(
@@ -15023,12 +15539,13 @@ struct BindingToClone<'a> {
     name: &'a str,
     is_copy: bool,
 }
-/// TODO should be `Option<{ type_: StillSype,  }>`
+/// TODO should be `Option<{ type_: StillSype, catch: StillPatternCatch }>`
 /// as an untyped pattern should never exist
 struct CompiledStillPattern {
     // None means it should be ignored (e.g. in a case of that case should be removed)
     rust: Option<syn::Pat>,
     type_: Option<StillType>,
+    catch: Option<StillPatternCatch>,
 }
 fn still_syntax_pattern_to_rust<'a>(
     errors: &mut Vec<StillErrorNode>,
@@ -15056,6 +15573,7 @@ fn still_syntax_pattern_to_rust<'a>(
                     lit: syn::Lit::Char(syn::LitChar::new(char_value, syn_span())),
                 })),
             },
+            catch: maybe_char.map(StillPatternCatch::Char),
         },
         StillSyntaxPattern::Unt(representation) => CompiledStillPattern {
             type_: Some(still_type_unt),
@@ -15074,10 +15592,14 @@ fn still_syntax_pattern_to_rust<'a>(
                     None
                 }
             },
+            catch: representation
+                .parse::<usize>()
+                .ok()
+                .map(StillPatternCatch::Unt),
         },
-        StillSyntaxPattern::Int(representation) => CompiledStillPattern {
+        StillSyntaxPattern::Int(int_syntax) => CompiledStillPattern {
             type_: Some(still_type_int),
-            rust: match representation {
+            rust: match int_syntax {
                 StillSyntaxInt::Zero => Some(syn::Pat::Lit(syn::ExprLit {
                     attrs: vec![],
                     lit: syn::Lit::Int(syn::LitInt::new("0isize", syn_span())),
@@ -15100,6 +15622,13 @@ fn still_syntax_pattern_to_rust<'a>(
                     }
                 }
             },
+            catch: match int_syntax {
+                StillSyntaxInt::Zero => Some(StillPatternCatch::Int(0)),
+                StillSyntaxInt::Signed(signed_representation) => signed_representation
+                    .parse::<isize>()
+                    .ok()
+                    .map(StillPatternCatch::Int),
+            },
         },
         StillSyntaxPattern::String {
             content,
@@ -15110,6 +15639,7 @@ fn still_syntax_pattern_to_rust<'a>(
                 attrs: vec![],
                 lit: syn::Lit::Str(syn::LitStr::new(content, syn_span())),
             })),
+            catch: Some(StillPatternCatch::String(content.clone())),
         },
         StillSyntaxPattern::WithComment {
             comment: _,
@@ -15147,175 +15677,308 @@ fn still_syntax_pattern_to_rust<'a>(
                     still_syntax_node_as_ref(type_node),
                 ),
             };
-            match maybe_in_typed {
-                None => {
-                    errors.push(StillErrorNode {
-                        range: pattern_node.range,
-                        message: Box::from("missing pattern after type :...: here. To ignore he incoming value, use _, or give it a lowercase name or specify a variant"),
-                    });
-                    CompiledStillPattern {
-                        rust: Some(syn_pat_wild()),
-                        type_: maybe_type,
-                    }
-                }
-                Some(untyped_pattern_node) => match &untyped_pattern_node.value {
-                    StillSyntaxPatternUntyped::Variable(name) => {
-                        let maybe_existing_pattern_variable_with_same_name_info: Option<
-                            StillLocalBindingCompileInfo,
-                        > = introduced_bindings.insert(
-                            name,
-                            StillLocalBindingCompileInfo {
-                                origin_range: untyped_pattern_node.range,
-                                is_copy: maybe_type.as_ref().is_some_and(|type_| {
-                                    still_type_is_copy(false, type_aliases, choice_types, type_)
-                                }),
-                                type_: maybe_type.clone(),
-                                last_uses: vec![],
-                                closures_it_is_used_in: vec![],
-                            },
-                        );
-                        if maybe_existing_pattern_variable_with_same_name_info.is_some() {
-                            errors.push(StillErrorNode {
+            let Some(untyped_pattern_node) = maybe_in_typed else {
+                errors.push(StillErrorNode {
+                    range: pattern_node.range,
+                    message: Box::from("missing pattern after type :...: here. To ignore he incoming value, use _, or give it a lowercase name or specify a variant"),
+                });
+                return CompiledStillPattern {
+                    rust: Some(syn_pat_wild()),
+                    type_: maybe_type,
+                    catch: None,
+                };
+            };
+            match &untyped_pattern_node.value {
+                StillSyntaxPatternUntyped::Variable(name) => {
+                    let maybe_existing_pattern_variable_with_same_name_info: Option<
+                        StillLocalBindingCompileInfo,
+                    > = introduced_bindings.insert(
+                        name,
+                        StillLocalBindingCompileInfo {
+                            origin_range: untyped_pattern_node.range,
+                            is_copy: maybe_type.as_ref().is_some_and(|type_| {
+                                still_type_is_copy(false, type_aliases, choice_types, type_)
+                            }),
+                            type_: maybe_type.clone(),
+                            last_uses: vec![],
+                            closures_it_is_used_in: vec![],
+                        },
+                    );
+                    if maybe_existing_pattern_variable_with_same_name_info.is_some() {
+                        errors.push(StillErrorNode {
                                 range: untyped_pattern_node.range,
                                 message: Box::from("a variable with this name is already used in another part of the patterns. Rename one of them")
                             });
-                        }
-                        if is_reference {
-                            bindings_to_clone.push(BindingToClone {
-                                name: name,
-                                is_copy: maybe_type.as_ref().is_some_and(|type_| {
-                                    still_type_is_copy(false, type_aliases, choice_types, type_)
-                                }),
-                            });
-                        }
-                        CompiledStillPattern {
-                            rust: Some(syn_pat_variable(name)),
-                            type_: maybe_type,
-                        }
                     }
-                    StillSyntaxPatternUntyped::Ignored => CompiledStillPattern {
-                        rust: Some(syn_pat_wild()),
+                    if is_reference {
+                        bindings_to_clone.push(BindingToClone {
+                            name: name,
+                            is_copy: maybe_type.as_ref().is_some_and(|type_| {
+                                still_type_is_copy(false, type_aliases, choice_types, type_)
+                            }),
+                        });
+                    }
+                    CompiledStillPattern {
+                        rust: Some(syn_pat_variable(name)),
                         type_: maybe_type,
-                    },
-                    StillSyntaxPatternUntyped::Variant {
-                        name: name_node,
-                        value: maybe_value,
-                    } => {
-                        let Some(type_) = maybe_type else {
-                            return CompiledStillPattern {
-                                rust: None,
-                                type_: None,
-                            };
+                        catch: Some(StillPatternCatch::Exhaustive),
+                    }
+                }
+                StillSyntaxPatternUntyped::Ignored => CompiledStillPattern {
+                    rust: Some(syn_pat_wild()),
+                    type_: maybe_type,
+                    catch: Some(StillPatternCatch::Exhaustive),
+                },
+                StillSyntaxPatternUntyped::Variant {
+                    name: name_node,
+                    value: maybe_value,
+                } => {
+                    let Some(type_) = maybe_type else {
+                        return CompiledStillPattern {
+                            rust: None,
+                            type_: None,
+                            catch: None,
                         };
-                        let StillType::ChoiceConstruct {
-                            name: origin_choice_type_name,
-                            arguments: origin_choice_type_arguments,
-                        } = type_
-                        else {
-                            errors.push(StillErrorNode {
-                                range: maybe_type_node.as_ref().map(|n| n.range).unwrap_or(pattern_node.range),
-                                message: Box::from("type in :here: is not a choice type which is necessary for a variant pattern"),
-                            });
-                            return CompiledStillPattern {
-                                rust: None,
-                                type_: None,
-                            };
+                    };
+                    let StillType::ChoiceConstruct {
+                        name: origin_choice_type_name,
+                        arguments: origin_choice_type_arguments,
+                    } = &type_
+                    else {
+                        errors.push(StillErrorNode {
+                            range: maybe_type_node.as_ref().map(|n| n.range).unwrap_or(pattern_node.range),
+                            message: Box::from("type in :here: is not a choice type which is necessary for a variant pattern"),
+                        });
+                        return CompiledStillPattern {
+                            rust: None,
+                            type_: None,
+                            catch: None,
                         };
-                        let variant_value_is_reference: bool = is_reference
-                            || ('variant_value_is_reference: {
-                                let Some(origin_choice_type) =
-                                    choice_types.get(origin_choice_type_name.as_str())
-                                else {
-                                    break 'variant_value_is_reference false;
-                                };
-                                let Some(variant_index_in_origin_choice_type) = origin_choice_type
-                                    .variants
-                                    .iter()
-                                    .enumerate()
-                                    .find(|(_, origin_choice_type_variant)| {
-                                        origin_choice_type_variant.name.as_ref().is_some_and(
-                                            |origin_choice_type_variant_name_node| {
-                                                origin_choice_type_variant_name_node.value
-                                                    == name_node.value
-                                            },
-                                        )
-                                    })
-                                    .map(|(i, _)| i)
-                                else {
-                                    break 'variant_value_is_reference false;
-                                };
-                                origin_choice_type
-                                    .type_variants
-                                    .get(variant_index_in_origin_choice_type)
-                                    .and_then(|type_variant| type_variant.value.as_ref())
-                                    .is_some_and(|variant_value| {
-                                        variant_value.constructs_recursive_type
-                                    })
-                            });
-                        let maybe_rust_value: Option<syn::Pat> = match maybe_value.as_ref() {
-                            None => {
-                                // TODO check origin variant also has no value
-                                None
-                            }
-                            Some(value_node) => {
-                                let compiled_value = still_syntax_pattern_to_rust(
-                                    errors,
-                                    records_used,
-                                    introduced_bindings,
-                                    bindings_to_clone,
-                                    type_aliases,
-                                    choice_types,
-                                    variant_value_is_reference,
-                                    still_syntax_node_unbox(value_node),
+                    };
+                    let Some(origin_choice_type_info) =
+                        choice_types.get(origin_choice_type_name.as_str())
+                    else {
+                        return CompiledStillPattern {
+                            rust: None,
+                            type_: None,
+                            catch: None,
+                        };
+                    };
+                    let Some(origin_variant_info) = origin_choice_type_info
+                        .type_variants
+                        .iter()
+                        .find(|origin_choice_type_variant| {
+                            origin_choice_type_variant.name == name_node.value
+                        })
+                    else {
+                        errors.push(StillErrorNode {
+                            range: name_node.range,
+                            message: format!(
+                                "the type in :here: is a choice type \"{}\" which is does not declare a variant with this name. Valid variant names are: {}. If you expected this variant name to be valid, check the origin choice type for errors",
+                                origin_choice_type_name,
+                                origin_choice_type_info.type_variants.iter().map(|variant| variant.name.as_str()).collect::<Vec<&str>>().join(", ")
+                            ).into_boxed_str()
+                        });
+                        return CompiledStillPattern {
+                            rust: None,
+                            type_: None,
+                            catch: None,
+                        };
+                    };
+                    let rust_variant_path: syn::Path = syn_path_reference([
+                        &still_name_to_uppercase_rust(origin_choice_type_name),
+                        &still_name_to_uppercase_rust(&name_node.value),
+                    ]);
+                    match maybe_value.as_ref() {
+                        None => {
+                            if let Some(declared_variant_value_type) = &origin_variant_info.value {
+                                let mut error_message: String = String::from(
+                                    "this variant is missing its value. In the origin choice declaration, it's type is declared as\n",
                                 );
-                                let Some(value_rust_pattern) = compiled_value.rust else {
-                                    return CompiledStillPattern {
-                                        rust: None,
-                                        type_: Some(StillType::ChoiceConstruct {
-                                            name: origin_choice_type_name,
-                                            arguments: origin_choice_type_arguments,
-                                        }),
-                                    };
+                                still_type_into(
+                                    &mut error_message,
+                                    0,
+                                    &declared_variant_value_type.type_,
+                                );
+                                errors.push(StillErrorNode {
+                                    range: name_node.range,
+                                    message: error_message.into_boxed_str(),
+                                });
+                                return CompiledStillPattern {
+                                    rust: None,
+                                    type_: None,
+                                    catch: None,
                                 };
-                                let Some(_value_type) = compiled_value.type_ else {
-                                    return CompiledStillPattern {
-                                        rust: None,
-                                        type_: Some(StillType::ChoiceConstruct {
-                                            name: origin_choice_type_name,
-                                            arguments: origin_choice_type_arguments,
-                                        }),
-                                    };
-                                };
-                                // TODO verify equal: origin choice type variant value with the type arguments inlined & value pattern type
-                                Some(value_rust_pattern)
                             }
-                        };
-                        let rust_variant_path = syn_path_reference([
-                            &still_name_to_uppercase_rust(&origin_choice_type_name),
-                            &still_name_to_uppercase_rust(&name_node.value),
-                        ]);
-                        CompiledStillPattern {
-                            rust: Some(match maybe_rust_value {
-                                None => syn::Pat::Path(syn::ExprPath {
+                            CompiledStillPattern {
+                                rust: Some(syn::Pat::Path(syn::ExprPath {
                                     attrs: vec![],
                                     qself: None,
                                     path: rust_variant_path,
+                                })),
+                                type_: Some(type_),
+                                catch: Some(if origin_choice_type_info.type_variants.len() == 1 {
+                                    StillPatternCatch::Exhaustive
+                                } else {
+                                    StillPatternCatch::Variant(
+                                        origin_choice_type_info
+                                            .type_variants
+                                            .iter()
+                                            .map(|variant_info| {
+                                                (
+                                                    variant_info.name.clone(),
+                                                    if variant_info.name == name_node.value {
+                                                        VariantCatch::Caught(
+                                                            StillPatternCatch::Exhaustive,
+                                                        )
+                                                    } else {
+                                                        VariantCatch::Uncaught {
+                                                            has_value: variant_info.value.is_some(),
+                                                        }
+                                                    },
+                                                )
+                                            })
+                                            .collect(),
+                                    )
                                 }),
-                                Some(rust_value) => syn::Pat::TupleStruct(syn::PatTupleStruct {
+                            }
+                        }
+                        Some(value_node) => {
+                            let Some(declared_variant_value_info) = &origin_variant_info.value
+                            else {
+                                errors.push(StillErrorNode {
+                                    range: name_node.range,
+                                    message: Box::from(
+                                        "extraneous variant value. This variant's declaration has no declared value. Remove this extra value or correct its origin choice type declaration",
+                                    ),
+                                });
+                                return CompiledStillPattern {
+                                    type_: Some(type_),
+                                    rust: Some(syn::Pat::Path(syn::ExprPath {
+                                        attrs: vec![],
+                                        qself: None,
+                                        path: rust_variant_path,
+                                    })),
+                                    catch: Some(
+                                        if origin_choice_type_info.type_variants.len() == 1 {
+                                            StillPatternCatch::Exhaustive
+                                        } else {
+                                            StillPatternCatch::Variant(
+                                                origin_choice_type_info
+                                                    .type_variants
+                                                    .iter()
+                                                    .map(|variant_info| {
+                                                        (
+                                                            variant_info.name.clone(),
+                                                            if variant_info.name == name_node.value
+                                                            {
+                                                                VariantCatch::Caught(
+                                                                    StillPatternCatch::Exhaustive,
+                                                                )
+                                                            } else {
+                                                                VariantCatch::Uncaught {
+                                                                    has_value: variant_info
+                                                                        .value
+                                                                        .is_some(),
+                                                                }
+                                                            },
+                                                        )
+                                                    })
+                                                    .collect(),
+                                            )
+                                        },
+                                    ),
+                                };
+                            };
+                            let compiled_value: CompiledStillPattern = still_syntax_pattern_to_rust(
+                                errors,
+                                records_used,
+                                introduced_bindings,
+                                bindings_to_clone,
+                                type_aliases,
+                                choice_types,
+                                is_reference
+                                    || declared_variant_value_info.constructs_recursive_type,
+                                still_syntax_node_unbox(value_node),
+                            );
+                            if let Some(actual_value_type) = &compiled_value.type_ {
+                                let mut variant_value_type: StillType =
+                                    declared_variant_value_info.type_.clone();
+                                still_type_replace_variables(
+                                    &origin_choice_type_info
+                                        .parameters
+                                        .iter()
+                                        .zip(origin_choice_type_arguments.iter())
+                                        .map(|(parameter_name_node, argument)| {
+                                            (parameter_name_node.value.as_str(), argument)
+                                        })
+                                        .collect(),
+                                    &mut variant_value_type,
+                                );
+                                if let Some(variant_value_type_diff) =
+                                    still_type_diff(&variant_value_type, actual_value_type)
+                                {
+                                    errors.push(StillErrorNode {
+                                        range: value_node.range,
+                                        message: still_type_diff_error_message(
+                                            &variant_value_type_diff,
+                                        )
+                                        .into_boxed_str(),
+                                    });
+                                    return CompiledStillPattern {
+                                        rust: None,
+                                        type_: None,
+                                        catch: None,
+                                    };
+                                }
+                            }
+                            let Some(value_rust_pattern) = compiled_value.rust else {
+                                return CompiledStillPattern {
+                                    rust: None,
+                                    type_: Some(type_),
+                                    catch: None,
+                                };
+                            };
+                            CompiledStillPattern {
+                                rust: Some(syn::Pat::TupleStruct(syn::PatTupleStruct {
                                     attrs: vec![],
                                     qself: None,
                                     path: rust_variant_path,
                                     paren_token: syn::token::Paren(syn_span()),
-                                    elems: std::iter::once(rust_value).collect(),
+                                    elems: std::iter::once(value_rust_pattern).collect(),
+                                })),
+                                type_: Some(type_),
+                                catch: compiled_value.catch.map(|value_catch| {
+                                    if origin_choice_type_info.type_variants.len() == 1 {
+                                        value_catch
+                                    } else {
+                                        let mut variants: std::collections::HashMap<
+                                            StillName,
+                                            VariantCatch<StillPatternCatch>,
+                                        > = origin_choice_type_info
+                                            .type_variants
+                                            .iter()
+                                            .map(|variant_info| {
+                                                (
+                                                    variant_info.name.clone(),
+                                                    VariantCatch::Uncaught {
+                                                        has_value: variant_info.value.is_some(),
+                                                    },
+                                                )
+                                            })
+                                            .collect();
+                                        if let Some(variant_catch) =
+                                            variants.get_mut(&name_node.value)
+                                        {
+                                            *variant_catch = VariantCatch::Caught(value_catch);
+                                        }
+                                        StillPatternCatch::Variant(variants)
+                                    }
                                 }),
-                            }),
-                            type_: Some(StillType::ChoiceConstruct {
-                                name: origin_choice_type_name,
-                                arguments: origin_choice_type_arguments,
-                            }),
+                            }
                         }
                     }
-                },
+                }
             }
         }
         StillSyntaxPattern::Record(fields) => {
@@ -15323,70 +15986,93 @@ fn still_syntax_pattern_to_rust<'a>(
             records_used.insert(sorted_field_names(
                 fields.iter().map(|field| &field.name.value),
             ));
-            let (field_values_rust, field_types): (
-                Vec<Option<(&str, syn::Pat)>>,
-                Vec<Option<StillTypeField>>,
-            ) = fields
-                .iter()
-                .map(|field| {
-                    let compiled_field_value: CompiledStillPattern =
-                        maybe_still_syntax_pattern_to_rust(
-                            errors,
-                            || StillErrorNode {
-                                range: field.name.range,
-                                message: Box::from("missing field value after this name"),
-                            },
-                            records_used,
-                            introduced_bindings,
-                            bindings_to_clone,
-                            type_aliases,
-                            choice_types,
-                            is_reference,
-                            field.value.as_ref().map(still_syntax_node_as_ref),
-                        );
-                    (
-                        compiled_field_value
-                            .rust
-                            .map(|rust| (field.name.value.as_str(), rust)),
-                        compiled_field_value.type_.map(|type_| StillTypeField {
-                            name: field.name.value.clone(),
-                            value: type_,
-                        }),
-                    )
-                })
-                .unzip();
+            let mut maybe_type_fields: Option<Vec<StillTypeField>> =
+                Some(Vec::with_capacity(fields.len()));
+            let mut maybe_field_catches: Option<
+                std::collections::HashMap<StillName, StillPatternCatch>,
+            > = Some(std::collections::HashMap::with_capacity(fields.len()));
+            let mut maybe_rust_fields: Option<
+                syn::punctuated::Punctuated<syn::FieldPat, syn::token::Comma>,
+            > = Some(syn::punctuated::Punctuated::new());
+            for field in fields {
+                let compiled_field_value: CompiledStillPattern = maybe_still_syntax_pattern_to_rust(
+                    errors,
+                    || StillErrorNode {
+                        range: field.name.range,
+                        message: Box::from("missing field value after this name"),
+                    },
+                    records_used,
+                    introduced_bindings,
+                    bindings_to_clone,
+                    type_aliases,
+                    choice_types,
+                    is_reference,
+                    field.value.as_ref().map(still_syntax_node_as_ref),
+                );
+                if let Some(ref mut type_fields) = maybe_type_fields {
+                    match compiled_field_value.type_ {
+                        None => {
+                            maybe_type_fields = None;
+                        }
+                        Some(field_value_type) => {
+                            type_fields.push(StillTypeField {
+                                name: field.name.value.clone(),
+                                value: field_value_type,
+                            });
+                        }
+                    }
+                }
+                if let Some(ref mut field_catches) = maybe_field_catches {
+                    match compiled_field_value.catch {
+                        None => {
+                            maybe_field_catches = None;
+                        }
+                        Some(field_value_type) => {
+                            field_catches.insert(field.name.value.clone(), field_value_type);
+                        }
+                    }
+                }
+                if let Some(ref mut rust_fields) = maybe_rust_fields {
+                    match compiled_field_value.rust {
+                        None => {
+                            maybe_rust_fields = None;
+                        }
+                        Some(field_value_rust) => {
+                            rust_fields.push(syn::FieldPat {
+                                attrs: vec![],
+                                member: syn::Member::Named(syn_ident(
+                                    &still_name_to_lowercase_rust(&field.name.value),
+                                )),
+                                colon_token: Some(syn::token::Colon(syn_span())),
+                                pat: Box::new(field_value_rust),
+                            });
+                        }
+                    }
+                }
+            }
             CompiledStillPattern {
-                type_: field_types
-                    .into_iter()
-                    .collect::<Option<Vec<StillTypeField>>>()
-                    .map(|type_fields| StillType::Record(type_fields)),
-                rust: field_values_rust
-                    .into_iter()
-                    .collect::<Option<Vec<_>>>()
-                    .map(|field_values_rust| {
-                        syn::Pat::Struct(syn::PatStruct {
-                            attrs: vec![],
-                            qself: None,
-                            path: syn_path_reference([
-                                &still_field_names_to_rust_record_struct_name(
-                                    fields.iter().map(|field| field.name.value.as_ref()),
-                                ),
-                            ]),
-                            brace_token: syn::token::Brace(syn_span()),
-                            fields: field_values_rust
-                                .into_iter()
-                                .map(|(field_name, field_value_rust)| syn::FieldPat {
-                                    attrs: vec![],
-                                    member: syn::Member::Named(syn_ident(
-                                        &still_name_to_lowercase_rust(field_name),
-                                    )),
-                                    colon_token: Some(syn::token::Colon(syn_span())),
-                                    pat: Box::new(field_value_rust),
-                                })
-                                .collect(),
-                            rest: None,
-                        })
-                    }),
+                type_: maybe_type_fields.map(|type_fields| StillType::Record(type_fields)),
+                rust: maybe_rust_fields.map(|field_values_rust| {
+                    syn::Pat::Struct(syn::PatStruct {
+                        attrs: vec![],
+                        qself: None,
+                        path: syn_path_reference([&still_field_names_to_rust_record_struct_name(
+                            fields.iter().map(|field| field.name.value.as_ref()),
+                        )]),
+                        brace_token: syn::token::Brace(syn_span()),
+                        fields: field_values_rust,
+                        rest: None,
+                    })
+                }),
+                catch: maybe_field_catches.map(|field_catches| {
+                    if field_catches.iter().all(|(_, field_value_catch)| {
+                        field_value_catch == &StillPatternCatch::Exhaustive
+                    }) {
+                        StillPatternCatch::Exhaustive
+                    } else {
+                        StillPatternCatch::Record(field_catches)
+                    }
+                }),
             }
         }
     }

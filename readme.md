@@ -57,10 +57,9 @@ Then point your editor to `still lsp`, see also [specific setups](#editor-setups
 - no features that obfuscate ("shiny, cool features" that ruin languages in my opinion): infix operators, currying, lifetime tracking, traits/type classes, objects, task/async, hidden mutation, macros & reflection, side effects, modules, hidden context values, undefined
 
 ## TODO
-- pattern match exhaustiveness checking
-- type checking for pattern variant value (just like for expressions)
 - simple io (`standard-in-read-line`, `standard-out-write`)
 - implement `StillIntoOwned::into_owned_overwriting` for generated structs and enums
+- correct hover and goto definition on variants, as well as references and rename (in the case that multiple choice types use the same variant names)
 
 ## considering
 - (leaning clear yes) add more core float operations like `sin`, `cos`, `pi`, `ln`
