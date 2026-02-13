@@ -21,7 +21,7 @@ ansi-clear-screen "\u{001B}c"
 
 run \:opt str:state-or-uninitialized >
     let state
-        case state-or-uninitialized
+        state-or-uninitialized
         | :opt str:Absent > ""
         | :opt str:Present :str:initialized > initialized
     :io str:Batch
