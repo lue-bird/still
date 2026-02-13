@@ -2,24 +2,19 @@ very small, explicitly boring, purely functional programming language that compi
 > ⚠️ Experimental, subject to change, use with caution.
 
 ### hello world
-
 ```still
-run \:opt {}:_ >
-    :io {}:Standard-out-write "hello, world\n"
+greet \:str:name >
+    strs-flatten [ "Hello, ", name, "\n" ]
 ```
-the syntactically equivalent elm code would be
-```elm
-run : Maybe {} -> Io {}
-run = \_ ->
-    StandardOutWrite "hello, world\n"
-```
+Variables in still land don't actually perform any effects.
+[`example-hello-world/`](https://github.com/lue-bird/still/tree/main/example-hello-world) shows how to actually use the compiled code.
 
 ### echo in loop
-
 ```still
-ansi-clear-screen "\u{001B}c"
+ansi-clear-screen
+    "\u{001B}c"
 
-run \:opt str:state-or-uninitialized >
+interface \:opt str:state-or-uninitialized >
     let state
         state-or-uninitialized
         | :opt str:Absent > ""
@@ -29,7 +24,13 @@ run \:opt str:state-or-uninitialized >
             strs-flatten [ ansi-clear-screen, state, "\nType a sentence to echo: " ]
         , :io str:Standard-in-read-line \:str:line > line
         ]
+
+choice io Future
+    | Standard-out-write str
+    | Batch vec (io Future)
+    | Standard-in-read-line \str > Future
 ```
+→ [`example-echo-in-loop/`](https://github.com/lue-bird/still/tree/main/example-echo-in-loop)
 
 To use, [install rust](https://rust-lang.org/tools/install/) and
 ```bash
@@ -58,6 +59,9 @@ Then point your editor to `still lsp`, see also [specific setups](#editor-setups
 
 ## TODO
 - simple io (`standard-in-read-line`, `standard-out-write`)
+- make `StillIntoOwned::into_owned_overwriting` actually useful in practice.
+  Currently, since `to_still` takes a reference with a lifetime of the returned still,
+  it can't be used to then mutate the original state
 - implement `StillIntoOwned::into_owned_overwriting` for generated structs and enums
 - correct hover and goto definition on variants, as well as references and rename (in the case that multiple choice types use the same variant names)
 
@@ -228,7 +232,7 @@ name = "still"
 scope = "source.still"
 injection-regex = "still"
 file-types = ["still"]
-indent = { tab-width = 2, unit = "  " }
+indent = { tab-width = 4, unit = "    " }
 language-servers = [ "still" ]
 auto-format = true
 ```

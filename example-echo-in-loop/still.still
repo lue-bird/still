@@ -1,0 +1,22 @@
+
+
+ansi-clear-screen
+    "\u{001B}c"
+
+interface \:opt str:state-or-uninitialized >
+    let state
+        state-or-uninitialized
+        | :opt str:Absent > ""
+        | :opt str:Present :str:initialized > initialized
+    :io str:Batch
+        [ :io str:Standard-out-write
+            strs-flatten
+                [ ansi-clear-screen, state, "\nType a sentence to echo: " ]
+        , :io str:Standard-in-read-line \:str:line > line
+        ]
+
+choice io Future
+    | Standard-out-write str
+    | Batch vec (io Future)
+    | Standard-in-read-line \str > Future
+
