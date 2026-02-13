@@ -11551,9 +11551,6 @@ fn variable_declaration_to_rust<'a>(
         // rust top level declarations need explicit types; partial types won't do
         return None;
     };
-    let mut still_type_parameters: std::collections::HashSet<&str> =
-        std::collections::HashSet::new();
-    still_type_variables_into(&mut still_type_parameters, &type_);
     let rust_attrs: Vec<syn::Attribute> = variable_declaration_info
         .documentation
         .map(|n| syn_attribute_doc(&n.value))
@@ -11564,36 +11561,65 @@ fn variable_declaration_to_rust<'a>(
     ));
     let has_lifetime_parameter: bool = compiled_result.uses_allocator
         || still_type_uses_lifetime(type_aliases, choice_types, &type_);
-    let rust_generics: syn::Generics = syn::Generics {
-        lt_token: Some(syn::token::Lt(syn_span())),
-        params: (if has_lifetime_parameter {
-            Some(syn::GenericParam::Lifetime(syn_default_lifetime_param()))
-        } else {
-            None
-        })
-        .into_iter()
-        .chain(still_type_parameters.iter().map(|name| {
-            syn::GenericParam::Type(syn::TypeParam {
-                attrs: vec![],
-                ident: syn_ident(&still_type_variable_to_rust(name)),
-                colon_token: Some(syn::token::Colon(syn_span())),
-                bounds: default_parameter_bounds(syn_default_lifetime_name).collect(),
-                eq_token: None,
-                default: None,
-            })
-        }))
-        .collect(),
-        gt_token: Some(syn::token::Gt(syn_span())),
-        where_clause: None,
-    };
-    match type_ {
+    match &type_ {
         StillType::Function {
             inputs: input_types,
-            output,
-        } => match compiled_result.rust {
-            syn::Expr::Closure(result_lambda) => {
-                let rust_parameters: syn::punctuated::Punctuated<syn::FnArg, syn::token::Comma> =
-                    (if compiled_result.uses_allocator {
+            output: output_type,
+        } => {
+            let mut still_input_type_parameters: std::collections::HashSet<&str> =
+                std::collections::HashSet::new();
+            for input_type in input_types {
+                still_type_variables_into(&mut still_input_type_parameters, input_type);
+            }
+            {
+                let mut output_type_parameters: std::collections::HashSet<&str> =
+                    std::collections::HashSet::new();
+                still_type_variables_into(&mut output_type_parameters, output_type);
+                output_type_parameters.retain(|output_type_parameter| {
+                    !still_input_type_parameters.contains(output_type_parameter)
+                });
+                if !output_type_parameters.is_empty() {
+                    let mut full_type_as_string: String = String::new();
+                    still_type_into(&mut full_type_as_string, 0, &type_);
+                    errors.push(StillErrorNode {
+                        range: variable_declaration_info.name.range,
+                        message: format!(
+                            "its output type contains variables not introduced in its input types, namely {}. In still, every value has a concrete type, so no value could satisfy such a type. Here is the full type:\n{}",
+                            output_type_parameters.iter().copied().collect::<Vec<&str>>().join(", "),
+                            &full_type_as_string
+                        ).into_boxed_str()
+                    });
+                    return None;
+                }
+            }
+            let rust_generics: syn::Generics = syn::Generics {
+                lt_token: Some(syn::token::Lt(syn_span())),
+                params: (if has_lifetime_parameter {
+                    Some(syn::GenericParam::Lifetime(syn_default_lifetime_param()))
+                } else {
+                    None
+                })
+                .into_iter()
+                .chain(still_input_type_parameters.iter().map(|name| {
+                    syn::GenericParam::Type(syn::TypeParam {
+                        attrs: vec![],
+                        ident: syn_ident(&still_type_variable_to_rust(name)),
+                        colon_token: Some(syn::token::Colon(syn_span())),
+                        bounds: default_parameter_bounds(syn_default_lifetime_name).collect(),
+                        eq_token: None,
+                        default: None,
+                    })
+                }))
+                .collect(),
+                gt_token: Some(syn::token::Gt(syn_span())),
+                where_clause: None,
+            };
+            match compiled_result.rust {
+                syn::Expr::Closure(result_lambda) => {
+                    let rust_parameters: syn::punctuated::Punctuated<
+                        syn::FnArg,
+                        syn::token::Comma,
+                    > = (if compiled_result.uses_allocator {
                         Some(default_allocator_fn_arg())
                     } else {
                         None
@@ -11620,8 +11646,40 @@ fn variable_declaration_to_rust<'a>(
                             }),
                     )
                     .collect();
-                Some(CompiledVariableDeclaration {
-                    rust: (syn::Item::Fn(syn::ItemFn {
+                    Some(CompiledVariableDeclaration {
+                        rust: (syn::Item::Fn(syn::ItemFn {
+                            attrs: rust_attrs,
+                            vis: syn::Visibility::Public(syn::token::Pub(syn_span())),
+                            sig: syn::Signature {
+                                constness: None,
+                                asyncness: None,
+                                unsafety: None,
+                                abi: None,
+                                fn_token: syn::token::Fn(syn_span()),
+                                ident: rust_ident,
+                                generics: rust_generics,
+                                paren_token: syn::token::Paren(syn_span()),
+                                inputs: rust_parameters,
+                                output: syn::ReturnType::Type(
+                                    syn::token::RArrow(syn_span()),
+                                    Box::new(still_type_to_rust(
+                                        type_aliases,
+                                        choice_types,
+                                        syn_default_lifetime_name,
+                                        FnRepresentation::Impl,
+                                        output_type,
+                                    )),
+                                ),
+                                variadic: None,
+                            },
+                            block: Box::new(syn_spread_expr_block(*result_lambda.body)),
+                        })),
+                        has_allocator_parameter: compiled_result.uses_allocator,
+                        type_: type_,
+                    })
+                }
+                result_rust => Some(CompiledVariableDeclaration {
+                    rust: syn::Item::Fn(syn::ItemFn {
                         attrs: rust_attrs,
                         vis: syn::Visibility::Public(syn::token::Pub(syn_span())),
                         sig: syn::Signature {
@@ -11633,7 +11691,33 @@ fn variable_declaration_to_rust<'a>(
                             ident: rust_ident,
                             generics: rust_generics,
                             paren_token: syn::token::Paren(syn_span()),
-                            inputs: rust_parameters,
+                            inputs: (if compiled_result.uses_allocator {
+                                Some(default_allocator_fn_arg())
+                            } else {
+                                None
+                            })
+                            .into_iter()
+                            .chain(input_types.iter().enumerate().map(|(i, input_type_node)| {
+                                syn::FnArg::Typed(syn::PatType {
+                                    pat: Box::new(syn::Pat::Path(syn::ExprPath {
+                                        attrs: vec![],
+                                        qself: None,
+                                        path: syn_path_reference([
+                                            &rust_generated_fn_parameter_name(i),
+                                        ]),
+                                    })),
+                                    attrs: vec![],
+                                    colon_token: syn::token::Colon(syn_span()),
+                                    ty: Box::new(still_type_to_rust(
+                                        type_aliases,
+                                        choice_types,
+                                        syn_default_lifetime_name,
+                                        FnRepresentation::Impl,
+                                        input_type_node,
+                                    )),
+                                })
+                            }))
+                            .collect(),
                             output: syn::ReturnType::Type(
                                 syn::token::RArrow(syn_span()),
                                 Box::new(still_type_to_rust(
@@ -11641,21 +11725,73 @@ fn variable_declaration_to_rust<'a>(
                                     choice_types,
                                     syn_default_lifetime_name,
                                     FnRepresentation::Impl,
-                                    &output,
+                                    output_type,
                                 )),
                             ),
                             variadic: None,
                         },
-                        block: Box::new(syn_spread_expr_block(*result_lambda.body)),
-                    })),
+                        block: Box::new(syn::Block {
+                            brace_token: syn::token::Brace(syn_span()),
+                            stmts: vec![syn::Stmt::Expr(
+                                syn::Expr::Call(syn::ExprCall {
+                                    attrs: vec![],
+                                    func: Box::new(result_rust),
+                                    paren_token: syn::token::Paren(syn_span()),
+                                    args: input_types
+                                        .iter()
+                                        .enumerate()
+                                        .map(|(i, _)| {
+                                            syn::Expr::Path(syn::ExprPath {
+                                                attrs: vec![],
+                                                qself: None,
+                                                path: syn_path_reference([
+                                                    &rust_generated_fn_parameter_name(i),
+                                                ]),
+                                            })
+                                        })
+                                        .collect(),
+                                }),
+                                None,
+                            )],
+                        }),
+                    }),
                     has_allocator_parameter: compiled_result.uses_allocator,
-                    type_: StillType::Function {
-                        inputs: input_types,
-                        output,
-                    },
-                })
+                    type_: type_,
+                }),
             }
-            result_rust => Some(CompiledVariableDeclaration {
+        }
+        type_not_function => {
+            {
+                let mut type_parameters: std::collections::HashSet<&str> =
+                    std::collections::HashSet::new();
+                still_type_variables_into(&mut type_parameters, type_not_function);
+                if !type_parameters.is_empty() {
+                    let mut full_type_as_string: String = String::new();
+                    still_type_into(&mut full_type_as_string, 0, &type_);
+                    errors.push(StillErrorNode {
+                        range: variable_declaration_info.name.range,
+                        message: format!(
+                            "its type contains variables, namely {}. In still, every value has a concrete type, so no value could satisfy such a type. Here is the full type:\n{}",
+                            type_parameters.iter().copied().collect::<Vec<&str>>().join(", "),
+                            &full_type_as_string
+                        ).into_boxed_str()
+                    });
+                    return None;
+                }
+            }
+            let rust_generics: syn::Generics = syn::Generics {
+                lt_token: Some(syn::token::Lt(syn_span())),
+                params: (if has_lifetime_parameter {
+                    Some(syn::GenericParam::Lifetime(syn_default_lifetime_param()))
+                } else {
+                    None
+                })
+                .into_iter()
+                .collect(),
+                gt_token: Some(syn::token::Gt(syn_span())),
+                where_clause: None,
+            };
+            Some(CompiledVariableDeclaration {
                 rust: syn::Item::Fn(syn::ItemFn {
                     attrs: rust_attrs,
                     vis: syn::Visibility::Public(syn::token::Pub(syn_span())),
@@ -11674,26 +11810,6 @@ fn variable_declaration_to_rust<'a>(
                             None
                         })
                         .into_iter()
-                        .chain(input_types.iter().enumerate().map(|(i, input_type_node)| {
-                            syn::FnArg::Typed(syn::PatType {
-                                pat: Box::new(syn::Pat::Path(syn::ExprPath {
-                                    attrs: vec![],
-                                    qself: None,
-                                    path: syn_path_reference([&rust_generated_fn_parameter_name(
-                                        i,
-                                    )]),
-                                })),
-                                attrs: vec![],
-                                colon_token: syn::token::Colon(syn_span()),
-                                ty: Box::new(still_type_to_rust(
-                                    type_aliases,
-                                    choice_types,
-                                    syn_default_lifetime_name,
-                                    FnRepresentation::Impl,
-                                    input_type_node,
-                                )),
-                            })
-                        }))
                         .collect(),
                         output: syn::ReturnType::Type(
                             syn::token::RArrow(syn_span()),
@@ -11702,80 +11818,17 @@ fn variable_declaration_to_rust<'a>(
                                 choice_types,
                                 syn_default_lifetime_name,
                                 FnRepresentation::Impl,
-                                &output,
+                                type_not_function,
                             )),
                         ),
                         variadic: None,
                     },
-                    block: Box::new(syn::Block {
-                        brace_token: syn::token::Brace(syn_span()),
-                        stmts: vec![syn::Stmt::Expr(
-                            syn::Expr::Call(syn::ExprCall {
-                                attrs: vec![],
-                                func: Box::new(result_rust),
-                                paren_token: syn::token::Paren(syn_span()),
-                                args: input_types
-                                    .iter()
-                                    .enumerate()
-                                    .map(|(i, _)| {
-                                        syn::Expr::Path(syn::ExprPath {
-                                            attrs: vec![],
-                                            qself: None,
-                                            path: syn_path_reference([
-                                                &rust_generated_fn_parameter_name(i),
-                                            ]),
-                                        })
-                                    })
-                                    .collect(),
-                            }),
-                            None,
-                        )],
-                    }),
+                    block: Box::new(syn_spread_expr_block(compiled_result.rust)),
                 }),
                 has_allocator_parameter: compiled_result.uses_allocator,
-                type_: StillType::Function {
-                    inputs: input_types,
-                    output,
-                },
-            }),
-        },
-        type_not_function => Some(CompiledVariableDeclaration {
-            rust: syn::Item::Fn(syn::ItemFn {
-                attrs: rust_attrs,
-                vis: syn::Visibility::Public(syn::token::Pub(syn_span())),
-                sig: syn::Signature {
-                    constness: None,
-                    asyncness: None,
-                    unsafety: None,
-                    abi: None,
-                    fn_token: syn::token::Fn(syn_span()),
-                    ident: rust_ident,
-                    generics: rust_generics,
-                    paren_token: syn::token::Paren(syn_span()),
-                    inputs: (if compiled_result.uses_allocator {
-                        Some(default_allocator_fn_arg())
-                    } else {
-                        None
-                    })
-                    .into_iter()
-                    .collect(),
-                    output: syn::ReturnType::Type(
-                        syn::token::RArrow(syn_span()),
-                        Box::new(still_type_to_rust(
-                            type_aliases,
-                            choice_types,
-                            syn_default_lifetime_name,
-                            FnRepresentation::Impl,
-                            &type_not_function,
-                        )),
-                    ),
-                    variadic: None,
-                },
-                block: Box::new(syn_spread_expr_block(compiled_result.rust)),
-            }),
-            has_allocator_parameter: compiled_result.uses_allocator,
-            type_: type_not_function,
-        }),
+                type_: type_,
+            })
+        }
     }
 }
 fn syn_spread_expr_block(syn_expr: syn::Expr) -> syn::Block {

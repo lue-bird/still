@@ -59,7 +59,6 @@ Then point your editor to `still lsp`, see also [specific setups](#editor-setups
 ## TODO
 - pattern match exhaustiveness checking
 - type checking for pattern variant value (just like for expressions)
-- check that each function output type only ever uses type variables used in the input type, and similarly: on non-function types, forbid the use of any new variables; in the error say "new type variables can only introduced in input types"
 - simple io (`standard-in-read-line`, `standard-out-write`)
 - implement `StillIntoOwned::into_owned_overwriting` for generated structs and enums
 
