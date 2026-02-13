@@ -6,8 +6,8 @@ very small, explicitly boring, purely functional programming language that compi
 greet \:str:name >
     strs-flatten [ "Hello, ", name, "\n" ]
 ```
-Variables in still land don't actually perform any effects.
-[`example-hello-world/`](https://github.com/lue-bird/still/tree/main/example-hello-world) shows how to actually use the compiled code.
+Variables don't actually perform any effects.
+[`example-hello-world/`](https://github.com/lue-bird/still/tree/main/example-hello-world) shows how to use the compiled code.
 
 ### echo in loop
 ```still
