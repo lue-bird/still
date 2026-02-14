@@ -9461,7 +9461,6 @@ I recommend creating helpers for common cases like mapping to an `opt` and keepi
             ),
         ]
         .map(|(name, has_allocator_parameter, type_, documentation)| {
-            // TODO inline
             (
                 name,
                 CompiledVariableDeclarationInfo {
