@@ -4,8 +4,7 @@
 mod still_core;
 
 struct State {
-    projects: std::collections::HashMap<std::path::PathBuf, ProjectState>,
-    open_still_text_document_uris: std::collections::HashSet<lsp_types::Url>,
+    projects: std::collections::HashMap<lsp_types::Url, ProjectState>,
 }
 
 struct ProjectState {
@@ -126,7 +125,7 @@ fn build_main(
 fn lsp_main() -> Result<(), Box<dyn std::error::Error>> {
     let (connection, io_thread) = lsp_server::Connection::stdio();
 
-    let (initialize_request_id, initialize_arguments_json) = connection.initialize_start()?;
+    let (initialize_request_id, _initialize_arguments_json) = connection.initialize_start()?;
     connection.initialize_finish(
         initialize_request_id,
         serde_json::to_value(lsp_types::InitializeResult {
@@ -137,69 +136,17 @@ fn lsp_main() -> Result<(), Box<dyn std::error::Error>> {
             }),
         })?,
     )?;
-    let initialize_arguments: lsp_types::InitializeParams =
-        serde_json::from_value(initialize_arguments_json)?;
-    let state: State = initialize(&connection, &initialize_arguments)?;
+    let state: State = initial_state();
     server_loop(&connection, state)?;
     // shut down gracefully
     drop(connection);
     io_thread.join()?;
     Ok(())
 }
-fn initialize(
-    connection: &lsp_server::Connection,
-    initialize_arguments: &lsp_types::InitializeParams,
-) -> Result<State, Box<dyn std::error::Error>> {
-    let state: State = State {
-        projects: initialize_projects_state_for_workspace_directories_into(
-            connection,
-            initialize_arguments,
-        ),
-        open_still_text_document_uris: std::collections::HashSet::new(),
-    };
-    connection.sender.send(lsp_server::Message::Notification(
-        lsp_server::Notification {
-            method: <lsp_types::request::RegisterCapability as lsp_types::request::Request>::METHOD
-                .to_string(),
-            params: serde_json::to_value(lsp_types::RegistrationParams {
-                registrations: initial_additional_capability_registrations(&state)?,
-            })?,
-        },
-    ))?;
-    Ok(state)
-}
-fn initial_additional_capability_registrations(
-    state: &State,
-) -> Result<Vec<lsp_types::Registration>, Box<dyn std::error::Error>> {
-    let file_watch_registration_options: lsp_types::DidChangeWatchedFilesRegistrationOptions =
-        lsp_types::DidChangeWatchedFilesRegistrationOptions {
-            watchers: state
-                .projects
-                .keys()
-                .filter_map(|source_directory_path| {
-                    lsp_types::Url::from_directory_path(source_directory_path).ok()
-                })
-                .map(|source_directory_url| lsp_types::FileSystemWatcher {
-                    glob_pattern: lsp_types::GlobPattern::Relative(lsp_types::RelativePattern {
-                        base_uri: lsp_types::OneOf::Right(source_directory_url),
-                        pattern: "**/*.still".to_string(),
-                    }),
-                    kind: Some(
-                        lsp_types::WatchKind::Create
-                            | lsp_types::WatchKind::Change
-                            | lsp_types::WatchKind::Delete,
-                    ),
-                })
-                .collect::<Vec<lsp_types::FileSystemWatcher>>(),
-        };
-    let file_watch_registration_options_json: serde_json::Value =
-        serde_json::to_value(file_watch_registration_options)?;
-    let file_watch_registration: lsp_types::Registration = lsp_types::Registration {
-        id: "file-watch".to_string(),
-        method: <lsp_types::notification::DidChangeWatchedFiles as lsp_types::notification::Notification>::METHOD.to_string(),
-        register_options: Some(file_watch_registration_options_json),
-    };
-    Ok(vec![file_watch_registration])
+fn initial_state() -> State {
+    State {
+        projects: std::collections::HashMap::new(),
+    }
 }
 fn server_capabilities() -> lsp_types::ServerCapabilities {
     lsp_types::ServerCapabilities {
@@ -296,17 +243,19 @@ fn handle_notification(
         <lsp_types::notification::DidCloseTextDocument as lsp_types::notification::Notification>::METHOD => {
             let arguments: <lsp_types::notification::DidCloseTextDocument as lsp_types::notification::Notification>::Params =
                 serde_json::from_value(notification_arguments_json)?;
-            state.open_still_text_document_uris.remove(&arguments.text_document.uri);
+            publish_diagnostics(
+                connection,
+                lsp_types::PublishDiagnosticsParams {
+                    uri: arguments.text_document.uri,
+                    diagnostics: vec![],
+                    version: None,
+                },
+            );
         }
         <lsp_types::notification::DidChangeTextDocument as lsp_types::notification::Notification>::METHOD => {
             let arguments: <lsp_types::notification::DidChangeTextDocument as lsp_types::notification::Notification>::Params =
                 serde_json::from_value(notification_arguments_json)?;
             update_state_on_did_change_text_document(state, connection, arguments);
-        }
-        <lsp_types::notification::DidChangeWatchedFiles as lsp_types::notification::Notification>::METHOD => {
-            let arguments: <lsp_types::notification::DidChangeWatchedFiles as lsp_types::notification::Notification>::Params =
-                serde_json::from_value(notification_arguments_json)?;
-            update_state_on_did_change_watched_files(connection, state, arguments);
         }
         <lsp_types::notification::Exit as lsp_types::notification::Notification>::METHOD => {}
         _ => {}
@@ -318,91 +267,21 @@ fn update_state_on_did_open_text_document(
     connection: &lsp_server::Connection,
     arguments: lsp_types::DidOpenTextDocumentParams,
 ) {
-    // Why is the existing handling on DidChangeWatchedFiles not good enough?
-    // When moving a project into an existing project,
-    // no syntax highlighting would be shown before you interact with the file,
-    // as semantic tokens are requested before the DidChangeWatchedFiles notification is sent.
-    // Since DidOpenTextDocumentParams already sends the full file content anyway,
-    // handling it on document open is relatively cheap and straightforward
-    if let Ok(opened_path) = arguments.text_document.uri.to_file_path()
-        && opened_path.extension().is_some_and(|ext| ext == "still")
+    if arguments.text_document.language_id == "still"
+        || (arguments
+            .text_document
+            .uri
+            .to_file_path()
+            .is_ok_and(|opened_path| opened_path.extension().is_some_and(|ext| ext == "still")))
     {
-        state.projects.entry(opened_path).or_insert_with(|| {
+        state.projects.insert(
+            arguments.text_document.uri.clone(),
             initialize_project_state_from_source(
                 connection,
                 arguments.text_document.uri.clone(),
                 arguments.text_document.text,
-            )
-        });
-        state
-            .open_still_text_document_uris
-            .insert(arguments.text_document.uri);
-    }
-}
-fn update_state_on_did_change_watched_files(
-    connection: &lsp_server::Connection,
-    state: &mut State,
-    arguments: lsp_types::DidChangeWatchedFilesParams,
-) {
-    for (changed_file_path, file_change) in
-        arguments
-            .changes
-            .into_iter()
-            .filter_map(|file_change_event| {
-                if file_change_event.typ == lsp_types::FileChangeType::CHANGED
-                    && state
-                        .open_still_text_document_uris
-                        .contains(&file_change_event.uri)
-                {
-                    None
-                } else {
-                    match file_change_event.uri.to_file_path() {
-                        Ok(changed_file_path) => Some((changed_file_path, file_change_event)),
-                        Err(()) => None,
-                    }
-                }
-            })
-    {
-        match file_change.typ {
-            lsp_types::FileChangeType::DELETED => {
-                if state.projects.remove(&changed_file_path).is_some() {
-                    publish_diagnostics(
-                        connection,
-                        lsp_types::PublishDiagnosticsParams {
-                            uri: file_change.uri,
-                            diagnostics: vec![],
-                            version: None,
-                        },
-                    );
-                }
-            }
-            lsp_types::FileChangeType::CREATED | lsp_types::FileChangeType::CHANGED => {
-                if changed_file_path
-                    .extension()
-                    .is_some_and(|ext| ext == "still")
-                {
-                    match std::fs::read_to_string(&changed_file_path) {
-                        Err(_) => {}
-                        Ok(changed_file_source) => {
-                            let changed_project_state = initialize_project_state_from_source(
-                                connection,
-                                file_change.uri,
-                                changed_file_source,
-                            );
-                            state
-                                .projects
-                                .insert(changed_file_path, changed_project_state);
-                        }
-                    }
-                }
-            }
-            unknown_file_change_type => {
-                eprintln!(
-                    "unknown file change type sent by LSP client: {:?}",
-                    unknown_file_change_type
-                );
-            }
-        }
+            ),
+        );
     }
 }
 
@@ -569,10 +448,10 @@ fn update_state_on_did_change_text_document(
     connection: &lsp_server::Connection,
     did_change_text_document: lsp_types::DidChangeTextDocumentParams,
 ) {
-    let Ok(changed_file_path) = did_change_text_document.text_document.uri.to_file_path() else {
-        return;
-    };
-    if let Some(project_state) = state.projects.get_mut(&changed_file_path) {
+    if let Some(project_state) = state
+        .projects
+        .get_mut(&did_change_text_document.text_document.uri)
+    {
         let mut updated_source: String = std::mem::take(&mut project_state.source);
         for change in did_change_text_document.content_changes {
             match (change.range, change.range_length) {
@@ -599,73 +478,6 @@ fn update_state_on_did_change_text_document(
     }
 }
 
-fn initialize_projects_state_for_workspace_directories_into(
-    connection: &lsp_server::Connection,
-    initialize_arguments: &lsp_types::InitializeParams,
-) -> std::collections::HashMap<std::path::PathBuf, ProjectState> {
-    let mut projects_state: std::collections::HashMap<std::path::PathBuf, ProjectState> =
-        std::collections::HashMap::new();
-    let workspace_directory_paths = initialize_arguments
-        .workspace_folders
-        .iter()
-        .flatten()
-        .filter_map(|workspace_folder| workspace_folder.uri.to_file_path().ok());
-    for project_path in list_still_projects_in_directory_path(workspace_directory_paths) {
-        initialize_state_for_project_into(&mut projects_state, project_path);
-    }
-    let (fully_initialized_project_sender, fully_initialized_project_receiver) =
-        std::sync::mpsc::channel();
-    std::thread::scope(|thread_scope| {
-        for uninitialized_path in projects_state.keys() {
-            let projects_that_finished_full_sender = fully_initialized_project_sender.clone();
-            #[allow(clippy::result_large_err)]
-            thread_scope.spawn(move || {
-                let initialized_project_state: ProjectState =
-                    initialize_project(connection, uninitialized_path);
-                projects_that_finished_full_sender
-                    .send((uninitialized_path.clone(), initialized_project_state))
-            });
-        }
-    });
-    drop(fully_initialized_project_sender);
-    while let Ok((fully_initialized_project_path, fully_parsed_projects)) =
-        fully_initialized_project_receiver.recv()
-    {
-        projects_state.insert(fully_initialized_project_path, fully_parsed_projects);
-    }
-    projects_state
-}
-fn initialize_project(
-    connection: &lsp_server::Connection,
-    path: &std::path::PathBuf,
-) -> ProjectState {
-    if let Ok(url) = lsp_types::Url::from_file_path(path)
-        && let Ok(project_source) = std::fs::read_to_string(path)
-    {
-        initialize_project_state_from_source(connection, url, project_source)
-    } else {
-        uninitialized_project_state()
-    }
-}
-
-fn initialize_state_for_project_into(
-    projects_state: &mut std::collections::HashMap<std::path::PathBuf, ProjectState>,
-    project_path: std::path::PathBuf,
-) {
-    projects_state.insert(project_path, uninitialized_project_state());
-}
-/// A yet to be initialized dummy [`ProjectState`]
-fn uninitialized_project_state() -> ProjectState {
-    ProjectState {
-        source: String::new(),
-        syntax: StillSyntaxProject {
-            declarations: vec![],
-        },
-        type_aliases: std::collections::HashMap::new(),
-        choice_types: std::collections::HashMap::new(),
-        variable_declarations: std::collections::HashMap::new(),
-    }
-}
 fn initialize_project_state_from_source(
     connection: &lsp_server::Connection,
     url: lsp_types::Url,
@@ -696,22 +508,13 @@ fn initialize_project_state_from_source(
     }
 }
 
-fn state_get_project_by_lsp_url<'a>(
-    state: &'a State,
-    uri: &lsp_types::Url,
-) -> Option<&'a ProjectState> {
-    let file_path: std::path::PathBuf = uri.to_file_path().ok()?;
-    state.projects.get(&file_path)
-}
-
 type StillName = compact_str::CompactString;
 
 fn respond_to_hover(
     state: &State,
     hover_arguments: &lsp_types::HoverParams,
 ) -> Option<lsp_types::Hover> {
-    let hovered_project_state = state_get_project_by_lsp_url(
-        state,
+    let hovered_project_state = state.projects.get(
         &hover_arguments
             .text_document_position_params
             .text_document
@@ -997,8 +800,7 @@ fn respond_to_goto_definition(
     state: &State,
     goto_definition_arguments: lsp_types::GotoDefinitionParams,
 ) -> Option<lsp_types::GotoDefinitionResponse> {
-    let goto_symbol_project_state = state_get_project_by_lsp_url(
-        state,
+    let goto_symbol_project_state = state.projects.get(
         &goto_definition_arguments
             .text_document_position_params
             .text_document
@@ -1210,8 +1012,9 @@ fn respond_to_prepare_rename(
     state: &State,
     prepare_rename_arguments: &lsp_types::TextDocumentPositionParams,
 ) -> Option<Result<lsp_types::PrepareRenameResponse, lsp_server::ResponseError>> {
-    let project_state =
-        state_get_project_by_lsp_url(state, &prepare_rename_arguments.text_document.uri)?;
+    let project_state = state
+        .projects
+        .get(&prepare_rename_arguments.text_document.uri)?;
     let prepare_rename_symbol_node: StillSyntaxNode<StillSyntaxSymbol> =
         still_syntax_project_find_symbol_at_position(
             &project_state.syntax,
@@ -1252,10 +1055,9 @@ fn respond_to_rename(
     state: &State,
     rename_arguments: lsp_types::RenameParams,
 ) -> Option<Vec<lsp_types::TextDocumentEdit>> {
-    let to_prepare_for_rename_project_state = state_get_project_by_lsp_url(
-        state,
-        &rename_arguments.text_document_position.text_document.uri,
-    )?;
+    let to_prepare_for_rename_project_state = state
+        .projects
+        .get(&rename_arguments.text_document_position.text_document.uri)?;
     let symbol_to_rename_node: StillSyntaxNode<StillSyntaxSymbol> =
         still_syntax_project_find_symbol_at_position(
             &to_prepare_for_rename_project_state.syntax,
@@ -1512,8 +1314,7 @@ fn respond_to_references(
     state: &State,
     references_arguments: lsp_types::ReferenceParams,
 ) -> Option<Vec<lsp_types::Location>> {
-    let to_find_project_state = state_get_project_by_lsp_url(
-        state,
+    let to_find_project_state = state.projects.get(
         &references_arguments
             .text_document_position
             .text_document
@@ -1758,8 +1559,9 @@ fn respond_to_semantic_tokens_full(
     state: &State,
     semantic_tokens_arguments: &lsp_types::SemanticTokensParams,
 ) -> Option<lsp_types::SemanticTokensResult> {
-    let project_state =
-        state_get_project_by_lsp_url(state, &semantic_tokens_arguments.text_document.uri)?;
+    let project_state = state
+        .projects
+        .get(&semantic_tokens_arguments.text_document.uri)?;
     let mut highlighting: Vec<StillSyntaxNode<StillSyntaxHighlightKind>> =
         Vec::with_capacity(project_state.source.len() / 16);
     still_syntax_highlight_project_into(&mut highlighting, &project_state.syntax);
@@ -1932,8 +1734,7 @@ fn respond_to_completion(
     state: &State,
     completion_arguments: &lsp_types::CompletionParams,
 ) -> Option<lsp_types::CompletionResponse> {
-    let completion_project = state_get_project_by_lsp_url(
-        state,
+    let completion_project = state.projects.get(
         &completion_arguments
             .text_document_position
             .text_document
@@ -2197,9 +1998,9 @@ fn respond_to_document_formatting(
     state: &State,
     formatting_arguments: &lsp_types::DocumentFormattingParams,
 ) -> Option<Vec<lsp_types::TextEdit>> {
-    let document_path: std::path::PathBuf =
-        formatting_arguments.text_document.uri.to_file_path().ok()?;
-    let to_format_project = state.projects.get(&document_path)?;
+    let to_format_project = state
+        .projects
+        .get(&formatting_arguments.text_document.uri)?;
     let formatted: String = still_syntax_project_format(to_format_project);
     // diffing does not seem to be needed here. But maybe it's faster?
     Some(vec![lsp_types::TextEdit {
@@ -2221,12 +2022,9 @@ fn respond_to_document_symbols(
     state: &State,
     document_symbol_arguments: &lsp_types::DocumentSymbolParams,
 ) -> Option<lsp_types::DocumentSymbolResponse> {
-    let document_path: std::path::PathBuf = document_symbol_arguments
-        .text_document
-        .uri
-        .to_file_path()
-        .ok()?;
-    let project = state.projects.get(&document_path)?;
+    let project = state
+        .projects
+        .get(&document_symbol_arguments.text_document.uri)?;
     Some(lsp_types::DocumentSymbolResponse::Nested(
         project
             .syntax
@@ -2535,40 +2333,6 @@ fn still_syntax_highlight_kind_to_lsp_semantic_token_type(
         StillSyntaxHighlightKind::Number => lsp_types::SemanticTokenType::NUMBER,
         StillSyntaxHighlightKind::String => lsp_types::SemanticTokenType::STRING,
         StillSyntaxHighlightKind::TypeVariable => lsp_types::SemanticTokenType::TYPE_PARAMETER,
-    }
-}
-
-fn list_still_projects_in_directory_path(
-    paths: impl Iterator<Item = std::path::PathBuf>,
-) -> Vec<std::path::PathBuf> {
-    let mut result: Vec<std::path::PathBuf> = Vec::new();
-    for path in paths {
-        list_files_passing_test_in_directory_at_path_into(&mut result, path.clone(), |path| {
-            path.extension().is_some_and(|ext| ext == "still")
-        });
-    }
-    result
-}
-
-fn list_files_passing_test_in_directory_at_path_into(
-    so_far: &mut Vec<std::path::PathBuf>,
-    path: std::path::PathBuf,
-    should_add_file: fn(&std::path::PathBuf) -> bool,
-) {
-    if path.is_dir() {
-        if let Ok(dir_subs) = std::fs::read_dir(&path) {
-            for dir_sub in dir_subs.into_iter().filter_map(Result::ok) {
-                list_files_passing_test_in_directory_at_path_into(
-                    so_far,
-                    dir_sub.path(),
-                    should_add_file,
-                );
-            }
-        }
-    } else {
-        if should_add_file(&path) {
-            so_far.push(path);
-        }
     }
 }
 
