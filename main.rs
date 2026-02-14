@@ -12570,7 +12570,7 @@ fn still_type_into(so_far: &mut String, indent: usize, type_: &StillType) {
                     StillType::ChoiceConstruct {
                         name: _,
                         arguments: argument_arguments,
-                    } => argument_arguments.is_empty(),
+                    } => !argument_arguments.is_empty(),
                     StillType::Record(_) => false,
                 };
                 if should_parenthesize_argument {
