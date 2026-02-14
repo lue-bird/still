@@ -62,7 +62,6 @@ Then point your editor to `still lsp`, see also [specific setups](#editor-setups
   Currently, since `to_still` takes a reference with a lifetime of the returned still,
   it can't be used to then mutate the original state
 - implement `StillIntoOwned::into_owned_overwriting` for generated structs and enums
-- correct hover and goto definition on variants, as well as references and rename (in the case that multiple choice types use the same variant names)
 
 ## considering
 - (leaning clear yes) add more core float operations like `sin`, `cos`, `pi`, `ln`
@@ -192,7 +191,7 @@ g y first-result
 | :g-result:g-result >
 h z g-result
 ```
-Some syntax might not be listed, the examples may give show more.
+Some syntax might not be listed, the examples may show more.
 
 ## editor setups
 feel free to contribute as I only use vscodium

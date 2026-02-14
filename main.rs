@@ -809,7 +809,7 @@ fn respond_to_hover(
             }),
             range: Some(hovered_symbol_node.range),
         }),
-        StillSyntaxSymbol::VariableOrVariant {
+        StillSyntaxSymbol::Variable {
             name: hovered_name,
             local_bindings,
         } => {
@@ -827,19 +827,45 @@ fn respond_to_hover(
                     range: Some(hovered_symbol_node.range),
                 });
             }
+            let origin_compiled_variable_declaration_info = hovered_project_state
+                .variable_declarations
+                .get(hovered_name)?;
             let origin_declaration_info_markdown: String =
-                if let Some(origin_compiled_variable_declaration_info) = hovered_project_state
-                    .variable_declarations
-                    .get(hovered_name)
-                {
-                    present_variable_declaration_info_with_complete_type_markdown(
-                        origin_compiled_variable_declaration_info
-                            .documentation
-                            .as_deref(),
-                        origin_compiled_variable_declaration_info.type_.as_ref(),
+                present_variable_declaration_info_with_complete_type_markdown(
+                    origin_compiled_variable_declaration_info
+                        .documentation
+                        .as_deref(),
+                    origin_compiled_variable_declaration_info.type_.as_ref(),
+                );
+            Some(lsp_types::Hover {
+                contents: lsp_types::HoverContents::Markup(lsp_types::MarkupContent {
+                    kind: lsp_types::MarkupKind::Markdown,
+                    value: origin_declaration_info_markdown,
+                }),
+                range: Some(hovered_symbol_node.range),
+            })
+        }
+        StillSyntaxSymbol::Variant {
+            name: hovered_name,
+            type_: maybe_type,
+        } => {
+            let (
+                origin_project_choice_type_declaration_name,
+                origin_project_choice_type_declaration,
+            ): (StillName, &ChoiceTypeInfo) = maybe_type
+                .and_then(|type_| {
+                    still_syntax_type_to_choice_type(
+                        &hovered_project_state.type_aliases,
+                        still_syntax_node_empty(type_),
                     )
-                } else {
-                    // TODO instead look at type
+                    .and_then(|(origin_choice_type_name, _)| {
+                        hovered_project_state
+                            .choice_types
+                            .get(&origin_choice_type_name)
+                            .map(|origin_choice_type| (origin_choice_type_name, origin_choice_type))
+                    })
+                })
+                .or_else(|| {
                     hovered_project_state.choice_types.iter().find_map(
                         |(
                             origin_project_choice_type_declaration_name,
@@ -856,25 +882,28 @@ fn respond_to_hover(
                             if !any_declared_name_matches_hovered {
                                 None
                             } else {
-                                Some(format!(
-                                    "variant in\n{}",
-                                    &present_choice_type_declaration_info_markdown(
-                                        Some(origin_project_choice_type_declaration_name.as_str()),
-                                        origin_project_choice_type_declaration
-                                            .documentation
-                                            .as_deref(),
-                                        &origin_project_choice_type_declaration.parameters,
-                                        &origin_project_choice_type_declaration.variants,
-                                    )
+                                Some((
+                                    origin_project_choice_type_declaration_name.clone(),
+                                    origin_project_choice_type_declaration,
                                 ))
                             }
                         },
-                    )?
-                };
+                    )
+                })?;
             Some(lsp_types::Hover {
                 contents: lsp_types::HoverContents::Markup(lsp_types::MarkupContent {
                     kind: lsp_types::MarkupKind::Markdown,
-                    value: origin_declaration_info_markdown,
+                    value: format!(
+                        "variant in\n{}",
+                        &present_choice_type_declaration_info_markdown(
+                            Some(origin_project_choice_type_declaration_name.as_str()),
+                            origin_project_choice_type_declaration
+                                .documentation
+                                .as_deref(),
+                            &origin_project_choice_type_declaration.parameters,
+                            &origin_project_choice_type_declaration.variants,
+                        )
+                    ),
                 }),
                 range: Some(hovered_symbol_node.range),
             })
@@ -1040,7 +1069,7 @@ fn respond_to_goto_definition(
                 StillSyntaxDeclaration::Variable { .. } => None,
             }
         }
-        StillSyntaxSymbol::VariableOrVariant {
+        StillSyntaxSymbol::Variable {
             name: goto_name,
             local_bindings,
         } => {
@@ -1060,13 +1089,69 @@ fn respond_to_goto_definition(
                     },
                 ));
             }
+            let declaration_name_range: lsp_types::Range = goto_symbol_project_state
+                .choice_types
+                .values()
+                .find_map(|origin_project_choice_type| {
+                    origin_project_choice_type
+                        .variants
+                        .iter()
+                        .find_map(|variant| {
+                            variant.name.as_ref().and_then(|variant_name_node| {
+                                if variant_name_node.value.as_str() == goto_name {
+                                    Some(variant_name_node.range)
+                                } else {
+                                    None
+                                }
+                            })
+                        })
+                })?;
+            Some(lsp_types::GotoDefinitionResponse::Scalar(
+                lsp_types::Location {
+                    uri: goto_definition_arguments
+                        .text_document_position_params
+                        .text_document
+                        .uri
+                        .clone(),
+                    range: declaration_name_range,
+                },
+            ))
+        }
+        StillSyntaxSymbol::Variant {
+            name: goto_name,
+            type_: maybe_type,
+        } => {
+            let maybe_origin_choice_type_variant_name_range: Option<lsp_types::Range> = maybe_type
+                .and_then(|type_| {
+                    still_syntax_type_to_choice_type(
+                        &goto_symbol_project_state.type_aliases,
+                        still_syntax_node_empty(type_),
+                    )
+                    .and_then(|(origin_choice_type_name, _)| {
+                        goto_symbol_project_state
+                            .choice_types
+                            .get(&origin_choice_type_name)
+                            .and_then(|origin_choice_type| {
+                                origin_choice_type.variants.iter().find_map(
+                                    |origin_choice_type_variant| {
+                                        origin_choice_type_variant.name.as_ref().and_then(
+                                            |origin_choice_type_variant_name_node| {
+                                                if origin_choice_type_variant_name_node.value
+                                                    == goto_name
+                                                {
+                                                    Some(origin_choice_type_variant_name_node.range)
+                                                } else {
+                                                    None
+                                                }
+                                            },
+                                        )
+                                    },
+                                )
+                            })
+                    })
+                });
             let declaration_name_range: lsp_types::Range =
-                if let Some(origin_variable_declaration_info) = goto_symbol_project_state
-                    .variable_declarations
-                    .get(goto_name)
-                {
-                    origin_variable_declaration_info.name_range?
-                } else {
+                maybe_origin_choice_type_variant_name_range.or_else(|| {
                     goto_symbol_project_state.choice_types.values().find_map(
                         |origin_project_choice_type| {
                             origin_project_choice_type
@@ -1082,8 +1167,8 @@ fn respond_to_goto_definition(
                                     })
                                 })
                         },
-                    )?
-                };
+                    )
+                })?;
             Some(lsp_types::GotoDefinitionResponse::Scalar(
                 lsp_types::Location {
                     uri: goto_definition_arguments
@@ -1148,38 +1233,15 @@ fn respond_to_prepare_rename(
         | StillSyntaxSymbol::TypeVariable {
             scope_declaration: _,
             name,
-        } => Ok(lsp_types::PrepareRenameResponse::RangeWithPlaceholder {
-            range: prepare_rename_symbol_node.range,
-            placeholder: name.to_string(),
-        }),
-        StillSyntaxSymbol::VariableOrVariant {
+        }
+        | StillSyntaxSymbol::Variable {
             name,
-            local_bindings,
-        } => match find_local_binding_info(&local_bindings, name) {
-            Some(_) => Ok(lsp_types::PrepareRenameResponse::RangeWithPlaceholder {
-                range: prepare_rename_symbol_node.range,
-                placeholder: name.to_string(),
-            }),
-            None => Ok(lsp_types::PrepareRenameResponse::RangeWithPlaceholder {
-                range: lsp_types::Range {
-                    start: lsp_position_add_characters(
-                        prepare_rename_symbol_node.range.end,
-                        -(name.len() as i32),
-                    ),
-                    end: prepare_rename_symbol_node.range.end,
-                },
-                placeholder: name.to_string(),
-            }),
-        },
-        StillSyntaxSymbol::Type { name } => {
+            local_bindings: _,
+        }
+        | StillSyntaxSymbol::Variant { name, type_: _ }
+        | StillSyntaxSymbol::Type { name } => {
             Ok(lsp_types::PrepareRenameResponse::RangeWithPlaceholder {
-                range: lsp_types::Range {
-                    start: lsp_position_add_characters(
-                        prepare_rename_symbol_node.range.end,
-                        -(name.len() as i32),
-                    ),
-                    end: prepare_rename_symbol_node.range.end,
-                },
+                range: prepare_rename_symbol_node.range,
                 placeholder: name.to_string(),
             })
         }
@@ -1190,15 +1252,15 @@ fn respond_to_rename(
     state: &State,
     rename_arguments: lsp_types::RenameParams,
 ) -> Option<Vec<lsp_types::TextDocumentEdit>> {
-    let to_rename_project_state = state_get_project_by_lsp_url(
+    let to_prepare_for_rename_project_state = state_get_project_by_lsp_url(
         state,
         &rename_arguments.text_document_position.text_document.uri,
     )?;
     let symbol_to_rename_node: StillSyntaxNode<StillSyntaxSymbol> =
         still_syntax_project_find_symbol_at_position(
-            &to_rename_project_state.syntax,
-            &to_rename_project_state.type_aliases,
-            &to_rename_project_state.variable_declarations,
+            &to_prepare_for_rename_project_state.syntax,
+            &to_prepare_for_rename_project_state.type_aliases,
+            &to_prepare_for_rename_project_state.variable_declarations,
             rename_arguments.text_document_position.position,
         )?;
     Some(match symbol_to_rename_node.value {
@@ -1209,6 +1271,7 @@ fn respond_to_rename(
             let mut all_uses_of_renamed_type_variable: Vec<lsp_types::Range> = Vec::new();
             still_syntax_declaration_uses_of_symbol_into(
                 &mut all_uses_of_renamed_type_variable,
+                &to_prepare_for_rename_project_state.type_aliases,
                 scope_declaration,
                 StillSymbolToReference::TypeVariable(type_variable_to_rename),
             );
@@ -1245,35 +1308,29 @@ fn respond_to_rename(
                         including_declaration_name: true,
                     }
                 };
-            state
-                .projects
-                .iter()
-                .filter_map(move |(project_path, project_state)| {
-                    let mut all_uses_of_at_docs_project_member: Vec<lsp_types::Range> = Vec::new();
-                    still_syntax_project_uses_of_symbol_into(
-                        &mut all_uses_of_at_docs_project_member,
-                        &project_state.syntax,
-                        still_declared_symbol_to_rename,
-                    );
-                    let still_project_uri: lsp_types::Url =
-                        lsp_types::Url::from_file_path(project_path).ok()?;
-                    Some(lsp_types::TextDocumentEdit {
-                        text_document: lsp_types::OptionalVersionedTextDocumentIdentifier {
-                            uri: still_project_uri,
-                            version: None,
-                        },
-                        edits: all_uses_of_at_docs_project_member
-                            .into_iter()
-                            .map(|use_range_of_renamed_project| {
-                                lsp_types::OneOf::Left(lsp_types::TextEdit {
-                                    range: use_range_of_renamed_project,
-                                    new_text: rename_arguments.new_name.clone(),
-                                })
-                            })
-                            .collect::<Vec<_>>(),
+
+            let mut all_uses_of_at_docs_project_member: Vec<lsp_types::Range> = Vec::new();
+            still_syntax_project_uses_of_symbol_into(
+                &mut all_uses_of_at_docs_project_member,
+                &to_prepare_for_rename_project_state.type_aliases,
+                &to_prepare_for_rename_project_state.syntax,
+                still_declared_symbol_to_rename,
+            );
+            vec![lsp_types::TextDocumentEdit {
+                text_document: lsp_types::OptionalVersionedTextDocumentIdentifier {
+                    uri: rename_arguments.text_document_position.text_document.uri,
+                    version: None,
+                },
+                edits: all_uses_of_at_docs_project_member
+                    .into_iter()
+                    .map(|use_range_of_renamed_project| {
+                        lsp_types::OneOf::Left(lsp_types::TextEdit {
+                            range: use_range_of_renamed_project,
+                            new_text: rename_arguments.new_name.clone(),
+                        })
                     })
-                })
-                .collect::<Vec<_>>()
+                    .collect::<Vec<_>>(),
+            }]
         }
         StillSyntaxSymbol::LetDeclarationName {
             name: to_rename_name,
@@ -1283,6 +1340,7 @@ fn respond_to_rename(
             let mut all_uses_of_let_declaration_to_rename: Vec<lsp_types::Range> = Vec::new();
             still_syntax_expression_uses_of_symbol_into(
                 &mut all_uses_of_let_declaration_to_rename,
+                &to_prepare_for_rename_project_state.type_aliases,
                 &[to_rename_name],
                 scope_expression,
                 StillSymbolToReference::LocalBinding {
@@ -1306,7 +1364,7 @@ fn respond_to_rename(
                     .collect::<Vec<_>>(),
             }]
         }
-        StillSyntaxSymbol::VariableOrVariant {
+        StillSyntaxSymbol::Variable {
             name: to_rename_name,
             local_bindings,
         } => {
@@ -1324,6 +1382,7 @@ fn respond_to_rename(
                 }
                 still_syntax_expression_uses_of_symbol_into(
                     &mut all_uses_of_local_binding_to_rename,
+                    &to_prepare_for_rename_project_state.type_aliases,
                     &[to_rename_name],
                     to_rename_local_binding_info.scope_expression,
                     StillSymbolToReference::LocalBinding {
@@ -1352,36 +1411,68 @@ fn respond_to_rename(
                         name: to_rename_name,
                         including_declaration_name: true,
                     };
-                state
-                    .projects
-                    .iter()
-                    .filter_map(|(project_path, project_state)| {
-                        let mut all_uses_of_renamed_variable: Vec<lsp_types::Range> = Vec::new();
-                        still_syntax_project_uses_of_symbol_into(
-                            &mut all_uses_of_renamed_variable,
-                            &project_state.syntax,
-                            symbol_to_find,
-                        );
-                        let still_project_uri: lsp_types::Url =
-                            lsp_types::Url::from_file_path(project_path).ok()?;
-                        Some(lsp_types::TextDocumentEdit {
-                            text_document: lsp_types::OptionalVersionedTextDocumentIdentifier {
-                                uri: still_project_uri,
-                                version: None,
-                            },
-                            edits: all_uses_of_renamed_variable
-                                .into_iter()
-                                .map(|use_range_of_renamed_project| {
-                                    lsp_types::OneOf::Left(lsp_types::TextEdit {
-                                        range: use_range_of_renamed_project,
-                                        new_text: rename_arguments.new_name.clone(),
-                                    })
-                                })
-                                .collect::<Vec<_>>(),
+                let mut all_uses_of_renamed_variable: Vec<lsp_types::Range> = Vec::new();
+                still_syntax_project_uses_of_symbol_into(
+                    &mut all_uses_of_renamed_variable,
+                    &to_prepare_for_rename_project_state.type_aliases,
+                    &to_prepare_for_rename_project_state.syntax,
+                    symbol_to_find,
+                );
+                vec![lsp_types::TextDocumentEdit {
+                    text_document: lsp_types::OptionalVersionedTextDocumentIdentifier {
+                        uri: rename_arguments.text_document_position.text_document.uri,
+                        version: None,
+                    },
+                    edits: all_uses_of_renamed_variable
+                        .into_iter()
+                        .map(|use_range_of_renamed_project| {
+                            lsp_types::OneOf::Left(lsp_types::TextEdit {
+                                range: use_range_of_renamed_project,
+                                new_text: rename_arguments.new_name.clone(),
+                            })
+                        })
+                        .collect::<Vec<_>>(),
+                }]
+            }
+        }
+        StillSyntaxSymbol::Variant {
+            name: to_rename_name,
+            type_: maybe_type,
+        } => {
+            let maybe_origin_choice_type_name: Option<StillName> = maybe_type.and_then(|type_| {
+                still_syntax_type_to_choice_type(
+                    &to_prepare_for_rename_project_state.type_aliases,
+                    still_syntax_node_empty(type_),
+                )
+                .map(|(name, _)| name)
+            });
+            let symbol_to_find: StillSymbolToReference = StillSymbolToReference::Variant {
+                name: to_rename_name,
+                including_declaration_name: true,
+                origin_type_name: maybe_origin_choice_type_name.as_deref(),
+            };
+            let mut all_uses_of_renamed_variable: Vec<lsp_types::Range> = Vec::new();
+            still_syntax_project_uses_of_symbol_into(
+                &mut all_uses_of_renamed_variable,
+                &to_prepare_for_rename_project_state.type_aliases,
+                &to_prepare_for_rename_project_state.syntax,
+                symbol_to_find,
+            );
+            vec![lsp_types::TextDocumentEdit {
+                text_document: lsp_types::OptionalVersionedTextDocumentIdentifier {
+                    uri: rename_arguments.text_document_position.text_document.uri,
+                    version: None,
+                },
+                edits: all_uses_of_renamed_variable
+                    .into_iter()
+                    .map(|use_range_of_renamed_project| {
+                        lsp_types::OneOf::Left(lsp_types::TextEdit {
+                            range: use_range_of_renamed_project,
+                            new_text: rename_arguments.new_name.clone(),
                         })
                     })
-                    .collect::<Vec<_>>()
-            }
+                    .collect::<Vec<_>>(),
+            }]
         }
         StillSyntaxSymbol::Type {
             name: type_name_to_rename,
@@ -1398,6 +1489,7 @@ fn respond_to_rename(
                     let mut all_uses_of_renamed_type: Vec<lsp_types::Range> = Vec::new();
                     still_syntax_project_uses_of_symbol_into(
                         &mut all_uses_of_renamed_type,
+                        &to_prepare_for_rename_project_state.type_aliases,
                         &project_state.syntax,
                         still_declared_symbol_to_rename,
                     );
@@ -1449,6 +1541,7 @@ fn respond_to_references(
             let mut all_uses_of_found_type_variable: Vec<lsp_types::Range> = Vec::new();
             still_syntax_declaration_uses_of_symbol_into(
                 &mut all_uses_of_found_type_variable,
+                &to_find_project_state.type_aliases,
                 scope_declaration,
                 StillSymbolToReference::TypeVariable(type_variable_to_find),
             );
@@ -1485,6 +1578,7 @@ fn respond_to_references(
             let mut all_uses_of_found_project_member: Vec<lsp_types::Range> = Vec::new();
             still_syntax_project_uses_of_symbol_into(
                 &mut all_uses_of_found_project_member,
+                &to_find_project_state.type_aliases,
                 &to_find_project_state.syntax,
                 still_declared_symbol_to_find,
             );
@@ -1508,6 +1602,7 @@ fn respond_to_references(
             let mut all_uses_of_found_let_declaration: Vec<lsp_types::Range> = Vec::new();
             still_syntax_expression_uses_of_symbol_into(
                 &mut all_uses_of_found_let_declaration,
+                &to_find_project_state.type_aliases,
                 &[to_find_name],
                 scope_expression,
                 StillSymbolToReference::LocalBinding {
@@ -1529,7 +1624,7 @@ fn respond_to_references(
                 })
                 .collect::<Vec<_>>()
         }
-        StillSyntaxSymbol::VariableOrVariant {
+        StillSyntaxSymbol::Variable {
             name: to_find_name,
             local_bindings,
         } => {
@@ -1549,6 +1644,7 @@ fn respond_to_references(
                 }
                 still_syntax_expression_uses_of_symbol_into(
                     &mut all_uses_of_found_local_binding,
+                    &to_find_project_state.type_aliases,
                     &[to_find_name],
                     to_find_local_binding_info.scope_expression,
                     StillSymbolToReference::LocalBinding {
@@ -1580,6 +1676,7 @@ fn respond_to_references(
                 let mut all_uses_of_found_variable: Vec<lsp_types::Range> = Vec::new();
                 still_syntax_project_uses_of_symbol_into(
                     &mut all_uses_of_found_variable,
+                    &to_find_project_state.type_aliases,
                     &to_find_project_state.syntax,
                     symbol_to_find,
                 );
@@ -1597,6 +1694,42 @@ fn respond_to_references(
                     .collect::<Vec<_>>()
             }
         }
+        StillSyntaxSymbol::Variant {
+            name: to_find_name,
+            type_: maybe_type,
+        } => {
+            let maybe_origin_choice_type_name: Option<StillName> = maybe_type.and_then(|type_| {
+                still_syntax_type_to_choice_type(
+                    &to_find_project_state.type_aliases,
+                    still_syntax_node_empty(type_),
+                )
+                .map(|(name, _)| name)
+            });
+            let symbol_to_find: StillSymbolToReference = StillSymbolToReference::Variant {
+                origin_type_name: maybe_origin_choice_type_name.as_deref(),
+                name: to_find_name,
+                including_declaration_name: references_arguments.context.include_declaration,
+            };
+            let mut all_uses_of_found_variable: Vec<lsp_types::Range> = Vec::new();
+            still_syntax_project_uses_of_symbol_into(
+                &mut all_uses_of_found_variable,
+                &to_find_project_state.type_aliases,
+                &to_find_project_state.syntax,
+                symbol_to_find,
+            );
+
+            all_uses_of_found_variable
+                .into_iter()
+                .map(move |use_range_of_found_project| lsp_types::Location {
+                    uri: references_arguments
+                        .text_document_position
+                        .text_document
+                        .uri
+                        .clone(),
+                    range: use_range_of_found_project,
+                })
+                .collect::<Vec<_>>()
+        }
         StillSyntaxSymbol::Type {
             name: type_name_to_find,
         } => {
@@ -1608,6 +1741,7 @@ fn respond_to_references(
             let mut all_uses_of_found_type: Vec<lsp_types::Range> = Vec::new();
             still_syntax_project_uses_of_symbol_into(
                 &mut all_uses_of_found_type,
+                &to_find_project_state.type_aliases,
                 &to_find_project_state.syntax,
                 still_declared_symbol_to_find,
             );
@@ -1824,7 +1958,7 @@ fn respond_to_completion(
     {
         StillSyntaxSymbol::LetDeclarationName { .. } => None,
         StillSyntaxSymbol::ProjectMemberDeclarationName { .. } => None,
-        StillSyntaxSymbol::VariableOrVariant {
+        StillSyntaxSymbol::Variable {
             name: _,
             local_bindings,
         } => {
@@ -1848,9 +1982,22 @@ fn respond_to_completion(
                 });
             completion_items.extend(local_binding_completions);
             variable_declaration_or_variant_completions_into(
+                &mut completion_items,
                 &completion_project.choice_types,
                 &completion_project.variable_declarations,
+            );
+            Some(completion_items)
+        }
+        StillSyntaxSymbol::Variant {
+            name: _,
+            type_: maybe_type,
+        } => {
+            let mut completion_items: Vec<lsp_types::CompletionItem> = Vec::new();
+            variant_completions_into(
                 &mut completion_items,
+                &completion_project.choice_types,
+                &completion_project.type_aliases,
+                maybe_type,
             );
             Some(completion_items)
         }
@@ -1874,9 +2021,9 @@ fn respond_to_completion(
 }
 
 fn variable_declaration_or_variant_completions_into(
+    completion_items: &mut Vec<lsp_types::CompletionItem>,
     choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
     variable_declarations: &std::collections::HashMap<StillName, CompiledVariableDeclarationInfo>,
-    completion_items: &mut Vec<lsp_types::CompletionItem>,
 ) {
     completion_items.extend(variable_declarations.iter().map(
         |(variable_declaration_name, variable_declaration_info)| lsp_types::CompletionItem {
@@ -1910,6 +2057,7 @@ fn variable_declaration_or_variant_completions_into(
                 .iter()
                 .filter_map(|variant| variant.name.as_ref().map(|node| node.value.to_string()))
                 .map(move |variant_name: String| lsp_types::CompletionItem {
+                    insert_text: Some(format!(":{origin_project_choice_type_name}:{variant_name}")),
                     label: variant_name,
                     kind: Some(lsp_types::CompletionItemKind::ENUM_MEMBER),
                     documentation: Some(lsp_types::Documentation::MarkupContent(
@@ -1922,6 +2070,85 @@ fn variable_declaration_or_variant_completions_into(
                 })
         },
     ));
+}
+fn variant_completions_into(
+    completion_items: &mut Vec<lsp_types::CompletionItem>,
+    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
+    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
+    maybe_type: Option<&StillSyntaxType>,
+) {
+    let maybe_origin_choice_type: Option<(StillName, &ChoiceTypeInfo)> =
+        maybe_type.and_then(|type_| {
+            still_syntax_type_to_choice_type(type_aliases, still_syntax_node_empty(type_)).and_then(
+                |(origin_choice_type_name, _)| {
+                    choice_types
+                        .get(&origin_choice_type_name)
+                        .map(|origin_choice_type| (origin_choice_type_name, origin_choice_type))
+                },
+            )
+        });
+    match maybe_origin_choice_type {
+        Some((origin_choice_type_name, origin_choice_type)) => {
+            let info_markdown: String = format!(
+                "variant in\n{}",
+                present_choice_type_declaration_info_markdown(
+                    Some(&origin_choice_type_name),
+                    origin_choice_type.documentation.as_deref(),
+                    &origin_choice_type.parameters,
+                    &origin_choice_type.variants,
+                ),
+            );
+            completion_items.extend(
+                origin_choice_type
+                    .variants
+                    .iter()
+                    .filter_map(|variant| variant.name.as_ref().map(|node| node.value.to_string()))
+                    .map(move |variant_name: String| lsp_types::CompletionItem {
+                        label: variant_name,
+                        kind: Some(lsp_types::CompletionItemKind::ENUM_MEMBER),
+                        documentation: Some(lsp_types::Documentation::MarkupContent(
+                            lsp_types::MarkupContent {
+                                kind: lsp_types::MarkupKind::Markdown,
+                                value: info_markdown.clone(),
+                            },
+                        )),
+                        ..lsp_types::CompletionItem::default()
+                    }),
+            );
+        }
+        None => {
+            completion_items.extend(choice_types.iter().flat_map(
+                |(origin_project_choice_type_name, origin_project_choice_type_info)| {
+                    let info_markdown: String = format!(
+                        "variant in\n{}",
+                        present_choice_type_declaration_info_markdown(
+                            Some(origin_project_choice_type_name),
+                            origin_project_choice_type_info.documentation.as_deref(),
+                            &origin_project_choice_type_info.parameters,
+                            &origin_project_choice_type_info.variants,
+                        ),
+                    );
+                    origin_project_choice_type_info
+                        .variants
+                        .iter()
+                        .filter_map(|variant| {
+                            variant.name.as_ref().map(|node| node.value.to_string())
+                        })
+                        .map(move |variant_name: String| lsp_types::CompletionItem {
+                            label: variant_name,
+                            kind: Some(lsp_types::CompletionItemKind::ENUM_MEMBER),
+                            documentation: Some(lsp_types::Documentation::MarkupContent(
+                                lsp_types::MarkupContent {
+                                    kind: lsp_types::MarkupKind::Markdown,
+                                    value: info_markdown.clone(),
+                                },
+                            )),
+                            ..lsp_types::CompletionItem::default()
+                        })
+                },
+            ));
+        }
+    }
 }
 fn type_declaration_completions_into(
     type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
@@ -4352,10 +4579,15 @@ enum StillSyntaxSymbol<'a> {
         type_: Option<StillSyntaxNode<StillSyntaxType>>,
         scope_expression: StillSyntaxNode<&'a StillSyntaxExpression>,
     },
-    VariableOrVariant {
+    // TODO rename to Variable
+    Variable {
         name: &'a str,
         // consider wrapping in Option
         local_bindings: StillLocalBindings<'a>,
+    },
+    Variant {
+        name: &'a str,
+        type_: Option<&'a StillSyntaxType>,
     },
     Type {
         // TODO without single-field record
@@ -4610,9 +4842,9 @@ fn still_syntax_pattern_find_symbol_at_position<'a>(
                     } => {
                         if lsp_range_includes_position(variable.range, position) {
                             Some(StillSyntaxNode {
-                                value: StillSyntaxSymbol::VariableOrVariant {
+                                value: StillSyntaxSymbol::Variant {
                                     name: &variable.value,
-                                    local_bindings: vec![],
+                                    type_: maybe_type_node.as_ref().map(|n| &n.value),
                                 },
                                 range: variable.range,
                             })
@@ -4776,7 +5008,7 @@ fn still_syntax_expression_find_symbol_at_position<'a>(
         } => {
             if lsp_range_includes_position(variable_node.range, position) {
                 return std::ops::ControlFlow::Break(StillSyntaxNode {
-                    value: StillSyntaxSymbol::VariableOrVariant {
+                    value: StillSyntaxSymbol::Variable {
                         name: &variable_node.value,
                         local_bindings: local_bindings,
                     },
@@ -4993,9 +5225,9 @@ fn still_syntax_expression_find_symbol_at_position<'a>(
                     } => {
                         if lsp_range_includes_position(name_node.range, position) {
                             return std::ops::ControlFlow::Break(StillSyntaxNode {
-                                value: StillSyntaxSymbol::VariableOrVariant {
+                                value: StillSyntaxSymbol::Variant {
                                     name: &name_node.value,
-                                    local_bindings: local_bindings,
+                                    type_: maybe_type.as_ref().map(|n| &n.value),
                                 },
                                 range: still_syntax_expression_node.range,
                             });
@@ -5143,7 +5375,13 @@ enum StillSymbolToReference<'a> {
         name: &'a str,
         including_declaration_name: bool,
     },
+    // TODO rename to Variable
     VariableOrVariant {
+        name: &'a str,
+        including_declaration_name: bool,
+    },
+    Variant {
+        origin_type_name: Option<&'a str>,
         name: &'a str,
         including_declaration_name: bool,
     },
@@ -5155,6 +5393,7 @@ enum StillSymbolToReference<'a> {
 
 fn still_syntax_project_uses_of_symbol_into(
     uses_so_far: &mut Vec<lsp_types::Range>,
+    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
     still_syntax_project: &StillSyntaxProject,
     symbol_to_collect_uses_of: StillSymbolToReference,
 ) {
@@ -5166,6 +5405,7 @@ fn still_syntax_project_uses_of_symbol_into(
         if let Some(declaration_node) = &documented_declaration.declaration {
             still_syntax_declaration_uses_of_symbol_into(
                 uses_so_far,
+                type_aliases,
                 &declaration_node.value,
                 symbol_to_collect_uses_of,
             );
@@ -5175,16 +5415,17 @@ fn still_syntax_project_uses_of_symbol_into(
 
 fn still_syntax_declaration_uses_of_symbol_into(
     uses_so_far: &mut Vec<lsp_types::Range>,
+    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
     still_syntax_declaration: &StillSyntaxDeclaration,
     symbol_to_collect_uses_of: StillSymbolToReference,
 ) {
     match still_syntax_declaration {
         StillSyntaxDeclaration::ChoiceType {
-            name: maybe_name,
+            name: maybe_choice_type_name,
             parameters,
             variants,
         } => {
-            if let Some(name_node) = maybe_name
+            if let Some(name_node) = maybe_choice_type_name
                 && symbol_to_collect_uses_of
                     == (StillSymbolToReference::Type {
                         name: &name_node.value,
@@ -5202,12 +5443,23 @@ fn still_syntax_declaration_uses_of_symbol_into(
                 }
             }
             for variant in variants {
-                if let Some(variant_name_node) = &variant.name
-                    && (StillSymbolToReference::VariableOrVariant {
-                        name: &variant_name_node.value,
-
-                        including_declaration_name: true,
-                    }) == symbol_to_collect_uses_of
+                if let StillSymbolToReference::Variant {
+                    name: variant_to_collect_uses_of_name,
+                    including_declaration_name: true,
+                    origin_type_name: variant_to_collect_uses_of_maybe_origin_type,
+                } = symbol_to_collect_uses_of
+                    && let Some(variant_name_node) = &variant.name
+                    && variant_to_collect_uses_of_name == variant_name_node.value
+                    && variant_to_collect_uses_of_maybe_origin_type.is_none_or(
+                        |variant_to_collect_uses_of_origin_type| {
+                            maybe_choice_type_name
+                                .as_ref()
+                                .is_none_or(|choice_type_name_node| {
+                                    variant_to_collect_uses_of_origin_type
+                                        == choice_type_name_node.value
+                                })
+                        },
+                    )
                 {
                     uses_so_far.push(variant_name_node.range);
                     return;
@@ -5261,7 +5513,6 @@ fn still_syntax_declaration_uses_of_symbol_into(
             if symbol_to_collect_uses_of
                 == (StillSymbolToReference::VariableOrVariant {
                     name: &name_node.value,
-
                     including_declaration_name: true,
                 })
             {
@@ -5270,6 +5521,7 @@ fn still_syntax_declaration_uses_of_symbol_into(
             if let Some(result_node) = maybe_result {
                 still_syntax_expression_uses_of_symbol_into(
                     uses_so_far,
+                    type_aliases,
                     &[],
                     still_syntax_node_as_ref(result_node),
                     symbol_to_collect_uses_of,
@@ -5372,6 +5624,7 @@ fn still_syntax_type_uses_of_symbol_into(
 
 fn still_syntax_expression_uses_of_symbol_into(
     uses_so_far: &mut Vec<lsp_types::Range>,
+    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
     local_bindings: &[&str],
     still_syntax_expression_node: StillSyntaxNode<&StillSyntaxExpression>,
     symbol_to_collect_uses_of: StillSymbolToReference,
@@ -5394,6 +5647,7 @@ fn still_syntax_expression_uses_of_symbol_into(
             for argument_node in arguments {
                 still_syntax_expression_uses_of_symbol_into(
                     uses_so_far,
+                    type_aliases,
                     local_bindings,
                     still_syntax_node_as_ref(argument_node),
                     symbol_to_collect_uses_of,
@@ -5406,6 +5660,7 @@ fn still_syntax_expression_uses_of_symbol_into(
         } => {
             still_syntax_expression_uses_of_symbol_into(
                 uses_so_far,
+                type_aliases,
                 local_bindings,
                 still_syntax_node_unbox(matched_node),
                 symbol_to_collect_uses_of,
@@ -5429,6 +5684,7 @@ fn still_syntax_expression_uses_of_symbol_into(
                     }
                     still_syntax_expression_uses_of_symbol_into(
                         uses_so_far,
+                        type_aliases,
                         &local_bindings_including_from_case_pattern,
                         still_syntax_node_as_ref(case_result_node),
                         symbol_to_collect_uses_of,
@@ -5463,6 +5719,7 @@ fn still_syntax_expression_uses_of_symbol_into(
                 }
                 still_syntax_expression_uses_of_symbol_into(
                     uses_so_far,
+                    type_aliases,
                     &local_bindings_including_from_lambda_parameters,
                     still_syntax_node_unbox(result_node),
                     symbol_to_collect_uses_of,
@@ -5482,6 +5739,7 @@ fn still_syntax_expression_uses_of_symbol_into(
             if let Some(let_declaration_node) = maybe_declaration {
                 still_syntax_let_declaration_uses_of_symbol_into(
                     uses_so_far,
+                    type_aliases,
                     &local_bindings_including_let_declaration_introduced,
                     &let_declaration_node.value,
                     symbol_to_collect_uses_of,
@@ -5490,6 +5748,7 @@ fn still_syntax_expression_uses_of_symbol_into(
             if let Some(result) = maybe_result {
                 still_syntax_expression_uses_of_symbol_into(
                     uses_so_far,
+                    type_aliases,
                     &local_bindings_including_let_declaration_introduced,
                     still_syntax_node_unbox(result),
                     symbol_to_collect_uses_of,
@@ -5500,6 +5759,7 @@ fn still_syntax_expression_uses_of_symbol_into(
             for element_node in elements {
                 still_syntax_expression_uses_of_symbol_into(
                     uses_so_far,
+                    type_aliases,
                     local_bindings,
                     still_syntax_node_as_ref(element_node),
                     symbol_to_collect_uses_of,
@@ -5510,6 +5770,7 @@ fn still_syntax_expression_uses_of_symbol_into(
         StillSyntaxExpression::Parenthesized(Some(in_parens)) => {
             still_syntax_expression_uses_of_symbol_into(
                 uses_so_far,
+                type_aliases,
                 local_bindings,
                 still_syntax_node_unbox(in_parens),
                 symbol_to_collect_uses_of,
@@ -5522,6 +5783,7 @@ fn still_syntax_expression_uses_of_symbol_into(
             if let Some(expression_node_after_comment) = maybe_expression_after_comment {
                 still_syntax_expression_uses_of_symbol_into(
                     uses_so_far,
+                    type_aliases,
                     local_bindings,
                     still_syntax_node_unbox(expression_node_after_comment),
                     symbol_to_collect_uses_of,
@@ -5545,11 +5807,30 @@ fn still_syntax_expression_uses_of_symbol_into(
                         name: name_node,
                         value: maybe_value,
                     } => {
-                        if let StillSymbolToReference::VariableOrVariant {
+                        let maybe_origin_choice_type_name =
+                            maybe_type.as_ref().and_then(|type_node| {
+                                still_syntax_type_to_choice_type(
+                                    type_aliases,
+                                    still_syntax_node_as_ref(type_node),
+                                )
+                                .map(|(origin_choice_type_name, _)| origin_choice_type_name)
+                            });
+                        if let StillSymbolToReference::Variant {
                             name: symbol_name,
                             including_declaration_name: _,
+                            origin_type_name: variant_to_collect_uses_of_maybe_origin_type_name,
                         } = symbol_to_collect_uses_of
                             && symbol_name == name_node.value.as_str()
+                            && variant_to_collect_uses_of_maybe_origin_type_name.is_none_or(
+                                |variant_to_collect_uses_of_origin_type_name| {
+                                    maybe_origin_choice_type_name.is_none_or(
+                                        |origin_choice_type_name| {
+                                            origin_choice_type_name
+                                                == variant_to_collect_uses_of_origin_type_name
+                                        },
+                                    )
+                                },
+                            )
                         {
                             uses_so_far.push(lsp_types::Range {
                                 start: lsp_position_add_characters(
@@ -5562,6 +5843,7 @@ fn still_syntax_expression_uses_of_symbol_into(
                         if let Some(value_node) = maybe_value {
                             still_syntax_expression_uses_of_symbol_into(
                                 uses_so_far,
+                                type_aliases,
                                 local_bindings,
                                 still_syntax_node_unbox(value_node),
                                 symbol_to_collect_uses_of,
@@ -5571,6 +5853,7 @@ fn still_syntax_expression_uses_of_symbol_into(
                     StillSyntaxExpressionUntyped::Other(other_expression_in_typed) => {
                         still_syntax_expression_uses_of_symbol_into(
                             uses_so_far,
+                            type_aliases,
                             local_bindings,
                             StillSyntaxNode {
                                 range: expression_node_in_typed.range,
@@ -5587,6 +5870,7 @@ fn still_syntax_expression_uses_of_symbol_into(
                 if let Some(field_value_node) = &field.value {
                     still_syntax_expression_uses_of_symbol_into(
                         uses_so_far,
+                        type_aliases,
                         local_bindings,
                         still_syntax_node_as_ref(field_value_node),
                         symbol_to_collect_uses_of,
@@ -5597,6 +5881,7 @@ fn still_syntax_expression_uses_of_symbol_into(
         StillSyntaxExpression::RecordAccess { record, field: _ } => {
             still_syntax_expression_uses_of_symbol_into(
                 uses_so_far,
+                type_aliases,
                 local_bindings,
                 still_syntax_node_unbox(record),
                 symbol_to_collect_uses_of,
@@ -5610,6 +5895,7 @@ fn still_syntax_expression_uses_of_symbol_into(
             if let Some(record_node) = maybe_record {
                 still_syntax_expression_uses_of_symbol_into(
                     uses_so_far,
+                    type_aliases,
                     local_bindings,
                     still_syntax_node_unbox(record_node),
                     symbol_to_collect_uses_of,
@@ -5619,6 +5905,7 @@ fn still_syntax_expression_uses_of_symbol_into(
                 if let Some(field_value_node) = &field.value {
                     still_syntax_expression_uses_of_symbol_into(
                         uses_so_far,
+                        type_aliases,
                         local_bindings,
                         still_syntax_node_as_ref(field_value_node),
                         symbol_to_collect_uses_of,
@@ -5632,6 +5919,7 @@ fn still_syntax_expression_uses_of_symbol_into(
 
 fn still_syntax_let_declaration_uses_of_symbol_into(
     uses_so_far: &mut Vec<lsp_types::Range>,
+    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
     local_bindings: &[&str],
     still_syntax_let_declaration: &StillSyntaxLetDeclaration,
     symbol_to_collect_uses_of: StillSymbolToReference,
@@ -5648,6 +5936,7 @@ fn still_syntax_let_declaration_uses_of_symbol_into(
     if let Some(result_node) = &still_syntax_let_declaration.result {
         still_syntax_expression_uses_of_symbol_into(
             uses_so_far,
+            type_aliases,
             local_bindings,
             still_syntax_node_unbox(result_node),
             symbol_to_collect_uses_of,
@@ -11902,7 +12191,7 @@ fn still_syntax_type_to_record(
 fn still_syntax_type_to_choice_type(
     type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
     still_type_node: StillSyntaxNode<&StillSyntaxType>,
-) -> Option<(Box<str>, Vec<StillSyntaxNode<StillSyntaxType>>)> {
+) -> Option<(StillName, Vec<StillSyntaxNode<StillSyntaxType>>)> {
     match still_type_node.value {
         StillSyntaxType::WithComment {
             comment: _,
@@ -11918,7 +12207,7 @@ fn still_syntax_type_to_choice_type(
             name: name_node,
             arguments,
         } => match still_syntax_type_resolve_while_type_alias(type_aliases, still_type_node) {
-            None => Some((Box::from(name_node.value.as_str()), arguments.clone())),
+            None => Some((name_node.value.clone(), arguments.clone())),
             Some(resolved) => {
                 still_syntax_type_to_choice_type(type_aliases, still_syntax_node_as_ref(&resolved))
             }
