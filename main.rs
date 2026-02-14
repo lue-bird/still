@@ -1644,7 +1644,6 @@ fn semantic_token_type_to_id(semantic_token: &lsp_types::SemanticTokenType) -> u
         })
         .unwrap_or(0_u32)
 }
-/// TODO eventually convert to `present_variable_declaration_type_info_markdown`
 fn present_variable_declaration_info_markdown(
     maybe_documentation: Option<&str>,
     maybe_variable_type: Option<StillSyntaxNode<&StillSyntaxType>>,
@@ -1677,14 +1676,31 @@ fn present_variable_declaration_info_with_complete_type_markdown(
     maybe_documentation: Option<&str>,
     maybe_variable_type: Option<&StillType>,
 ) -> String {
-    // TODO implement actual StillType printing
-    present_variable_declaration_info_markdown(
-        maybe_documentation,
-        maybe_variable_type
-            .map(still_type_to_syntax_node)
-            .as_ref()
-            .map(still_syntax_node_as_ref),
-    )
+    let description: String = match maybe_variable_type {
+        Some(variable_type) => {
+            let mut type_string: String = String::new();
+            still_type_into(&mut type_string, 1, variable_type);
+            format!(
+                "project variable
+```still
+:{type_string}{}:
+```
+",
+                if type_string.contains('\n') {
+                    "\n    "
+                } else {
+                    ""
+                },
+            )
+        }
+        None => "project variable".to_string(),
+    };
+    match maybe_documentation {
+        None => description,
+        Some(documentation) => {
+            description + "---\n" + documentation_comment_to_markdown(documentation).as_str()
+        }
+    }
 }
 fn present_type_alias_declaration_info_markdown(
     maybe_name: Option<&str>,
@@ -6384,9 +6400,9 @@ fn still_syntax_highlight_type_into(
 
 fn still_syntax_highlight_expression_into(
     highlighted_so_far: &mut Vec<StillSyntaxNode<StillSyntaxHighlightKind>>,
-    still_syntax_expression_node: StillSyntaxNode<&StillSyntaxExpression>,
+    expression_node: StillSyntaxNode<&StillSyntaxExpression>,
 ) {
-    match still_syntax_expression_node.value {
+    match expression_node.value {
         StillSyntaxExpression::VariableOrCall {
             variable: variable_node,
             arguments,
@@ -6437,25 +6453,25 @@ fn still_syntax_highlight_expression_into(
         }
         StillSyntaxExpression::Char(_) => {
             highlighted_so_far.push(StillSyntaxNode {
-                range: still_syntax_expression_node.range,
+                range: expression_node.range,
                 value: StillSyntaxHighlightKind::String,
             });
         }
         StillSyntaxExpression::Dec(_) => {
             highlighted_so_far.push(StillSyntaxNode {
-                range: still_syntax_expression_node.range,
+                range: expression_node.range,
                 value: StillSyntaxHighlightKind::Number,
             });
         }
         StillSyntaxExpression::Unt(_) => {
             highlighted_so_far.push(StillSyntaxNode {
-                range: still_syntax_expression_node.range,
+                range: expression_node.range,
                 value: StillSyntaxHighlightKind::Number,
             });
         }
         StillSyntaxExpression::Int(_) => {
             highlighted_so_far.push(StillSyntaxNode {
-                range: still_syntax_expression_node.range,
+                range: expression_node.range,
                 value: StillSyntaxHighlightKind::Number,
             });
         }
@@ -6466,8 +6482,8 @@ fn still_syntax_highlight_expression_into(
         } => {
             highlighted_so_far.push(StillSyntaxNode {
                 range: lsp_types::Range {
-                    start: still_syntax_expression_node.range.start,
-                    end: lsp_position_add_characters(still_syntax_expression_node.range.start, 1),
+                    start: expression_node.range.start,
+                    end: lsp_position_add_characters(expression_node.range.start, 1),
                 },
                 value: StillSyntaxHighlightKind::KeySymbol,
             });
@@ -6496,8 +6512,8 @@ fn still_syntax_highlight_expression_into(
         } => {
             highlighted_so_far.push(StillSyntaxNode {
                 range: lsp_types::Range {
-                    start: still_syntax_expression_node.range.start,
-                    end: lsp_position_add_characters(still_syntax_expression_node.range.start, 3),
+                    start: expression_node.range.start,
+                    end: lsp_position_add_characters(expression_node.range.start, 3),
                 },
                 value: StillSyntaxHighlightKind::KeySymbol,
             });
@@ -6650,26 +6666,30 @@ fn still_syntax_highlight_expression_into(
         StillSyntaxExpression::String {
             content,
             quoting_style,
-        } => {
-            let quote_count: usize = match quoting_style {
-                StillSyntaxStringQuotingStyle::SingleQuoted => 1,
-                StillSyntaxStringQuotingStyle::TripleQuoted => 3,
-            };
-            highlighted_so_far.extend(
-                still_syntax_highlight_multi_line(
-                    StillSyntaxNode {
-                        range: still_syntax_expression_node.range,
-                        value: content,
-                    },
-                    quote_count,
-                    quote_count,
-                )
-                .map(|range| StillSyntaxNode {
-                    range: range,
+        } => match quoting_style {
+            StillSyntaxStringQuotingStyle::SingleQuoted => {
+                highlighted_so_far.push(StillSyntaxNode {
+                    range: expression_node.range,
                     value: StillSyntaxHighlightKind::String,
-                }),
-            );
-        }
+                });
+            }
+            StillSyntaxStringQuotingStyle::TripleQuoted => {
+                highlighted_so_far.extend(
+                    still_syntax_highlight_multi_line(
+                        StillSyntaxNode {
+                            range: expression_node.range,
+                            value: content,
+                        },
+                        3,
+                        3,
+                    )
+                    .map(|range| StillSyntaxNode {
+                        range: range,
+                        value: StillSyntaxHighlightKind::String,
+                    }),
+                );
+            }
+        },
     }
 }
 
@@ -12574,6 +12594,7 @@ fn still_type_field_into(so_far: &mut String, indent: usize, type_field: &StillT
     linebreak_indented_into(so_far, next_indent(indent));
     still_type_into(so_far, next_indent(indent), &type_field.value);
 }
+
 /// None means the types are equal
 fn still_type_diff(expected_type: &StillType, actual_type: &StillType) -> Option<StillTypeDiff> {
     match expected_type {
