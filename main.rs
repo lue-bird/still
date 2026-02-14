@@ -3703,7 +3703,7 @@ fn still_syntax_expression_not_parenthesized_into(
             );
             for case in cases {
                 linebreak_indented_into(so_far, indent);
-                still_syntax_case_into(so_far, indent, case);
+                still_syntax_case_into(so_far, indent, cases.len() == 1, case);
             }
         }
         StillSyntaxExpression::Char(maybe_char) => {
@@ -3965,7 +3965,12 @@ fn still_syntax_expression_not_parenthesized_into(
     }
 }
 /// returns the last syntax end position
-fn still_syntax_case_into(so_far: &mut String, indent: usize, case: &StillSyntaxExpressionCase) {
+fn still_syntax_case_into(
+    so_far: &mut String,
+    indent: usize,
+    is_only_case: bool,
+    case: &StillSyntaxExpressionCase,
+) {
     so_far.push_str("| ");
     if let Some(case_pattern_node) = &case.pattern {
         still_syntax_pattern_into(
@@ -3994,8 +3999,8 @@ fn still_syntax_case_into(so_far: &mut String, indent: usize, case: &StillSyntax
             );
         }
         Some(result_node) => {
-            let result_indent: usize = if result_node.range.start.character
-                <= case.or_bar_key_symbol_range.start.character
+            let result_indent: usize = if is_only_case
+                || result_node.range.start.character <= case.or_bar_key_symbol_range.start.character
             {
                 indent
             } else {

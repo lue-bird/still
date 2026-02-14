@@ -58,20 +58,18 @@ Then point your editor to `still lsp`, see also [specific setups](#editor-setups
 - no features that obfuscate ("shiny, cool features" that ruin languages in my opinion): infix operators, currying, lifetime tracking, traits/type classes, objects, task/async, hidden mutation, macros & reflection, side effects, modules, hidden context values, undefined
 
 ## TODO
-- if only one case in match expression, print result unindented
 - make `StillIntoOwned::into_owned_overwriting` actually useful in practice.
   Currently, since `to_still` takes a reference with a lifetime of the returned still,
   it can't be used to then mutate the original state
 - implement `StillIntoOwned::into_owned_overwriting` for generated structs and enums
 
 ## considering
-- store projects by document Uri instead of file path
 - (leaning clear yes) add more core float operations like `sin`, `cos`, `pi`, `ln`
 - (leaning towards yes) add core bitwise and, or, xor, shifts, complement for the integer number types
 - (leaning towards yes) add `vec-walk-backwards-from`, `str-walk-chrs-backwards-from`
 - (leaning towards yes) rename chr to char
 - (leaning towards yes) allow comments before variant (field name, case?, variant?)
-- (leaning towards yes) use better multiline string literal: starting each line with `/"` or `"""` just like zig's `//`
+- (leaning towards yes) use better multiline string literal: starting each line with `/` or `"""` just like zig's `//`
 - (leaning slightly towards yes) change `Str<'a>` to `enum { Slice(&'a str), Rc(Rc<String>) }` and converting to Rc to a slice when necessary by allocating the Rc (same for Vec)
 - (maybe in the future) add or pattern `( first | second | third )`
 - (leaning towards no, partly due to matching syntax) make formatter range-independent, and instead cut a line >=100 (is that possible to do when trying to get a maximally fast formatter? Because it seems an intermediate recursive structure is required)
