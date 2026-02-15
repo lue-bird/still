@@ -44,19 +44,30 @@ fn alloc_fn_as_dyn<'a, Inputs, Output>(
 /// will get turned into
 /// `std::vec::Vec<{ x: Box<str>, y: isize }`
 /// Notice how all _inner_ values are also converted,
-/// making this operation more expensive than `to_owned`/`clone`
+/// making this operation more expensive than even `to_owned`/`clone`
 ///
 /// ```
-/// let mut still_state: Some_still_type::Owned = StillIntoOwned::into_owned(...);
 /// let mut allocator = ...;
+/// let mut still_state: <Some_still_type<'static> as StillIntoOwned>::Owned =
+///     StillIntoOwned::into_owned(some_still_fn(&allocator));
 /// ..some_event_loop.. {
 ///     let old_state_still: Some_still_type = OwnedToStill::to_still(still_state);
 ///     let updated_state_still: Some_still_type =
 ///         some_still_fn(&allocator, old_state_still);
-///     StillIntoOwned::into_owned_overwriting(updated_state_still, &mut still_state);
+///     still_state = StillIntoOwned::into_owned(updated_state_still);
 ///     allocator.reset();
 ///  }
 /// ```
+/// or alternatively, which might reuse more allocations but consumes the old owned state
+/// ```
+/// ...
+/// let old_state_still: Some_still_type = OwnedToStill::into_still(still_state);
+/// let updated_state_still: Some_still_type =
+///     some_still_fn(&allocator, old_state_still);
+/// still_state = StillIntoOwned::into_owned(updated_state_still);
+/// ...
+/// ```
+/// Note that into_still is currently not recommended as it clones every string.
 ///
 /// See also `OwnedToStill`
 pub trait StillIntoOwned: std::marker::Sized {
@@ -64,6 +75,11 @@ pub trait StillIntoOwned: std::marker::Sized {
     fn into_owned(self) -> Self::Owned;
     /// `still.into_owned_overwriting(&mut owned)` is functionally equivalent to `owned = still.into_owned()`
     /// but can be overridden to reuse the allocations of `owned`.
+    /// Note that currently, since `to_still` takes a reference with a lifetime of the returned still,
+    /// it can't actually be used to then mutate the original state,
+    /// so it's use is really limited.
+    /// If you think there's a way around this (without unsafe or other assumptions not encoded into the type system),
+    // please open an issue
     fn into_owned_overwriting(self, allocation_to_reuse: &mut Self::Owned) {
         *allocation_to_reuse = Self::into_owned(self);
     }
@@ -82,14 +98,21 @@ pub trait OwnedToStill {
     where
         Self: 'a;
     fn to_still<'a>(&'a self, allocator: &'a impl Alloc) -> Self::Still<'a>;
+    /// equivalent to to_still but able to reuse some allocations.
+    /// It is currently not recommended to use this as it clones every string.
+    fn into_still<'a>(self, allocator: &'a impl Alloc) -> Self::Still<'a>;
 }
-impl<T: ?std::marker::Sized + OwnedToStill> OwnedToStill for std::boxed::Box<T> {
+impl<T: OwnedToStill> OwnedToStill for std::boxed::Box<T> {
     type Still<'a>
         = &'a T::Still<'a>
     where
         T: 'a;
     fn to_still<'a>(&'a self, allocator: &'a impl Alloc) -> Self::Still<'a> {
         allocator.alloc(T::to_still(self, allocator))
+    }
+    /// same as
+    fn into_still<'a>(self, allocator: &'a impl Alloc) -> Self::Still<'a> {
+        allocator.alloc(T::into_still(*self, allocator))
     }
 }
 impl<T: StillIntoOwned + Clone> StillIntoOwned for &T {
@@ -113,6 +136,9 @@ impl OwnedToStill for Blank {
     fn to_still<'a>(&'a self, _: &'a impl Alloc) -> Self::Still<'a> {
         *self
     }
+    fn into_still<'a>(self, _: &'a impl Alloc) -> Self::Still<'a> {
+        self
+    }
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash, Debug)]
@@ -125,6 +151,9 @@ impl OwnedToStill for Order {
     type Still<'a> = Order;
     fn to_still<'a>(&'a self, _: &'a impl Alloc) -> Self::Still<'a> {
         *self
+    }
+    fn into_still<'a>(self, _: &'a impl Alloc) -> Self::Still<'a> {
+        self
     }
 }
 impl StillIntoOwned for Order {
@@ -155,6 +184,9 @@ impl OwnedToStill for Unt {
     type Still<'a> = Unt;
     fn to_still<'a>(&'a self, _: &'a impl Alloc) -> Self::Still<'a> {
         *self
+    }
+    fn into_still<'a>(self, _: &'a impl Alloc) -> Self::Still<'a> {
+        self
     }
 }
 impl StillIntoOwned for Unt {
@@ -198,6 +230,9 @@ impl OwnedToStill for Int {
     type Still<'a> = Int;
     fn to_still<'a>(&'a self, _: &'a impl Alloc) -> Self::Still<'a> {
         *self
+    }
+    fn into_still<'a>(self, _: &'a impl Alloc) -> Self::Still<'a> {
+        self
     }
 }
 impl StillIntoOwned for Int {
@@ -247,6 +282,9 @@ impl OwnedToStill for Dec {
     type Still<'a> = Dec;
     fn to_still<'a>(&'a self, _: &'a impl Alloc) -> Self::Still<'a> {
         *self
+    }
+    fn into_still<'a>(self, _: &'a impl Alloc) -> Self::Still<'a> {
+        self
     }
 }
 impl StillIntoOwned for Dec {
@@ -340,6 +378,12 @@ impl<A: OwnedToStill> OwnedToStill for Opt<A> {
             Opt::Present(value) => Opt::Present(A::to_still(value, allocator)),
         }
     }
+    fn into_still<'a>(self, allocator: &'a impl Alloc) -> Self::Still<'a> {
+        match self {
+            Opt::Absent => Opt::Absent,
+            Opt::Present(value) => Opt::Present(A::into_still(value, allocator)),
+        }
+    }
 }
 impl<A> Opt<A> {
     fn from_option(option: std::option::Option<A>) -> Self {
@@ -404,6 +448,14 @@ impl<C: OwnedToStill, E: OwnedToStill> OwnedToStill for Continue_or_exit<C, E> {
             Continue_or_exit::Exit(exit) => Continue_or_exit::Exit(E::to_still(exit, allocator)),
         }
     }
+    fn into_still<'a>(self, allocator: &'a impl Alloc) -> Self::Still<'a> {
+        match self {
+            Continue_or_exit::Continue(continue_) => {
+                Continue_or_exit::Continue(C::into_still(continue_, allocator))
+            }
+            Continue_or_exit::Exit(exit) => Continue_or_exit::Exit(E::into_still(exit, allocator)),
+        }
+    }
 }
 impl<C, E> Continue_or_exit<C, E> {
     fn to_control_flow(self) -> std::ops::ControlFlow<E, C> {
@@ -425,6 +477,9 @@ impl OwnedToStill for Chr {
     type Still<'a> = Chr;
     fn to_still<'a>(&'a self, _: &'a impl Alloc) -> Self::Still<'a> {
         *self
+    }
+    fn into_still<'a>(self, _: &'a impl Alloc) -> Self::Still<'a> {
+        self
     }
 }
 impl StillIntoOwned for Chr {
@@ -455,6 +510,9 @@ impl OwnedToStill for std::boxed::Box<str> {
     type Still<'a> = Str<'a>;
     fn to_still<'a>(&'a self, _: &'a impl Alloc) -> Self::Still<'a> {
         self
+    }
+    fn into_still<'a>(self, allocator: &'a impl Alloc) -> Self::Still<'a> {
+        allocator.alloc(self)
     }
 }
 
@@ -570,6 +628,13 @@ impl<A: OwnedToStill> OwnedToStill for std::vec::Vec<A> {
         std::rc::Rc::new(std::iter::Iterator::collect(std::iter::Iterator::map(
             self.iter(),
             |element_owned_ref| A::to_still(element_owned_ref, allocator),
+        )))
+    }
+    fn into_still<'a>(self, allocator: &'a impl Alloc) -> Self::Still<'a> {
+        // is the optimizer smart enough to inline map if possible?
+        std::rc::Rc::new(std::iter::Iterator::collect(std::iter::Iterator::map(
+            std::iter::IntoIterator::into_iter(self),
+            |element_owned| A::into_still(element_owned, allocator),
         )))
     }
 }

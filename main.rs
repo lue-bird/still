@@ -10098,6 +10098,121 @@ fn still_syntax_record_to_rust(used_still_record_fields: &[StillName]) -> [syn::
                     )],
                 },
             }),
+            syn::ImplItem::Fn(syn::ImplItemFn {
+                attrs: vec![],
+                vis: syn::Visibility::Inherited,
+                defaultness: None,
+                sig: syn::Signature {
+                    constness: None,
+                    asyncness: None,
+                    unsafety: None,
+                    abi: None,
+                    fn_token: syn::token::Fn(syn_span()),
+                    ident: syn_ident("into_still"),
+                    generics: syn::Generics {
+                        lt_token: Some(syn::token::Lt(syn_span())),
+                        params: std::iter::once(syn::GenericParam::Lifetime(
+                            syn_default_lifetime_param(),
+                        ))
+                        .collect(),
+                        gt_token: Some(syn::token::Gt(syn_span())),
+                        where_clause: None,
+                    },
+                    paren_token: syn::token::Paren(syn_span()),
+                    inputs: [
+                        syn::FnArg::Receiver(syn::Receiver {
+                            attrs: vec![],
+                            reference: None,
+                            mutability: None,
+                            self_token: syn::token::SelfValue(syn_span()),
+                            colon_token: None,
+                            ty: Box::new(syn::Type::Path(syn::TypePath {
+                                qself: None,
+                                path: syn_path_reference(["Self"]),
+                            })),
+                        }),
+                        default_allocator_fn_arg(),
+                    ]
+                    .into_iter()
+                    .collect(),
+                    variadic: None,
+                    output: syn::ReturnType::Type(
+                        syn::token::RArrow(syn_span()),
+                        Box::new(syn::Type::Path(syn::TypePath {
+                            qself: None,
+                            path: syn::Path {
+                                leading_colon: None,
+                                segments: [
+                                    syn_path_segment_ident("Self"),
+                                    syn::PathSegment {
+                                        ident: syn_ident("Still"),
+                                        arguments: syn::PathArguments::AngleBracketed(
+                                            syn::AngleBracketedGenericArguments {
+                                                colon2_token: None,
+                                                lt_token: syn::token::Lt(syn_span()),
+                                                args: std::iter::once(
+                                                    syn::GenericArgument::Lifetime(
+                                                        syn_default_lifetime(),
+                                                    ),
+                                                )
+                                                .collect(),
+                                                gt_token: syn::token::Gt(syn_span()),
+                                            },
+                                        ),
+                                    },
+                                ]
+                                .into_iter()
+                                .collect(),
+                            },
+                        })),
+                    ),
+                },
+                block: syn::Block {
+                    brace_token: syn::token::Brace(syn_span()),
+                    stmts: vec![syn::Stmt::Expr(
+                        syn::Expr::Struct(syn::ExprStruct {
+                            attrs: vec![],
+                            qself: None,
+                            path: syn_path_reference([&rust_struct_name]),
+                            brace_token: syn::token::Brace(syn_span()),
+                            fields: used_still_record_fields
+                                .iter()
+                                .map(|field_name| syn::FieldValue {
+                                    attrs: vec![],
+                                    member: syn::Member::Named(syn_ident(
+                                        &still_name_to_lowercase_rust(field_name),
+                                    )),
+                                    colon_token: Some(syn::token::Colon(syn_span())),
+                                    expr: syn::Expr::Call(syn::ExprCall {
+                                        attrs: vec![],
+                                        func: Box::new(syn_expr_reference([
+                                            &still_type_variable_to_rust(field_name),
+                                            "into_still",
+                                        ])),
+                                        paren_token: syn::token::Paren(syn_span()),
+                                        args: [
+                                            syn::Expr::Field(syn::ExprField {
+                                                attrs: vec![],
+                                                base: Box::new(syn_expr_reference(["self"])),
+                                                dot_token: syn::token::Dot(syn_span()),
+                                                member: syn::Member::Named(syn_ident(
+                                                    &still_name_to_lowercase_rust(field_name),
+                                                )),
+                                            }),
+                                            syn_expr_reference([default_allocator_parameter_name]),
+                                        ]
+                                        .into_iter()
+                                        .collect(),
+                                    }),
+                                })
+                                .collect(),
+                            dot2_token: None,
+                            rest: None,
+                        }),
+                        None,
+                    )],
+                },
+            }),
         ],
     });
     [rust_struct, impl_still_to_owned, impl_owned_to_still]
@@ -11439,6 +11554,187 @@ fn choice_type_declaration_to_rust_into<'a>(
                         )],
                     },
                 }),
+                syn::ImplItem::Fn(syn::ImplItemFn {
+                    attrs: vec![],
+                    vis: syn::Visibility::Inherited,
+                    defaultness: None,
+                    sig: syn::Signature {
+                        constness: None,
+                        asyncness: None,
+                        unsafety: None,
+                        abi: None,
+                        fn_token: syn::token::Fn(syn_span()),
+                        ident: syn_ident("into_still"),
+                        generics: syn::Generics {
+                            lt_token: Some(syn::token::Lt(syn_span())),
+                            params: std::iter::once(syn::GenericParam::Lifetime(
+                                syn_default_lifetime_param(),
+                            ))
+                            .collect(),
+                            gt_token: Some(syn::token::Gt(syn_span())),
+                            where_clause: None,
+                        },
+                        paren_token: syn::token::Paren(syn_span()),
+                        inputs: [
+                            syn::FnArg::Receiver(syn::Receiver {
+                                attrs: vec![],
+                                reference: None,
+                                mutability: None,
+                                self_token: syn::token::SelfValue(syn_span()),
+                                colon_token: None,
+                                ty: Box::new(syn::Type::Path(syn::TypePath {
+                                    qself: None,
+                                    path: syn_path_reference(["Self"]),
+                                }))
+                            }),
+                            default_allocator_fn_arg(),
+                        ]
+                        .into_iter()
+                        .collect(),
+                        variadic: None,
+                        output: syn::ReturnType::Type(
+                            syn::token::RArrow(syn_span()),
+                            Box::new(syn::Type::Path(syn::TypePath {
+                                qself: None,
+                                path: syn_path_name_with_arguments(
+                                    &rust_enum_name,
+                                    (if has_lifetime_parameter {
+                                        Some(syn::GenericArgument::Lifetime(syn_default_lifetime()))
+                                    } else {
+                                        None
+                                    })
+                                    .into_iter()
+                                    .chain(parameters.iter().map(|parameter_node| {
+                                        syn::GenericArgument::Type(syn::Type::Path(syn::TypePath {
+                                            qself: Some(syn::QSelf {
+                                                lt_token: syn::token::Lt(syn_span()),
+                                                ty: Box::new(syn::Type::Path(syn::TypePath {
+                                                    qself: None,
+                                                    path: syn_path_reference([
+                                                        &still_type_variable_to_rust(&parameter_node.value),
+                                                        "Owned",
+                                                    ]),
+                                                })),
+                                                position: 1,
+                                                gt_token: syn::token::Gt(syn_span()),
+                                                as_token: Some(syn::token::As(syn_span())),
+                                            }),
+                                            path: syn::Path {
+                                                leading_colon: None,
+                                                segments: [
+                                                    syn_path_segment_ident("OwnedToStill"),
+                                                    syn::PathSegment {
+                                                        ident: syn_ident("Still"),
+                                                        arguments: syn::PathArguments::AngleBracketed(
+                                                            syn::AngleBracketedGenericArguments {
+                                                                colon2_token: None,
+                                                                lt_token: syn::token::Lt(syn_span()),
+                                                                args: std::iter::once(
+                                                                    syn::GenericArgument::Lifetime(
+                                                                        syn_default_lifetime(),
+                                                                    ),
+                                                                )
+                                                                .collect(),
+                                                                gt_token: syn::token::Gt(syn_span()),
+                                                            },
+                                                        ),
+                                                    },
+                                                ]
+                                                .into_iter()
+                                                .collect(),
+                                            },
+                                        }))
+                                    })),
+                                ),
+                            })),
+                        ),
+                    },
+                    block: syn::Block {
+                        brace_token: syn::token::Brace(syn_span()),
+                        stmts: vec![syn::Stmt::Expr(
+                            syn::Expr::Match(syn::ExprMatch {
+                                attrs: vec![],
+                                match_token: syn::token::Match(syn_span()),
+                                brace_token: syn::token::Brace(syn_span()),
+                                expr: Box::new(syn_expr_reference(["self"])),
+                                arms: variants
+                                    .iter()
+                                    .filter_map(|variant| {
+                                        variant.name.as_ref().map(|n| {
+                                            (
+                                                still_syntax_node_as_ref_map(n, StillName::as_str),
+                                                variant.value.as_ref().map(still_syntax_node_as_ref),
+                                            )
+                                        })
+                                    })
+                                    .map(|(variant_name, maybe_variant_value)| {
+                                        let rust_variant_name: String =
+                                            still_name_to_uppercase_rust(variant_name.value);
+                                        let rust_pat_variant_path = syn_path_reference([
+                                            &owned_rust_enum_name,
+                                            &rust_variant_name,
+                                        ]);
+                                        let rust_result_variant_constructor =
+                                            syn_expr_reference([&rust_enum_name, &rust_variant_name]);
+                                        syn::Arm {
+                                            attrs: vec![],
+                                            guard: None,
+                                            pat: match maybe_variant_value {
+                                                None => syn::Pat::Path(syn::PatPath {
+                                                    attrs: vec![],
+                                                    qself: None,
+                                                    path: rust_pat_variant_path,
+                                                }),
+                                                Some(_) => syn::Pat::TupleStruct(syn::PatTupleStruct {
+                                                    attrs: vec![],
+                                                    qself: None,
+                                                    path: rust_pat_variant_path,
+                                                    paren_token: syn::token::Paren(syn_span()),
+                                                    elems: std::iter::once(syn_pat_variable(
+                                                        variable_value_variable_name,
+                                                    ))
+                                                    .collect(),
+                                                }),
+                                            },
+                                            fat_arrow_token: syn::token::FatArrow(syn_span()),
+                                            body: Box::new(match maybe_variant_value {
+                                                None => rust_result_variant_constructor,
+                                                Some(_) => syn::Expr::Call(syn::ExprCall {
+                                                    attrs: vec![],
+                                                    func: Box::new(rust_result_variant_constructor),
+                                                    paren_token: syn::token::Paren(syn_span()),
+                                                    args: std::iter::once(syn::Expr::Call(
+                                                        syn::ExprCall {
+                                                            attrs: vec![],
+                                                            func: Box::new(syn_expr_reference([
+                                                                "OwnedToStill",
+                                                                "into_still",
+                                                            ])),
+                                                            paren_token: syn::token::Paren(syn_span()),
+                                                            args: [
+                                                                syn_expr_reference([
+                                                                    variable_value_variable_name,
+                                                                ]),
+                                                                syn_expr_reference([
+                                                                    default_allocator_parameter_name,
+                                                                ]),
+                                                            ]
+                                                            .into_iter()
+                                                            .collect(),
+                                                        },
+                                                    ))
+                                                    .collect(),
+                                                }),
+                                            }),
+                                            comma: Some(syn::token::Comma(syn_span())),
+                                        }
+                                    })
+                                    .collect(),
+                            }),
+                            None,
+                        )],
+                    },
+                })
             ],
         });
         rust_items.extend([rust_owned_enum, impl_owned_to_still, impl_still_to_owned]);
