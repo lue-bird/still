@@ -9020,6 +9020,19 @@ static core_variable_declaration_infos: std::sync::LazyLock<
                 "Encoded as UTF-8, how many bytes the `chr` spans, between 1 and 4",
             ),
             (
+                StillName::from("chr-to-code-point"),
+                false,
+                function([still_type_chr], still_type_unt),
+                "Convert to its 4-byte unicode code point",
+            ),
+            (
+                StillName::from("code-point-to-chr"),
+                false,
+                function([still_type_unt],  still_type_opt(still_type_chr)),
+                "Convert a 4-byte unicode code point to a `chr`, or :opt chr:Absent if the `unt` has too many bytes or the code point has no associated character (for example hex 110000).
+Note that the inverse never fails: `chr-to-code-point`",
+            ),
+            (
                 StillName::from("chr-order"),
                 false,
                 function([still_type_chr,still_type_chr], still_type_order),
@@ -9051,7 +9064,7 @@ static core_variable_declaration_infos: std::sync::LazyLock<
                 true,
                 function(
                     [still_type_str, still_type_unt,still_type_unt],
-                    still_type_opt(still_type_str),
+                    still_type_str,
                 ),
                 "Create a sub-slice starting at the floor character boundary of a given UTF-8 index, spanning for a given count of UTF-8 bytes until before the nearest higher character boundary",
             ),

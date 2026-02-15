@@ -481,6 +481,16 @@ fn chr_byte_count(chr: Chr) -> Unt {
 fn chr_order(left: Chr, right: Chr) -> Order {
     Order::from_ordering(left.cmp(&right))
 }
+fn code_point_to_chr(code_point: Unt) -> Opt<Chr> {
+    Opt::from_option(
+        std::convert::TryFrom::try_from(code_point)
+            .ok()
+            .and_then(char::from_u32),
+    )
+}
+fn chr_to_code_point(chr: Chr) -> Unt {
+    chr as Unt
+}
 fn chr_to_str<'a>(chr: Chr) -> Str<'a> {
     Str::from_string(std::format!("{}", chr))
 }
