@@ -25,6 +25,9 @@
       "include": "#string-quote"
     },
     {
+      "include": "#string-ticked-lines"
+    },
+    {
       "include": "#char"
     },
     {
@@ -210,6 +213,22 @@
           "name": "constant.character.escape.control.still"
         }
       ]
+    },
+    "string-ticked-lines": {
+      "name": "string.quoted.double.still",
+      "begin": "\"",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.begin.still"
+        }
+      },
+      "end": "(\\r\\n|\\r|\\n)",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.end.still"
+        }
+      },
+      "patterns": []
     },
     "char": {
       "name": "string.quoted.single.still",
