@@ -763,7 +763,7 @@ fn local_binding_info_markdown(
                     still_syntax_type_to_string(type_node, 1),
                     match still_syntax_range_line_span(type_node.range) {
                         LineSpan::Single => "",
-                        LineSpan::Multiple => "\n    ",
+                        LineSpan::Multiple => "\n",
                     }
                 )
             }
@@ -788,7 +788,7 @@ fn let_declaration_info_markdown(
                 &still_syntax_type_to_string(hovered_local_binding_type, 1),
                 match still_syntax_range_line_span(hovered_local_binding_type.range) {
                     LineSpan::Single => "",
-                    LineSpan::Multiple => "\n    ",
+                    LineSpan::Multiple => "\n",
                 },
             )
         }
@@ -1681,7 +1681,7 @@ fn present_variable_declaration_info_markdown(
                 &still_syntax_type_to_string(variable_type_node, 1),
                 match still_syntax_range_line_span(variable_type_node.range) {
                     LineSpan::Single => "",
-                    LineSpan::Multiple => "\n    ",
+                    LineSpan::Multiple => "\n",
                 },
             )
         }
@@ -1708,11 +1708,7 @@ fn present_variable_declaration_info_with_complete_type_markdown(
 :{type_string}{}:
 ```
 ",
-                if type_string.contains('\n') {
-                    "\n    "
-                } else {
-                    ""
-                },
+                if type_string.contains('\n') { "\n" } else { "" },
             )
         }
         None => "project variable".to_string(),
@@ -4589,9 +4585,13 @@ fn still_syntax_declaration_find_symbol_at_position<'a>(
 
 fn still_syntax_pattern_find_symbol_at_position<'a>(
     scope_declaration: &'a StillSyntaxDeclaration,
+    scope_expression: Option<StillSyntaxNode<&'a StillSyntaxExpression>>,
     still_syntax_pattern_node: StillSyntaxNode<&'a StillSyntaxPattern>,
     position: lsp_types::Position,
 ) -> Option<StillSyntaxNode<StillSyntaxSymbol<'a>>> {
+    if !lsp_range_includes_position(still_syntax_pattern_node.range, position) {
+        return None;
+    }
     match still_syntax_pattern_node.value {
         StillSyntaxPattern::Char(_) => None,
         StillSyntaxPattern::Unt { .. } => None,
@@ -4612,7 +4612,27 @@ fn still_syntax_pattern_find_symbol_at_position<'a>(
                 let pattern_node_in_typed = maybe_pattern_node_in_typed.as_ref()?;
                 match &pattern_node_in_typed.value {
                     StillSyntaxPatternUntyped::Ignored => None,
-                    StillSyntaxPatternUntyped::Variable(_) => None,
+                    StillSyntaxPatternUntyped::Variable(name) => Some(StillSyntaxNode {
+                        range: pattern_node_in_typed.range,
+                        value: StillSyntaxSymbol::Variable {
+                            name: name,
+                            local_bindings: vec![(
+                                // this is a bit silly but works for now
+                                scope_expression.unwrap_or_else(|| {
+                                    still_syntax_node_empty(&StillSyntaxExpression::Parenthesized(
+                                        None,
+                                    ))
+                                }),
+                                vec![StillLocalBinding {
+                                    name: name,
+                                    type_: maybe_type_node.clone(),
+                                    origin: LocalBindingOrigin::PatternVariable(
+                                        pattern_node_in_typed.range,
+                                    ),
+                                }],
+                            )],
+                        },
+                    }),
                     StillSyntaxPatternUntyped::Variant {
                         name: variable,
                         value: maybe_value,
@@ -4629,6 +4649,7 @@ fn still_syntax_pattern_find_symbol_at_position<'a>(
                             maybe_value.as_ref().and_then(|value| {
                                 still_syntax_pattern_find_symbol_at_position(
                                     scope_declaration,
+                                    scope_expression,
                                     still_syntax_node_unbox(value),
                                     position,
                                 )
@@ -4645,6 +4666,7 @@ fn still_syntax_pattern_find_symbol_at_position<'a>(
             .and_then(|pattern_node_after_expression| {
                 still_syntax_pattern_find_symbol_at_position(
                     scope_declaration,
+                    scope_expression,
                     still_syntax_node_unbox(pattern_node_after_expression),
                     position,
                 )
@@ -4653,6 +4675,7 @@ fn still_syntax_pattern_find_symbol_at_position<'a>(
             field.value.as_ref().and_then(|field_value_node| {
                 still_syntax_pattern_find_symbol_at_position(
                     scope_declaration,
+                    scope_expression,
                     still_syntax_node_as_ref(field_value_node),
                     position,
                 )
@@ -4807,7 +4830,6 @@ fn still_syntax_expression_find_symbol_at_position<'a>(
         }
         StillSyntaxExpression::Match {
             matched: matched_node,
-
             cases,
         } => {
             local_bindings = still_syntax_expression_find_symbol_at_position(
@@ -4824,6 +4846,7 @@ fn still_syntax_expression_find_symbol_at_position<'a>(
                     if let Some(case_pattern_node) = &case.pattern
                         && let Some(found_symbol) = still_syntax_pattern_find_symbol_at_position(
                             scope_declaration,
+                            case.result.as_ref().map(still_syntax_node_as_ref),
                             still_syntax_node_as_ref(case_pattern_node),
                             position,
                         )
@@ -4870,6 +4893,7 @@ fn still_syntax_expression_find_symbol_at_position<'a>(
             if let Some(found_symbol) = parameters.iter().find_map(|parameter| {
                 still_syntax_pattern_find_symbol_at_position(
                     scope_declaration,
+                    maybe_result.as_ref().map(still_syntax_node_unbox),
                     still_syntax_node_as_ref(parameter),
                     position,
                 )
