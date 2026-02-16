@@ -11837,6 +11837,7 @@ fn choice_type_declaration_to_rust_into<'a>(
         variants: type_variants,
     })
 }
+/// only use for types that compile functions to &dyn Fn
 fn still_type_is_copy(
     variables_are_copy: bool,
     type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
@@ -11847,7 +11848,7 @@ fn still_type_is_copy(
         StillType::Variable(_) => variables_are_copy,
         StillType::Function { .. } => {
             true
-            // TODO for non-dyn it would be false
+            // for non-dyn it would be false
         }
         StillType::ChoiceConstruct {
             name: name_node,
@@ -11874,7 +11875,6 @@ fn still_type_is_copy(
         }),
     }
 }
-/// TODO make part of `still_type_to_type`
 fn still_type_uses_lifetime(
     type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
     choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
@@ -11905,7 +11905,7 @@ fn still_type_uses_lifetime(
             .any(|field| still_type_uses_lifetime(type_aliases, choice_types, &field.value)),
     }
 }
-/// TODO make part of `still_type_to_type`
+/// consider making it part of part of `still_syntax_type_to_type` for performance
 fn still_type_has_owned_representation(
     variables_have_owned_representation: bool,
     type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
@@ -11952,7 +11952,6 @@ fn still_type_has_owned_representation(
         }),
     }
 }
-/// TODO merge into `still_syntax_type_to_type`
 fn still_type_constructs_recursive_type_in(
     scc_type_declaration_names: &std::collections::HashSet<&str>,
     type_: &StillType,
@@ -11988,7 +11987,6 @@ fn still_type_constructs_recursive_type_in(
         }),
     }
 }
-/// second result is `has_allocator_parameter` (TODO make a struct)
 struct CompiledVariableDeclaration {
     rust: syn::Item,
     has_allocator_parameter: bool,
@@ -12455,7 +12453,6 @@ struct TypeAliasInfo {
     name_range: Option<lsp_types::Range>,
     documentation: Option<Box<str>>,
     parameters: Vec<StillSyntaxNode<StillName>>,
-    // TODO is trying to recover something from partial type syntax overkill?
     type_syntax: Option<StillSyntaxNode<StillSyntaxType>>,
     type_: Option<StillType>,
     is_copy: bool,
@@ -13354,7 +13351,6 @@ fn still_type_variables_into<'a>(
             for input_type in inputs {
                 still_type_variables_into(variables, input_type);
             }
-            // TODO skip as it should not contain variables not used in the inputs
             still_type_variables_into(variables, output);
         }
         StillType::ChoiceConstruct { name: _, arguments } => {
@@ -14879,84 +14875,140 @@ fn still_syntax_expression_to_rust<'a>(
             }
         }
         StillSyntaxExpression::RecordUpdate {
-            record: maybe_record,
+            record: maybe_record_to_update,
             spread_key_symbol_range: _,
             fields,
-        } => match maybe_record {
-            None => {
+        } => {
+            let Some(record_to_update_node) = maybe_record_to_update else {
                 errors.push(StillErrorNode {
                     range: expression_node.range,
                     message: Box::from(
                         "missing record expression to update in { ..here, ... ... }",
                     ),
                 });
-                CompiledStillExpression {
+                return CompiledStillExpression {
                     uses_allocator: false,
                     rust: syn_expr_todo(),
                     type_: None,
-                }
-            }
-            Some(record_node) => {
-                let mut fields_use_allocator: bool = false;
-                let rust_fields = fields
-                    .iter()
-                    .map(|field| {
-                        let compiled_field_value: CompiledStillExpression =
-                            maybe_still_syntax_expression_to_rust(
-                                errors,
-                                || StillErrorNode {
-                                    range: field.name.range,
-                                    message: Box::from("missing field value after this field name"),
-                                },
-                                records_used,
-                                type_aliases,
-                                choice_types,
-                                project_variable_declarations,
-                                local_bindings.clone(),
-                                closure_representation,
-                                field.value.as_ref().map(still_syntax_node_as_ref),
-                            );
-                        fields_use_allocator =
-                            fields_use_allocator || compiled_field_value.uses_allocator;
-                        syn::FieldValue {
-                            attrs: vec![],
-                            member: syn::Member::Named(syn_ident(&still_name_to_lowercase_rust(
-                                &field.name.value,
-                            ))),
-                            colon_token: Some(syn::token::Colon(syn_span())),
-                            expr: compiled_field_value.rust,
-                        }
-                    })
-                    .collect();
-                let compiled_record: CompiledStillExpression = still_syntax_expression_to_rust(
+                };
+            };
+            let compiled_record_to_update: CompiledStillExpression =
+                still_syntax_expression_to_rust(
                     errors,
                     records_used,
                     type_aliases,
                     choice_types,
                     project_variable_declarations,
-                    local_bindings,
+                    local_bindings.clone(),
                     FnRepresentation::RefDyn,
-                    still_syntax_node_unbox(record_node),
+                    still_syntax_node_unbox(record_to_update_node),
                 );
-                // TODO check the updated field values are present in the compile record type
-                // and their value types are equal
-                CompiledStillExpression {
-                    rust: syn::Expr::Struct(syn::ExprStruct {
-                        attrs: vec![],
-                        qself: None,
-                        path: syn_path_reference([&still_field_names_to_rust_record_struct_name(
-                            fields.iter().map(|field| field.name.value.as_ref()),
-                        )]),
-                        brace_token: syn::token::Brace(syn_span()),
-                        fields: rust_fields,
-                        dot2_token: Some(syn::token::DotDot(syn_span())),
-                        rest: Some(Box::new(compiled_record.rust)),
-                    }),
-                    uses_allocator: compiled_record.uses_allocator || fields_use_allocator,
-                    type_: compiled_record.type_,
-                }
+            if fields.is_empty() {
+                errors.push(StillErrorNode {
+                    range: expression_node.range,
+                    message: Box::from(
+                        "missing fields after the record expression to update in { ..record to update.., ..here a field name.. ..here a field value.. }",
+                    ),
+                });
+                return compiled_record_to_update;
             }
-        },
+            let Some(record_to_update_type) = compiled_record_to_update.type_ else {
+                return compiled_record_to_update;
+            };
+            let StillType::Record(record_to_update_fields) = &record_to_update_type else {
+                let mut error_message: String = String::from(
+                    "type of this record to update { ..here, ... ... } is not a record but\n",
+                );
+                still_type_into(&mut error_message, 0, &record_to_update_type);
+                errors.push(StillErrorNode {
+                    range: record_to_update_node.range,
+                    message: error_message.into_boxed_str(),
+                });
+                return CompiledStillExpression {
+                    uses_allocator: compiled_record_to_update.uses_allocator,
+                    rust: compiled_record_to_update.rust,
+                    type_: Some(record_to_update_type),
+                };
+            };
+            let mut fields_use_allocator: bool = false;
+            let rust_fields = fields
+                .iter()
+                .filter_map(|field| {
+                    let Some(field_value) = &field.value else {
+                        errors.push(StillErrorNode {
+                            range: field.name.range,
+                            message: Box::from("missing field value after this field name"),
+                        });
+                        return None;
+                    };
+                    let compiled_field_value: CompiledStillExpression =
+                        still_syntax_expression_to_rust(
+                            errors,
+                            records_used,
+                            type_aliases,
+                            choice_types,
+                            project_variable_declarations,
+                            local_bindings.clone(),
+                            closure_representation,
+                            still_syntax_node_as_ref(field_value),
+                        );
+                    let Some(compiled_field_value_type) = compiled_field_value.type_ else {
+                        return None;
+                    };
+                    if let Some(record_to_update_field) =
+                        record_to_update_fields
+                            .iter()
+                            .find(|record_to_update_field| {
+                                record_to_update_field.name == field.name.value
+                            })
+                        && let Some(field_type_diff) = still_type_diff(
+                            &record_to_update_field.value,
+                            &compiled_field_value_type,
+                        )
+                    {
+                        errors.push(StillErrorNode {
+                            range: field_value.range,
+                            message: (still_type_diff_error_message(&field_type_diff)
+                                + "\nThe updated field value must have the same type as the field value of the updated record (mostly to prevent confusion)")
+                                .into_boxed_str(),
+                        });
+                        return None;
+                    }
+                    fields_use_allocator =
+                        fields_use_allocator || compiled_field_value.uses_allocator;
+                    Some(syn::FieldValue {
+                        attrs: vec![],
+                        member: syn::Member::Named(syn_ident(&still_name_to_lowercase_rust(
+                            &field.name.value,
+                        ))),
+                        colon_token: Some(syn::token::Colon(syn_span())),
+                        expr: compiled_field_value.rust,
+                    })
+                })
+                .collect();
+            if syn::punctuated::Punctuated::is_empty(&rust_fields) {
+                return CompiledStillExpression {
+                    uses_allocator: compiled_record_to_update.uses_allocator,
+                    rust: compiled_record_to_update.rust,
+                    type_: Some(record_to_update_type),
+                };
+            }
+            CompiledStillExpression {
+                rust: syn::Expr::Struct(syn::ExprStruct {
+                    attrs: vec![],
+                    qself: None,
+                    path: syn_path_reference([&still_field_names_to_rust_record_struct_name(
+                        fields.iter().map(|field| field.name.value.as_str()),
+                    )]),
+                    brace_token: syn::token::Brace(syn_span()),
+                    fields: rust_fields,
+                    dot2_token: Some(syn::token::DotDot(syn_span())),
+                    rest: Some(Box::new(compiled_record_to_update.rust)),
+                }),
+                uses_allocator: compiled_record_to_update.uses_allocator || fields_use_allocator,
+                type_: Some(record_to_update_type),
+            }
+        }
     }
 }
 /// If called from outside itself, set `in_closures` to `None`
