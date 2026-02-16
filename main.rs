@@ -9165,7 +9165,7 @@ To push a single char, use `str-attach-chr`.",
             (
                 StillName::from("str-attach-chr"),
                 false,
-                function([still_type_str,still_type_str], still_type_str),
+                function([still_type_str,still_type_chr], still_type_str),
                 "Push a given `chr` to the end of the first.",
             ),
             (
@@ -12627,15 +12627,14 @@ fn still_syntax_type_replace_variables(
         },
     }
 }
-fn still_type_collect_variables_that_are_concrete_into(
-    type_parameter_replacements: &mut std::collections::HashMap<Box<str>, StillType>,
-    type_with_variables: &StillType,
-    concrete_type: StillType,
+fn still_type_collect_variables_that_are_concrete_into<'a>(
+    type_parameter_replacements: &mut std::collections::HashMap<&'a str, &'a StillType>,
+    type_with_variables: &'a StillType,
+    concrete_type: &'a StillType,
 ) {
     match type_with_variables {
         StillType::Variable(variable_name) => {
-            // TODO check that previous replacement type equals current one
-            type_parameter_replacements.insert(Box::from(variable_name.as_str()), concrete_type);
+            type_parameter_replacements.insert(variable_name.as_str(), concrete_type);
         }
         StillType::Function {
             inputs,
@@ -12647,7 +12646,7 @@ fn still_type_collect_variables_that_are_concrete_into(
             } = concrete_type
             {
                 for (input_type, concrete_input_type) in
-                    inputs.iter().zip(concrete_function_inputs.into_iter())
+                    inputs.iter().zip(concrete_function_inputs.iter())
                 {
                     still_type_collect_variables_that_are_concrete_into(
                         type_parameter_replacements,
@@ -12658,7 +12657,7 @@ fn still_type_collect_variables_that_are_concrete_into(
                 still_type_collect_variables_that_are_concrete_into(
                     type_parameter_replacements,
                     output_type,
-                    *concrete_function_output_type,
+                    concrete_function_output_type,
                 );
             }
         }
@@ -12671,7 +12670,7 @@ fn still_type_collect_variables_that_are_concrete_into(
             {
                 for (argument_type, concrete_argument_type) in arguments
                     .iter()
-                    .zip(concrete_choice_type_construct_arguments.into_iter())
+                    .zip(concrete_choice_type_construct_arguments.iter())
                 {
                     still_type_collect_variables_that_are_concrete_into(
                         type_parameter_replacements,
@@ -12682,18 +12681,16 @@ fn still_type_collect_variables_that_are_concrete_into(
             }
         }
         StillType::Record(fields) => {
-            if let StillType::Record(mut concrete_fields) = concrete_type {
+            if let StillType::Record(concrete_fields) = concrete_type {
                 for field in fields {
-                    if let Some(matching_concrete_field_index) = concrete_fields
+                    if let Some(matching_concrete_field) = concrete_fields
                         .iter()
-                        .position(|concrete_field| concrete_field.name == field.name)
+                        .find(|concrete_field| concrete_field.name == field.name)
                     {
-                        let concrete_field =
-                            concrete_fields.swap_remove(matching_concrete_field_index);
                         still_type_collect_variables_that_are_concrete_into(
                             type_parameter_replacements,
                             &field.value,
-                            concrete_field.value,
+                            &matching_concrete_field.value,
                         );
                     }
                 }
@@ -14418,13 +14415,13 @@ fn still_syntax_expression_to_rust<'a>(
                                     }
                                 }
                                 let mut type_parameter_replacements: std::collections::HashMap<
-                                    Box<str>,
-                                    StillType,
+                                    &str,
+                                    &StillType,
                                 > = std::collections::HashMap::new();
                                 for (parameter_type_node, maybe_argument_type) in
                                     project_variable_input_types
                                         .iter()
-                                        .zip(argument_maybe_types.into_iter())
+                                        .zip(argument_maybe_types.iter())
                                 {
                                     if let Some(argument_type) = maybe_argument_type {
                                         still_type_collect_variables_that_are_concrete_into(
@@ -14434,14 +14431,52 @@ fn still_syntax_expression_to_rust<'a>(
                                         );
                                     }
                                 }
+                                let mut any_argument_type_conflicts_with_variable_input_type: bool =
+                                    false;
+                                for (
+                                    (project_variable_input_type, maybe_argument_type),
+                                    argument_node,
+                                ) in project_variable_input_types
+                                    .iter()
+                                    .zip(argument_maybe_types.iter())
+                                    .zip(arguments.iter())
+                                {
+                                    if let Some(argument_type) = maybe_argument_type {
+                                        let mut project_variable_input_type: StillType =
+                                            project_variable_input_type.clone();
+                                        still_type_replace_variables(
+                                            &type_parameter_replacements,
+                                            &mut project_variable_input_type,
+                                        );
+                                        if let Some(argument_variable_input_type_diff) =
+                                            still_type_diff(
+                                                &project_variable_input_type,
+                                                argument_type,
+                                            )
+                                        {
+                                            errors.push(StillErrorNode {
+                                                range: argument_node.range,
+                                                message: still_type_diff_error_message(
+                                                    &argument_variable_input_type_diff,
+                                                )
+                                                .into_boxed_str(),
+                                            });
+                                            any_argument_type_conflicts_with_variable_input_type =
+                                                true;
+                                        }
+                                    }
+                                }
+                                if any_argument_type_conflicts_with_variable_input_type {
+                                    return CompiledStillExpression {
+                                        rust: syn_expr_todo(),
+                                        uses_allocator: false,
+                                        type_: None,
+                                    };
+                                }
                                 let mut variable_output_type: StillType =
                                     (**project_variable_output_type).clone();
                                 still_type_replace_variables(
-                                    // seems inefficient, a function would be better
-                                    &type_parameter_replacements
-                                        .iter()
-                                        .map(|(k, v)| (k.as_ref(), v))
-                                        .collect::<std::collections::HashMap<_, _>>(),
+                                    &type_parameter_replacements,
                                     &mut variable_output_type,
                                 );
                                 variable_output_type
