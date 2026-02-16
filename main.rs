@@ -154,7 +154,7 @@ fn lsp_main() -> Result<(), Box<dyn std::error::Error>> {
 }
 fn initial_state() -> State {
     State {
-        projects: std::collections::HashMap::new(),
+        projects: std::collections::HashMap::with_capacity(1),
     }
 }
 fn server_capabilities() -> lsp_types::ServerCapabilities {
@@ -287,7 +287,7 @@ fn update_state_on_did_open_text_document(
             arguments.text_document.uri.clone(),
             initialize_project_state_from_source(
                 connection,
-                arguments.text_document.uri.clone(),
+                arguments.text_document.uri,
                 arguments.text_document.text,
             ),
         );
@@ -351,7 +351,7 @@ fn handle_request(
             let arguments: <lsp_types::request::References as lsp_types::request::Request>::Params =
                 serde_json::from_value(request_arguments_json)?;
             let result: <lsp_types::request::References as lsp_types::request::Request>::Result =
-                respond_to_references(state, arguments);
+                respond_to_references(state, &arguments);
             Ok(serde_json::to_value(result)?)
         }
         <lsp_types::request::SemanticTokensFullRequest as lsp_types::request::Request>::METHOD => {
@@ -925,8 +925,7 @@ fn respond_to_goto_definition(
                     uri: goto_definition_arguments
                         .text_document_position_params
                         .text_document
-                        .uri
-                        .clone(),
+                        .uri,
                     range: declaration_name_range,
                 },
             ))
@@ -987,8 +986,7 @@ fn respond_to_goto_definition(
                     uri: goto_definition_arguments
                         .text_document_position_params
                         .text_document
-                        .uri
-                        .clone(),
+                        .uri,
                     range: origin_choice_type_variant_name_range,
                 },
             ))
@@ -1010,8 +1008,7 @@ fn respond_to_goto_definition(
                     uri: goto_definition_arguments
                         .text_document_position_params
                         .text_document
-                        .uri
-                        .clone(),
+                        .uri,
                     range: declaration_name_range,
                 },
             ))
@@ -1083,7 +1080,8 @@ fn respond_to_rename(
             scope_declaration,
             name: type_variable_to_rename,
         } => {
-            let mut all_uses_of_renamed_type_variable: Vec<lsp_types::Range> = Vec::new();
+            let mut all_uses_of_renamed_type_variable: Vec<lsp_types::Range> =
+                Vec::with_capacity(2);
             still_syntax_declaration_uses_of_symbol_into(
                 &mut all_uses_of_renamed_type_variable,
                 &to_prepare_for_rename_project_state.type_aliases,
@@ -1144,9 +1142,9 @@ fn respond_to_rename(
                         }
                     }
                 };
-            let mut all_uses_of_at_docs_project_member: Vec<lsp_types::Range> = Vec::new();
+            let mut all_uses_of_project_member: Vec<lsp_types::Range> = Vec::with_capacity(4);
             still_syntax_project_uses_of_symbol_into(
-                &mut all_uses_of_at_docs_project_member,
+                &mut all_uses_of_project_member,
                 &to_prepare_for_rename_project_state.type_aliases,
                 &to_prepare_for_rename_project_state.syntax,
                 still_declared_symbol_to_rename,
@@ -1156,7 +1154,7 @@ fn respond_to_rename(
                     uri: rename_arguments.text_document_position.text_document.uri,
                     version: None,
                 },
-                edits: all_uses_of_at_docs_project_member
+                edits: all_uses_of_project_member
                     .into_iter()
                     .map(|use_range_of_renamed_project| {
                         lsp_types::OneOf::Left(lsp_types::TextEdit {
@@ -1172,7 +1170,8 @@ fn respond_to_rename(
             type_: _,
             scope_expression,
         } => {
-            let mut all_uses_of_let_declaration_to_rename: Vec<lsp_types::Range> = Vec::new();
+            let mut all_uses_of_let_declaration_to_rename: Vec<lsp_types::Range> =
+                Vec::with_capacity(2);
             still_syntax_expression_uses_of_symbol_into(
                 &mut all_uses_of_let_declaration_to_rename,
                 &to_prepare_for_rename_project_state.type_aliases,
@@ -1206,7 +1205,8 @@ fn respond_to_rename(
             if let Some(to_rename_local_binding_info) =
                 find_local_binding_info(&local_bindings, to_rename_name)
             {
-                let mut all_uses_of_local_binding_to_rename: Vec<lsp_types::Range> = Vec::new();
+                let mut all_uses_of_local_binding_to_rename: Vec<lsp_types::Range> =
+                    Vec::with_capacity(3);
                 match to_rename_local_binding_info.origin {
                     LocalBindingOrigin::PatternVariable(range) => {
                         all_uses_of_local_binding_to_rename.push(range);
@@ -1245,7 +1245,7 @@ fn respond_to_rename(
                     name: to_rename_name,
                     including_declaration_name: true,
                 };
-                let mut all_uses_of_renamed_variable: Vec<lsp_types::Range> = Vec::new();
+                let mut all_uses_of_renamed_variable: Vec<lsp_types::Range> = Vec::with_capacity(4);
                 still_syntax_project_uses_of_symbol_into(
                     &mut all_uses_of_renamed_variable,
                     &to_prepare_for_rename_project_state.type_aliases,
@@ -1285,7 +1285,7 @@ fn respond_to_rename(
                 including_declaration_name: true,
                 origin_type_name: maybe_origin_choice_type_name.as_ref(),
             };
-            let mut all_uses_of_renamed_variable: Vec<lsp_types::Range> = Vec::new();
+            let mut all_uses_of_renamed_variable: Vec<lsp_types::Range> = Vec::with_capacity(4);
             still_syntax_project_uses_of_symbol_into(
                 &mut all_uses_of_renamed_variable,
                 &to_prepare_for_rename_project_state.type_aliases,
@@ -1315,7 +1315,7 @@ fn respond_to_rename(
                     including_declaration_name: true,
                 };
 
-            let mut all_uses_of_renamed_type: Vec<lsp_types::Range> = Vec::new();
+            let mut all_uses_of_renamed_type: Vec<lsp_types::Range> = Vec::with_capacity(4);
             still_syntax_project_uses_of_symbol_into(
                 &mut all_uses_of_renamed_type,
                 &to_prepare_for_rename_project_state.type_aliases,
@@ -1342,7 +1342,7 @@ fn respond_to_rename(
 }
 fn respond_to_references(
     state: &State,
-    references_arguments: lsp_types::ReferenceParams,
+    references_arguments: &lsp_types::ReferenceParams,
 ) -> Option<Vec<lsp_types::Location>> {
     let to_find_project_state = state.projects.get(
         &references_arguments
@@ -1363,7 +1363,7 @@ fn respond_to_references(
             scope_declaration,
             name: type_variable_to_find,
         } => {
-            let mut all_uses_of_found_type_variable: Vec<lsp_types::Range> = Vec::new();
+            let mut all_uses_of_found_type_variable: Vec<lsp_types::Range> = Vec::with_capacity(2);
             still_syntax_declaration_uses_of_symbol_into(
                 &mut all_uses_of_found_type_variable,
                 &to_find_project_state.type_aliases,
@@ -1400,7 +1400,7 @@ fn respond_to_references(
                     including_declaration_name: references_arguments.context.include_declaration,
                 }
             };
-            let mut all_uses_of_found_project_member: Vec<lsp_types::Range> = Vec::new();
+            let mut all_uses_of_found_project_member: Vec<lsp_types::Range> = Vec::with_capacity(4);
             still_syntax_project_uses_of_symbol_into(
                 &mut all_uses_of_found_project_member,
                 &to_find_project_state.type_aliases,
@@ -1409,7 +1409,7 @@ fn respond_to_references(
             );
             all_uses_of_found_project_member
                 .into_iter()
-                .map(move |use_range_of_found_project| lsp_types::Location {
+                .map(|use_range_of_found_project| lsp_types::Location {
                     uri: references_arguments
                         .text_document_position
                         .text_document
@@ -1424,7 +1424,8 @@ fn respond_to_references(
             type_: _,
             scope_expression,
         } => {
-            let mut all_uses_of_found_let_declaration: Vec<lsp_types::Range> = Vec::new();
+            let mut all_uses_of_found_let_declaration: Vec<lsp_types::Range> =
+                Vec::with_capacity(2);
             still_syntax_expression_uses_of_symbol_into(
                 &mut all_uses_of_found_let_declaration,
                 &to_find_project_state.type_aliases,
@@ -1456,7 +1457,8 @@ fn respond_to_references(
             if let Some(to_find_local_binding_info) =
                 find_local_binding_info(&local_bindings, to_find_name)
             {
-                let mut all_uses_of_found_local_binding: Vec<lsp_types::Range> = Vec::new();
+                let mut all_uses_of_found_local_binding: Vec<lsp_types::Range> =
+                    Vec::with_capacity(2);
                 if references_arguments.context.include_declaration {
                     match to_find_local_binding_info.origin {
                         LocalBindingOrigin::PatternVariable(range) => {
@@ -1495,7 +1497,7 @@ fn respond_to_references(
                     name: to_find_name,
                     including_declaration_name: references_arguments.context.include_declaration,
                 };
-                let mut all_uses_of_found_variable: Vec<lsp_types::Range> = Vec::new();
+                let mut all_uses_of_found_variable: Vec<lsp_types::Range> = Vec::with_capacity(4);
                 still_syntax_project_uses_of_symbol_into(
                     &mut all_uses_of_found_variable,
                     &to_find_project_state.type_aliases,
@@ -1505,7 +1507,7 @@ fn respond_to_references(
 
                 all_uses_of_found_variable
                     .into_iter()
-                    .map(move |use_range_of_found_project| lsp_types::Location {
+                    .map(|use_range_of_found_project| lsp_types::Location {
                         uri: references_arguments
                             .text_document_position
                             .text_document
@@ -1532,17 +1534,16 @@ fn respond_to_references(
                 name: to_find_name,
                 including_declaration_name: references_arguments.context.include_declaration,
             };
-            let mut all_uses_of_found_variable: Vec<lsp_types::Range> = Vec::new();
+            let mut all_uses_of_found_variable: Vec<lsp_types::Range> = Vec::with_capacity(4);
             still_syntax_project_uses_of_symbol_into(
                 &mut all_uses_of_found_variable,
                 &to_find_project_state.type_aliases,
                 &to_find_project_state.syntax,
                 symbol_to_find,
             );
-
             all_uses_of_found_variable
                 .into_iter()
-                .map(move |use_range_of_found_project| lsp_types::Location {
+                .map(|use_range_of_found_project| lsp_types::Location {
                     uri: references_arguments
                         .text_document_position
                         .text_document
@@ -1558,17 +1559,16 @@ fn respond_to_references(
                     name: type_name_to_find,
                     including_declaration_name: references_arguments.context.include_declaration,
                 };
-            let mut all_uses_of_found_type: Vec<lsp_types::Range> = Vec::new();
+            let mut all_uses_of_found_type: Vec<lsp_types::Range> = Vec::with_capacity(4);
             still_syntax_project_uses_of_symbol_into(
                 &mut all_uses_of_found_type,
                 &to_find_project_state.type_aliases,
                 &to_find_project_state.syntax,
                 still_declared_symbol_to_find,
             );
-
             all_uses_of_found_type
                 .into_iter()
-                .map(move |use_range_of_found_project| lsp_types::Location {
+                .map(|use_range_of_found_project| lsp_types::Location {
                     uri: references_arguments
                         .text_document_position
                         .text_document
@@ -2155,7 +2155,7 @@ fn documentation_comment_to_markdown(documentation: &str) -> String {
 fn markdown_convert_code_blocks_to_still_into(builder: &mut String, markdown_source: &str) {
     // because I don't want to introduce a full markdown parser for just this tiny
     // improvement, the code below only approximates where code blocks are.
-    let mut with_fenced_code_blocks_converted = String::new();
+    let mut with_fenced_code_blocks_converted: String = String::new();
     markdown_convert_unspecific_fenced_code_blocks_to_still_into(
         &mut with_fenced_code_blocks_converted,
         markdown_source,
@@ -2827,7 +2827,7 @@ fn still_syntax_expression_type_with<'a>(
             arrow_key_symbol_range: _,
             result: maybe_result,
         } => {
-            let mut input_types: Vec<StillType> = Vec::new();
+            let mut input_types: Vec<StillType> = Vec::with_capacity(parameters.len());
             let mut local_bindings: std::collections::HashMap<&str, Option<StillType>> =
                 std::rc::Rc::unwrap_or_clone(local_bindings);
             for parameter_node in parameters {
@@ -2928,7 +2928,7 @@ fn still_syntax_expression_type_with<'a>(
             ),
         },
         StillSyntaxExpression::Record(fields) => {
-            let mut field_types: Vec<StillTypeField> = Vec::new();
+            let mut field_types: Vec<StillTypeField> = Vec::with_capacity(fields.len());
             for field in fields {
                 field_types.push(StillTypeField {
                     name: field.name.value.clone(),
@@ -4768,7 +4768,8 @@ fn still_syntax_expression_find_symbol_at_position<'a>(
                     lsp_range_includes_position(case_result_node.range, position)
                     {
                         if let Some(case_pattern_node) = &case.pattern {
-                            let mut introduced_bindings: Vec<StillLocalBinding> = Vec::new();
+                            let mut introduced_bindings: Vec<StillLocalBinding> =
+                                Vec::with_capacity(1);
                             still_syntax_pattern_bindings_into(
                                 &mut introduced_bindings,
                                 type_aliases,
@@ -4817,7 +4818,7 @@ fn still_syntax_expression_find_symbol_at_position<'a>(
             }
             match maybe_result {
                 Some(result_node) => {
-                    let mut introduced_bindings: Vec<StillLocalBinding> = Vec::new();
+                    let mut introduced_bindings: Vec<StillLocalBinding> = Vec::with_capacity(1);
                     for parameter_node in parameters {
                         still_syntax_pattern_bindings_into(
                             &mut introduced_bindings,
@@ -4845,15 +4846,15 @@ fn still_syntax_expression_find_symbol_at_position<'a>(
             declaration: declarations,
             result: maybe_result,
         } => {
-            let mut introduced_bindings: Vec<StillLocalBinding> = Vec::new();
+            let mut introduced_bindings: Vec<StillLocalBinding> = Vec::with_capacity(1);
             if let Some(let_declaration_node) = declarations {
-                still_syntax_let_declaration_introduced_bindings_into(
-                    &mut introduced_bindings,
+                introduced_bindings.push(still_syntax_let_declaration_introduced_bindings_into(
+                    &introduced_bindings,
                     type_aliases,
                     choice_types,
                     variable_declarations,
                     &let_declaration_node.value,
-                );
+                ));
             }
             local_bindings.push((expression_node, introduced_bindings));
             local_bindings =
@@ -5783,13 +5784,13 @@ fn still_syntax_pattern_uses_of_symbol_into(
 }
 
 fn still_syntax_let_declaration_introduced_bindings_into<'a>(
-    bindings_so_far: &mut Vec<StillLocalBinding<'a>>,
+    bindings_so_far: &Vec<StillLocalBinding<'a>>,
     type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
     choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
     variable_declarations: &std::collections::HashMap<StillName, CompiledVariableDeclarationInfo>,
     still_syntax_let_declaration: &'a StillSyntaxLetDeclaration,
-) {
-    bindings_so_far.push(StillLocalBinding {
+) -> StillLocalBinding<'a> {
+    StillLocalBinding {
         name: &still_syntax_let_declaration.name.value,
         origin: LocalBindingOrigin::LetDeclaredVariable {
             name_range: still_syntax_let_declaration.name.range,
@@ -5812,7 +5813,7 @@ fn still_syntax_let_declaration_introduced_bindings_into<'a>(
                     still_syntax_node_unbox(result_node),
                 )
             }),
-    });
+    }
 }
 
 fn still_syntax_pattern_bindings_into<'a>(
@@ -6864,7 +6865,7 @@ fn parse_same_line_while(state: &mut ParseState, char_is_valid: impl Fn(char) ->
         .chars()
         .take_while(|&c| char_is_valid(c));
     let consumed_length_utf8: usize = consumed_chars_iterator.clone().map(char::len_utf8).sum();
-    let consumed_length_utf16: usize = consumed_chars_iterator.clone().map(char::len_utf16).sum();
+    let consumed_length_utf16: usize = consumed_chars_iterator.map(char::len_utf16).sum();
     state.offset_utf8 += consumed_length_utf8;
     state.position.character += consumed_length_utf16 as u32;
 }
@@ -7032,7 +7033,7 @@ fn parse_still_syntax_type_with_comment(
 fn parse_still_syntax_function(state: &mut ParseState) -> Option<StillSyntaxNode<StillSyntaxType>> {
     let backslash_range: lsp_types::Range = parse_symbol_as_range(state, "\\")?;
     parse_still_whitespace(state);
-    let mut inputs: Vec<StillSyntaxNode<StillSyntaxType>> = Vec::new();
+    let mut inputs: Vec<StillSyntaxNode<StillSyntaxType>> = Vec::with_capacity(1);
     while let Some(input_node) = parse_still_syntax_type(state) {
         inputs.push(input_node);
         parse_still_whitespace(state);
@@ -7125,7 +7126,7 @@ fn parse_still_syntax_type_record(state: &mut ParseState) -> Option<StillSyntaxT
     while parse_symbol(state, ",") {
         parse_still_whitespace(state);
     }
-    let mut fields: Vec<StillSyntaxTypeField> = Vec::new();
+    let mut fields: Vec<StillSyntaxTypeField> = Vec::with_capacity(2);
     while let Some(field) = parse_still_syntax_type_field(state) {
         fields.push(field);
         parse_still_whitespace(state);
@@ -7194,7 +7195,7 @@ fn parse_still_syntax_pattern_record(state: &mut ParseState) -> Option<StillSynt
     while parse_symbol(state, ",") {
         parse_still_whitespace(state);
     }
-    let mut fields: Vec<StillSyntaxPatternField> = Vec::new();
+    let mut fields: Vec<StillSyntaxPatternField> = Vec::with_capacity(2);
     while let Some(field_name_node) = if state.position.character <= u32::from(state.indent) {
         None
     } else {
@@ -7729,7 +7730,7 @@ fn parse_still_syntax_expression_record_or_record_update(
         while parse_symbol(state, ",") {
             parse_still_whitespace(state);
         }
-        let mut fields: Vec<StillSyntaxExpressionField> = Vec::new();
+        let mut fields: Vec<StillSyntaxExpressionField> = Vec::with_capacity(1);
         while let Some(field) = parse_still_syntax_expression_field(state) {
             fields.push(field);
             parse_still_whitespace(state);
@@ -7747,7 +7748,7 @@ fn parse_still_syntax_expression_record_or_record_update(
         while parse_symbol(state, ",") {
             parse_still_whitespace(state);
         }
-        let mut fields: Vec<StillSyntaxExpressionField> = Vec::new();
+        let mut fields: Vec<StillSyntaxExpressionField> = Vec::with_capacity(2);
         while let Some(field) = parse_still_syntax_expression_field(state) {
             fields.push(field);
             parse_still_whitespace(state);
@@ -7779,7 +7780,7 @@ fn parse_still_syntax_expression_lambda(
 ) -> Option<StillSyntaxNode<StillSyntaxExpression>> {
     let backslash_key_symbol_range: lsp_types::Range = parse_symbol_as_range(state, "\\")?;
     parse_still_whitespace(state);
-    let mut parameters: Vec<StillSyntaxNode<StillSyntaxPattern>> = Vec::new();
+    let mut parameters: Vec<StillSyntaxNode<StillSyntaxPattern>> = Vec::with_capacity(1);
     while let Some(parameter_node) = parse_still_syntax_pattern(state) {
         parameters.push(parameter_node);
         parse_still_whitespace(state);
@@ -8086,7 +8087,7 @@ fn parse_still_syntax_declaration_choice_type_node(
     let maybe_equals_key_symbol_range: Option<lsp_types::Range> = parse_symbol_as_range(state, "=");
     parse_still_whitespace(state);
 
-    let mut variants: Vec<StillSyntaxChoiceTypeVariant> = Vec::new();
+    let mut variants: Vec<StillSyntaxChoiceTypeVariant> = Vec::with_capacity(2);
     while let Some(variant) = parse_still_syntax_choice_type_declaration_variant(state) {
         variants.push(variant);
         parse_still_whitespace(state);
@@ -8530,11 +8531,12 @@ fn still_project_info_to_rust(
     let mut rust_items: Vec<syn::Item> =
         Vec::with_capacity(type_graph.len() * 3 + variable_graph.len());
     let mut compiled_type_alias_infos: std::collections::HashMap<StillName, TypeAliasInfo> =
-        std::collections::HashMap::new();
+        std::collections::HashMap::with_capacity(type_declaration_by_graph_node.len());
     let mut compiled_choice_type_infos: std::collections::HashMap<StillName, ChoiceTypeInfo> =
         core_choice_type_infos.clone();
+    compiled_choice_type_infos.reserve(type_declaration_by_graph_node.len());
     let mut records_used: std::collections::HashSet<Vec<StillName>> =
-        std::collections::HashSet::new();
+        std::collections::HashSet::with_capacity(8);
     'compile_types: for type_declaration_strongly_connected_component in
         type_graph.find_sccs().iter_sccs()
     {
@@ -10667,7 +10669,7 @@ fn type_alias_declaration_to_rust(
     );
     let has_lifetime_parameter: bool = still_type_uses_lifetime(type_aliases, choice_types, &type_);
     let mut actually_used_type_variables: std::collections::HashSet<StillName> =
-        std::collections::HashSet::new();
+        std::collections::HashSet::with_capacity(parameters.len());
     still_type_variables_and_records_into(&mut actually_used_type_variables, records_used, &type_);
     let mut rust_parameters: syn::punctuated::Punctuated<syn::GenericParam, syn::token::Comma> =
         syn::punctuated::Punctuated::new();
@@ -13094,9 +13096,7 @@ fn still_type_to_rust(
         }
         StillType::Record(fields) => {
             let mut fields_sorted: Vec<&StillTypeField> = fields.iter().collect();
-            fields_sorted.sort_by(|a, b| {
-                still_name_to_lowercase_rust(&a.name).cmp(&still_name_to_lowercase_rust(&b.name))
-            });
+            fields_sorted.sort_unstable_by_key(|a| &a.name);
             syn::Type::Path(syn::TypePath {
                 qself: None,
                 path: syn::Path {
@@ -13356,7 +13356,7 @@ fn still_syntax_expression_to_rust<'a>(
             let mut parameter_introduced_bindings: std::collections::HashMap<
                 &str,
                 StillLocalBindingCompileInfo,
-            > = std::collections::HashMap::new();
+            > = std::collections::HashMap::with_capacity(1);
             let mut bindings_to_clone: Vec<BindingToClone> = Vec::new();
             let mut has_inexhaustive_pattern: bool = false;
             let (rust_patterns, input_type_maybes): (
@@ -14340,11 +14340,11 @@ fn still_syntax_expression_to_rust<'a>(
                         });
                         return None;
                     };
-                    let mut introduced_str_bindings_to_match = Vec::new();
+                    let mut introduced_str_bindings_to_match: Vec<(lsp_types::Range, &str)> = Vec::new();
                     let mut case_pattern_introduced_bindings: std::collections::HashMap<
                         &str,
                         StillLocalBindingCompileInfo,
-                    > = std::collections::HashMap::new();
+                    > = std::collections::HashMap::with_capacity(1);
                     let mut bindings_to_clone: Vec<BindingToClone> = Vec::new();
                     let compiled_pattern: CompiledStillPattern = still_syntax_pattern_to_rust(
                         errors,
@@ -15120,7 +15120,7 @@ fn still_syntax_let_declaration_to_rust_into(
                 .as_ref()
                 .map(still_syntax_node_unbox),
         );
-    let mut rust_stmts: Vec<syn::Stmt> = Vec::new();
+    let mut rust_stmts: Vec<syn::Stmt> = Vec::with_capacity(2);
     rust_stmts.push(syn::Stmt::Local(syn::Local {
         attrs: vec![],
         let_token: syn::token::Let(syn_span()),
@@ -15135,7 +15135,7 @@ fn still_syntax_let_declaration_to_rust_into(
     let mut introduced_binding_infos: std::collections::HashMap<
         &str,
         StillLocalBindingCompileInfo,
-    > = std::iter::once((
+    > = std::collections::HashMap::from([(
         declaration_node.value.name.value.as_str(),
         StillLocalBindingCompileInfo {
             origin_range: declaration_node.value.name.range,
@@ -15149,8 +15149,7 @@ fn still_syntax_let_declaration_to_rust_into(
             last_uses: vec![],
             closures_it_is_used_in: vec![],
         },
-    ))
-    .collect::<std::collections::HashMap<_, _>>();
+    )]);
     if let Some(result_node) = maybe_result {
         still_syntax_expression_uses_of_local_bindings_into(
             &mut introduced_binding_infos,
@@ -15510,7 +15509,7 @@ fn still_case_patterns_catch_record_is_exhaustive(
     still_possibilities_of_pattern_catches_are_exhaustive(
         // it's unfortunate that we need to allocate here,
         // since rust runs into an "reached the recursion limit while instantiating"
-        // error when instantiatin Iterators (recursively)
+        // error when instantiating Iterators (recursively)
         &record_possibilities
             .iter()
             .map(|record_possibility| record_possibility.values().collect())
@@ -15548,28 +15547,26 @@ fn still_possibilities_of_pattern_catches_are_exhaustive<'a>(
 ) -> bool {
     let maybe_split: Option<StillPatternCatchPossibilitiesSplit> = possibilities_of_pattern_catches.iter()
         .fold(None, |mut maybe_so_far, possibility_values| {
-            let mut possibility_values_iterator = possibility_values.iter().copied();
-            match possibility_values_iterator.next() {
+            match possibility_values.split_first() {
                 None => maybe_so_far,
-                Some(first_value_catch) => {
+                Some((first_value_catch, remaining_value_catches)) => {
                     match first_value_catch {
                         StillPatternCatch::Exhaustive => {
                             match &mut maybe_so_far {
                                 None | Some(StillPatternCatchPossibilitiesSplit::Infinite) => {
-                                    Some(StillPatternCatchPossibilitiesSplit::AllExhaustive(vec![possibility_values_iterator.collect()]))
+                                    Some(StillPatternCatchPossibilitiesSplit::AllExhaustive(vec![remaining_value_catches.to_vec()]))
                                 }
                                 Some(StillPatternCatchPossibilitiesSplit::AllExhaustive(possibilities)) => {
-                                    possibilities.push(possibility_values_iterator.collect());
+                                    possibilities.push(remaining_value_catches.to_vec());
                                     maybe_so_far
                                 }
                                 Some(StillPatternCatchPossibilitiesSplit::WithAdditionalFieldValues { field_count, possibilities }) => {
-                                    possibilities.push(std::iter::repeat_n(&StillPatternCatch::Exhaustive, *field_count).chain(possibility_values_iterator).collect());
+                                    possibilities.push(std::iter::repeat_n(&StillPatternCatch::Exhaustive, *field_count).chain(remaining_value_catches.iter().copied()).collect());
                                     maybe_so_far
                                 }
                                 Some(StillPatternCatchPossibilitiesSplit::ByVariant(possibilities_by_variant)) => {
-                                    let new_possibilities_with_exhaustive_first: Vec<&StillPatternCatch> = std::iter::once(&StillPatternCatch::Exhaustive).chain(possibility_values_iterator).collect();
                                     for possibilities_for_variant in possibilities_by_variant.values_mut() {
-                                        possibilities_for_variant.push(new_possibilities_with_exhaustive_first.clone());
+                                        possibilities_for_variant.push(std::iter::once(&StillPatternCatch::Exhaustive).chain(remaining_value_catches.iter().copied()).collect());
                                     }
                                     maybe_so_far
                                 }
@@ -15606,7 +15603,7 @@ fn still_possibilities_of_pattern_catches_are_exhaustive<'a>(
                             };
                             let new_possibility_for_variant: Vec<&StillPatternCatch> =
                                 std::iter::once(first_field_value_variant_value_catch)
-                                    .chain(possibility_values_iterator)
+                                    .chain(remaining_value_catches.iter().copied())
                                     .collect();
                             match &mut maybe_so_far {
                                 None => {
@@ -15669,28 +15666,28 @@ fn still_possibilities_of_pattern_catches_are_exhaustive<'a>(
                             }
                         }
                         StillPatternCatch::Record(first_field_value_fields) => {
-                            let new_possibility_for_variant: Vec<&StillPatternCatch> =
+                            let new_possibility_for_record: Vec<&StillPatternCatch> =
                                 first_field_value_fields.values()
-                                    .chain(possibility_values_iterator)
+                                    .chain(remaining_value_catches.iter().copied())
                                     .collect();
                             match &mut maybe_so_far {
                                 None => {
                                     Some(StillPatternCatchPossibilitiesSplit::WithAdditionalFieldValues {
                                         field_count: first_field_value_fields.len(),
-                                        possibilities: vec![new_possibility_for_variant],
+                                        possibilities: vec![new_possibility_for_record],
                                     })
                                 }
                                 Some(StillPatternCatchPossibilitiesSplit::WithAdditionalFieldValues
                                     {possibilities: with_record_field_values_possibilities_so_far, field_count:_},
                                 ) => {
                                     with_record_field_values_possibilities_so_far
-                                        .push(new_possibility_for_variant);
+                                        .push(new_possibility_for_record);
                                     maybe_so_far
                                 }
                                 Some(StillPatternCatchPossibilitiesSplit::AllExhaustive(possibilities)) => {
                                     Some(StillPatternCatchPossibilitiesSplit::WithAdditionalFieldValues {
                                         field_count: first_field_value_fields.len(),
-                                        possibilities: std::iter::once(new_possibility_for_variant)
+                                        possibilities: std::iter::once(new_possibility_for_record)
                                             .chain(possibilities.iter().map(|possibility|
                                                 std::iter::repeat_n(&StillPatternCatch::Exhaustive, first_field_value_fields.len())
                                                     .chain(possibility.iter().copied())
@@ -16710,7 +16707,7 @@ fn still_field_names_to_rust_record_struct_name<'a>(
     let mut rust_field_names_vec: Vec<String> = field_names
         .map(still_name_to_lowercase_rust)
         .collect::<Vec<_>>();
-    rust_field_names_vec.sort();
+    rust_field_names_vec.sort_unstable();
     /*
     field names in the final type can
     not just separated by _ or __ because still identifiers are
