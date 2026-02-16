@@ -199,7 +199,6 @@ fn server_capabilities() -> lsp_types::ServerCapabilities {
         }),
         document_formatting_provider: Some(lsp_types::OneOf::Left(true)),
         document_symbol_provider: Some(lsp_types::OneOf::Left(true)),
-        position_encoding: Some(lsp_types::PositionEncodingKind::UTF8),
         ..lsp_types::ServerCapabilities::default()
     }
 }
@@ -3451,6 +3450,8 @@ fn still_char_into(so_far: &mut String, maybe_char: Option<char>) {
     }
 }
 fn still_char_needs_unicode_escaping(char: char) -> bool {
+    // I'm aware this isn't the exact criterion that still-format uses
+    // (something something separators, private use, unassigned, ?)
     (char.len_utf16() >= 2) || char.is_control()
 }
 fn still_unicode_char_escape_into(so_far: &mut String, char: char) {
@@ -6089,13 +6090,14 @@ fn still_syntax_highlight_multi_line(
         .enumerate()
         .map(move |(inner_line, inner_line_str)| {
             let line: u32 = still_syntax_str_node.range.start.line + (inner_line as u32);
+            let line_length_utf16: usize = inner_line_str.encode_utf16().count();
             if inner_line == 0 {
                 lsp_types::Range {
                     start: still_syntax_str_node.range.start,
                     end: lsp_position_add_characters(
                         still_syntax_str_node.range.start,
                         (characters_before_content
-                            + inner_line_str.len()
+                            + line_length_utf16
                             + if content_does_not_break_line {
                                 characters_after_content
                             } else {
@@ -6114,7 +6116,7 @@ fn still_syntax_highlight_multi_line(
                     } else {
                         lsp_types::Position {
                             line: line,
-                            character: (inner_line_str.len() + characters_after_content) as u32,
+                            character: (line_length_utf16 + characters_after_content) as u32,
                         }
                     },
                 }
@@ -6821,7 +6823,7 @@ fn parse_any_guaranteed_non_linebreak_char_as_char(state: &mut ParseState) -> Op
         None => None,
         Some(parsed_char) => {
             state.offset_utf8 += parsed_char.len_utf8();
-            state.position.character += parsed_char.len_utf8() as u32;
+            state.position.character += parsed_char.len_utf16() as u32;
             Some(parsed_char)
         }
     }
@@ -6862,8 +6864,9 @@ fn parse_same_line_while(state: &mut ParseState, char_is_valid: impl Fn(char) ->
         .chars()
         .take_while(|&c| char_is_valid(c));
     let consumed_length_utf8: usize = consumed_chars_iterator.clone().map(char::len_utf8).sum();
+    let consumed_length_utf16: usize = consumed_chars_iterator.clone().map(char::len_utf16).sum();
     state.offset_utf8 += consumed_length_utf8;
-    state.position.character += consumed_length_utf8 as u32;
+    state.position.character += consumed_length_utf16 as u32;
 }
 fn parse_before_next_linebreak(state: &mut ParseState) {
     parse_same_line_while(state, |c| c != '\r' && c != '\n');
@@ -6874,7 +6877,7 @@ fn parse_same_line_char_if(state: &mut ParseState, char_is_valid: impl Fn(char) 
         && char_is_valid(next_char)
     {
         state.offset_utf8 += next_char.len_utf8();
-        state.position.character += next_char.len_utf8() as u32;
+        state.position.character += next_char.len_utf16() as u32;
         true
     } else {
         false
@@ -6914,7 +6917,7 @@ fn parse_before_next_linebreak_or_end_as_str<'a>(state: &mut ParseState<'a>) -> 
         .next()
         .unwrap_or("");
     state.offset_utf8 += content.len();
-    state.position.character += content.len() as u32;
+    state.position.character += content.encode_utf16().count() as u32;
     content
 }
 
@@ -6952,7 +6955,7 @@ fn parse_still_lowercase_name(state: &mut ParseState) -> Option<StillName> {
         let end_offset_utf8: usize = state.offset_utf8 + parsed_length;
         let parsed_str: &str = &state.source[state.offset_utf8..end_offset_utf8];
         state.offset_utf8 = end_offset_utf8;
-        state.position.character += parsed_length as u32;
+        state.position.character += parsed_str.encode_utf16().count() as u32;
         Some(StillName::from(parsed_str))
     } else {
         None
@@ -6982,7 +6985,7 @@ fn parse_still_uppercase_name(state: &mut ParseState) -> Option<StillName> {
         let end_offset_utf8: usize = state.offset_utf8 + parsed_length;
         let parsed_str: &str = &state.source[state.offset_utf8..end_offset_utf8];
         state.offset_utf8 = end_offset_utf8;
-        state.position.character += parsed_length as u32;
+        state.position.character += parsed_str.encode_utf16().count() as u32;
         Some(StillName::from(parsed_str))
     } else {
         None
@@ -7487,7 +7490,7 @@ fn parse_still_text_content_char(state: &mut ParseState) -> Option<char> {
                     None => None,
                     Some(plain_char) => {
                         state.offset_utf8 += plain_char.len_utf8();
-                        state.position.character += plain_char.len_utf8() as u32;
+                        state.position.character += plain_char.len_utf16() as u32;
                         Some(plain_char)
                     }
                 }
@@ -8263,14 +8266,15 @@ fn parse_still_syntax_project(project_source: &str) -> StillSyntaxProject {
         let unknown_source: &str = &project_source[last_valid_end_offset_utf8..];
         let mut unknown_source_lines_iterator_rev = unknown_source.lines().rev();
         let end_position: lsp_types::Position = match unknown_source_lines_iterator_rev.next() {
-            None => {
-                lsp_position_add_characters(last_valid_end_position, unknown_source.len() as i32)
-            }
+            None => lsp_position_add_characters(
+                last_valid_end_position,
+                unknown_source.encode_utf16().count() as i32,
+            ),
             Some(last_unknown_line) => {
                 let unknown_line_count: usize = 1 + unknown_source_lines_iterator_rev.count();
                 lsp_types::Position {
                     line: last_valid_end_position.line + unknown_line_count as u32 - 1,
-                    character: last_unknown_line.len() as u32,
+                    character: last_unknown_line.encode_utf16().count() as u32,
                 }
             }
         };
@@ -16956,8 +16960,17 @@ fn string_replace_lsp_range(
 ) {
     let start_line_offset: usize =
         str_offset_after_n_lsp_linebreaks(string, range.start.line as usize);
-    let start_offset: usize = start_line_offset + (range.start.character as usize);
-    string.replace_range(start_offset..(start_offset + range_length), replacement);
+    let start_offset: usize = start_line_offset
+        + str_starting_utf8_length_for_utf16_length(
+            &string[start_line_offset..],
+            range.start.character as usize,
+        );
+    let range_length_utf8: usize =
+        str_starting_utf8_length_for_utf16_length(&string[start_offset..], range_length);
+    string.replace_range(
+        start_offset..(start_offset + range_length_utf8),
+        replacement,
+    );
 }
 fn str_offset_after_n_lsp_linebreaks(str: &str, linebreak_count_to_skip: usize) -> usize {
     if linebreak_count_to_skip == 0 {
@@ -16992,4 +17005,16 @@ fn str_offset_after_n_lsp_linebreaks(str: &str, linebreak_count_to_skip: usize) 
         }
     }
     offset_after_n_linebreaks
+}
+fn str_starting_utf8_length_for_utf16_length(slice: &str, starting_utf16_length: usize) -> usize {
+    let mut utf8_length: usize = 0;
+    let mut so_far_length_utf16: usize = 0;
+    'traversing_utf16_length: for char in slice.chars() {
+        if so_far_length_utf16 >= starting_utf16_length {
+            break 'traversing_utf16_length;
+        }
+        utf8_length += char.len_utf8();
+        so_far_length_utf16 += char.len_utf16();
+    }
+    utf8_length
 }
