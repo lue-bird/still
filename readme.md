@@ -222,7 +222,6 @@ cargo build
 Then point your editor to the created `???/target/debug/still lsp`.
 
 ## TODO (none are blocking, just additions)
-- actually type-check project variable arguments
 - print variable declaration types more nicely (and generated types more concisely)
 - implement `StillIntoOwned::into_owned_overwriting` for generated structs and enums (or remove it)
 
