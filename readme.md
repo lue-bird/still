@@ -62,7 +62,7 @@ Then point your editor to `still lsp`, see also [specific setups](#editor-setups
 
   Requiring cloning of some state and deep conversions alone disqualifies this memory model for performance-critical programs. It can only be competitive for regular applications which tend to have simple state but a bunch of memory waste at each frame/update/...
 
-- no features that obfuscate ("shiny, cool features" that ruin languages in my opinion): infix operators, currying, lifetime tracking, traits/type classes, objects, task/async, hidden mutation, macros & reflection, side effects, modules, hidden context values, undefined
+- no features that obfuscate ("shiny, cool features" that ruin languages in my opinion): infix operators, currying, lifetime tracking, traits/type classes/overloading, objects, task/async, hidden mutation, macros & reflection, side effects, modules, hidden context values, exceptions, undefined
 
 ## syntax overview
 ```still
@@ -233,10 +233,10 @@ Then point your editor to the created `???/target/debug/still lsp`.
 - (leaning towards yes) add `str-attach-unt`, `str-attach-int`, `str-attach-dec`
 - (leaning towards yes) rename chr to char
 - (leaning towards yes) allow comments before variant (field name, case?, variant?)
-- (maybe in the future) add or pattern `( first | second | third )`
-- (leaning towards no, partly due to matching syntax) make formatter range-independent, and instead cut a line >=100 (is that possible to do when trying to get a maximally fast formatter? Because it seems an intermediate recursive structure is required)
+- (to make some parts almost infinitely scalable:) for formatting: leave declarations fully outside of "touched ranges" alone; for compilation: if touched only in one declaration and its type ends up the same, only change that field, (optionally: if type changed, recompile "downstream"); also , when keeping all existing names and only adding a new one, no need to recompile anything else
+- (leaning towards yes) switch to `position_encoding: Some(lsp_types::PositionEncodingKind::UTF8)`. This makes source edits and parsing easier and faster at the cost of compatibility with lsp clients below version 3.17.0. Is that acceptable?
+- in syntax tree, use separate range type for single-line tokens like keywords, symbols, names etc to save on memory consumption
 - (seems not worth the analysis cost but a simpler version maybe is) avoid unnecessary clones by field
-- output rust in realtime. Really cool since the compiled code is always up to date, need to check if file io is fast enough
 - (leaning towards no, sadly) replace non-recursive nominal-ish choice types by structural-ish choice types. Should be fairly easy to implement as `enum Variant0Variant1<Variant0, Variant1>` but still alright for FFI (you always have to type `Variant0Variant1::Variant0` similar to record structs currently _but_ crucially you have the option to use a still-declared type alias like `type Choice<'a> = Variant0Variant1<usize, &'a str>` to write `Choice::Variant0`)
 - (currently no idea how to implement in rust, maybe can be done in user land given that it required Hash but I'd like order functions to be given for each operation or similar?) add `map`, `set` core types
 - switch all core numbers to either 32 bit or 64 bit (64 bit would be nice for conversions if there are 32bit variations in the future and also be a reasonable default fur use as posix time or random seed, 32 bit is nice for chr conversion, default memory efficiency)
@@ -256,6 +256,8 @@ Then point your editor to the created `???/target/debug/still lsp`.
   allows non-called generic functions, would allow the removal of all "::Typed" patterns and expressions (except recursion? but maybe there is a better solution for that).
 - (seems completely useless) infer constness of generated variable/fn items
 - (leaning towards no) allow concrete bounded variables in some type aliases and choice types instead of &dyn
+- (maybe in the future) add or pattern `( first | second | third )`
+- reimplement [strongly_connected_components](https://docs.rs/strongly-connected-components/latest/strongly_connected_components/) myself
 
 ### log of failed optimizations
 - switching to mimalloc, ~>25% faster (really nice) at the cost of 25% more memory consumption.
@@ -264,13 +266,3 @@ Then point your editor to the created `???/target/debug/still lsp`.
 - upgrading `lto` to `"thin"` to `"fat"` both improve runtime speed by ~13% compared to the default (and reduce binary size) but increase build time by about 30% (default to thin) and 15% (thin to fat).
   As this prolongs installation and prevents people from quickly trying it, the default is kept.
   If this language server get distributed as a binary or people end up using this language server a lot, this `"thin"` might become a reasonable trade-off.
-
-### optimizations to try
-- reimplement [strongly_connected_components](https://docs.rs/strongly-connected-components/latest/strongly_connected_components/) myself
-- reparse incrementally (somewhat easy to implement but somehow it's for me at least pretty much fast enough already without? More data points welcome)
-- switch to `position_encoding: Some(lsp_types::PositionEncodingKind::UTF8)`. This makes source edits and parsing easier and faster at the cost of compatibility with lsp clients below version 3.17.0. Is that acceptable? (leaning towards yes).
-- if memory consumptions turns out to be a problem, stop storing the source in memory
-  and request full file content on each change (potentially only for dependencies).
-  This adds complexity and is slower so only if necessary.
-- in syntax tree, use separate range type for single-line tokens like keywords, symbols, names etc to save on memory consumption
-- in syntax tree, use `Box<[]>` instead of `Vec` for common nodes like call arguments

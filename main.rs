@@ -49,6 +49,25 @@ const command_help: &str = r"try
   - start the language server: still lsp
   - print this command help message: still help";
 
+fn default_still_output_file_path_for_input_file_path(
+    input_file_path: &std::path::Path,
+) -> std::path::PathBuf {
+    std::path::Path::join(&input_file_path.with_extension(""), "mod.rs")
+}
+fn compiled_rust_to_file_content(compiled_rust: &syn::File) -> String {
+    format!(
+        "// jump to compiled code by searching for // compiled
+{}
+
+
+// compiled code //
+
+
+{}",
+        include_str!("still_core.rs"),
+        prettyplease::unparse(compiled_rust),
+    )
+}
 fn build_main(
     maybe_input_file_path: Option<&std::path::Path>,
     maybe_output_file_path: Option<&std::path::Path>,
@@ -59,7 +78,7 @@ fn build_main(
     };
     let output_file_path: &std::path::Path = match maybe_output_file_path {
         Some(output_file_path) => &output_file_path.with_extension(".rs"),
-        None => &std::path::Path::join(&input_file_path.with_extension(""), "mod.rs"),
+        None => &default_still_output_file_path_for_input_file_path(input_file_path),
     };
     println!("...compiling {input_file_path:?} into {output_file_path:?}.");
     match std::fs::read_to_string(input_file_path) {
@@ -83,18 +102,8 @@ fn build_main(
                     message = &output_error.message
                 );
             }
-            let output_rust_file_string: String = format!(
-                "// jump to compiled code by searching for // compiled
-{}
-
-
-// compiled code //
-
-
-{}",
-                include_str!("still_core.rs"),
-                prettyplease::unparse(&compiled_project.rust),
-            );
+            let output_rust_file_string: String =
+                compiled_rust_to_file_content(&compiled_project.rust);
             if let Some(output_file_directory_path) = output_file_path.parent()
                 && let Err(error) = std::fs::create_dir_all(output_file_directory_path)
             {
@@ -487,6 +496,14 @@ fn initialize_project_state_from_source(
     let parsed_project: StillSyntaxProject = parse_still_syntax_project(&source);
     let compiled_project: CompiledProject =
         still_project_compile_to_rust(&mut errors, &parsed_project);
+    if let Ok(input_file_path) = url.to_file_path()
+        && std::fs::exists(input_file_path.with_extension("")).is_ok_and(|exists| exists)
+    {
+        let _: std::io::Result<()> = std::fs::write(
+            default_still_output_file_path_for_input_file_path(&input_file_path),
+            compiled_rust_to_file_content(&compiled_project.rust),
+        );
+    }
     publish_diagnostics(
         connection,
         lsp_types::PublishDiagnosticsParams {
@@ -498,7 +515,6 @@ fn initialize_project_state_from_source(
             version: None,
         },
     );
-    // TODO output the generated rust
     ProjectState {
         source: source,
         syntax: parsed_project,
