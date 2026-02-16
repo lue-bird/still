@@ -137,10 +137,10 @@ choice card Custom-joker-action
 # function (the first symbol is a backslash)
 \first-pattern, second-pattern > result-expression
 
-# a pattern can be a number, string, character, record, variant or...
-# ...a variable 
+# a pattern can be a number, string, character, record, variant or
+#     a variable (:type: is required)
 :str:incoming-string
-# ...a wildcard: match anything but don't store it in a variable
+#     a wildcard: match anything and discard (:type: is required)
 :card unt:_
 
 # for different cases of how a value looks, exhaustively decide what to do
