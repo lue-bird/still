@@ -222,8 +222,9 @@ cargo build
 Then point your editor to the created `???/target/debug/still lsp`.
 
 ## TODO (none are blocking, just additions)
+- make rename work on pattern variables
 - print variable declaration types more nicely (and generated types more concisely)
-- implement `StillIntoOwned::into_owned_overwriting` for generated structs and enums
+- implement `StillIntoOwned::into_owned_overwriting` for generated structs and enums (or remove it)
 
 ## considering
 - (leaning clear yes) add more core float operations like `sin`, `cos`, `pi`, `ln`

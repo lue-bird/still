@@ -536,23 +536,22 @@ fn respond_to_hover(
         } => {
             let origin_declaration_info_markdown: String = match &declaration_node.value {
                 StillSyntaxDeclaration::ChoiceType {
-                    name: origin_project_declaration_name,
+                    name: origin_project_declaration_maybe_name,
                     parameters: origin_project_declaration_parameters,
                     variants: origin_project_declaration_variants,
                 } => {
                     format!(
                         "{}{}",
-                        if Some(hovered_declaration_name)
-                            == origin_project_declaration_name
-                                .as_ref()
-                                .map(|node| node.value.as_ref())
+                        if origin_project_declaration_maybe_name
+                            .as_ref()
+                            .is_some_and(|node| node.value == hovered_declaration_name)
                         {
                             ""
                         } else {
                             "variant in\n"
                         },
                         &present_choice_type_declaration_info_markdown(
-                            origin_project_declaration_name
+                            origin_project_declaration_maybe_name
                                 .as_ref()
                                 .map(|n| n.value.as_str()),
                             documentation,
@@ -1111,11 +1110,32 @@ fn respond_to_rename(
                         name: to_rename_declaration_name,
                         including_declaration_name: true,
                     },
-                    StillSyntaxDeclaration::TypeAlias { .. }
-                    | StillSyntaxDeclaration::ChoiceType { .. } => StillSymbolToReference::Type {
+                    StillSyntaxDeclaration::TypeAlias { .. } => StillSymbolToReference::Type {
                         name: to_rename_declaration_name,
                         including_declaration_name: true,
                     },
+                    StillSyntaxDeclaration::ChoiceType {
+                        name: origin_project_declaration_maybe_name,
+                        ..
+                    } => {
+                        if origin_project_declaration_maybe_name
+                            .as_ref()
+                            .is_some_and(|node| node.value == to_rename_declaration_name)
+                        {
+                            StillSymbolToReference::Type {
+                                name: to_rename_declaration_name,
+                                including_declaration_name: true,
+                            }
+                        } else {
+                            StillSymbolToReference::Variant {
+                                origin_type_name: origin_project_declaration_maybe_name
+                                    .as_ref()
+                                    .map(|node| node.value.as_str()),
+                                name: to_rename_declaration_name,
+                                including_declaration_name: true,
+                            }
+                        }
+                    }
                 };
             let mut all_uses_of_at_docs_project_member: Vec<lsp_types::Range> = Vec::new();
             still_syntax_project_uses_of_symbol_into(
@@ -4443,58 +4463,54 @@ fn still_syntax_declaration_find_symbol_at_position<'a>(
                         position,
                     )
                 {
-                    Some(StillSyntaxNode {
+                    return Some(StillSyntaxNode {
                         value: StillSyntaxSymbol::ProjectDeclarationName {
                             name: &name_node.value,
                             declaration: still_syntax_declaration_node,
                             documentation: maybe_documentation,
                         },
                         range: name_node.range,
+                    });
+                }
+                parameters
+                    .iter()
+                    .find_map(|parameter_node| {
+                        if lsp_range_includes_position(parameter_node.range, position) {
+                            Some(StillSyntaxNode {
+                                value: StillSyntaxSymbol::TypeVariable {
+                                    scope_declaration: still_syntax_declaration_node.value,
+                                    name: &parameter_node.value,
+                                },
+                                range: parameter_node.range,
+                            })
+                        } else {
+                            None
+                        }
                     })
-                } else {
-                    parameters
-                        .iter()
-                        .find_map(|parameter_node| {
-                            if lsp_range_includes_position(parameter_node.range, position) {
+                    .or_else(|| {
+                        variants.iter().find_map(|variant| {
+                            if let Some(variant_name_node) = &variant.name
+                                && lsp_range_includes_position(variant_name_node.range, position)
+                            {
                                 Some(StillSyntaxNode {
-                                    value: StillSyntaxSymbol::TypeVariable {
-                                        scope_declaration: still_syntax_declaration_node.value,
-                                        name: &parameter_node.value,
+                                    value: StillSyntaxSymbol::ProjectDeclarationName {
+                                        name: &variant_name_node.value,
+                                        declaration: still_syntax_declaration_node,
+                                        documentation: maybe_documentation,
                                     },
-                                    range: parameter_node.range,
+                                    range: variant_name_node.range,
                                 })
                             } else {
-                                None
-                            }
-                        })
-                        .or_else(|| {
-                            variants.iter().find_map(|variant| {
-                                if let Some(variant_name_node) = &variant.name
-                                    && lsp_range_includes_position(
-                                        variant_name_node.range,
+                                variant.value.iter().find_map(|variant_value| {
+                                    still_syntax_type_find_symbol_at_position(
+                                        still_syntax_declaration_node.value,
+                                        still_syntax_node_as_ref(variant_value),
                                         position,
                                     )
-                                {
-                                    Some(StillSyntaxNode {
-                                        value: StillSyntaxSymbol::ProjectDeclarationName {
-                                            name: &variant_name_node.value,
-                                            declaration: still_syntax_declaration_node,
-                                            documentation: maybe_documentation,
-                                        },
-                                        range: variant_name_node.range,
-                                    })
-                                } else {
-                                    variant.value.iter().find_map(|variant_value| {
-                                        still_syntax_type_find_symbol_at_position(
-                                            still_syntax_declaration_node.value,
-                                            still_syntax_node_as_ref(variant_value),
-                                            position,
-                                        )
-                                    })
-                                }
-                            })
+                                })
+                            }
                         })
-                }
+                    })
             }
             StillSyntaxDeclaration::TypeAlias {
                 type_keyword_range,
@@ -4507,67 +4523,65 @@ fn still_syntax_declaration_find_symbol_at_position<'a>(
                     && (lsp_range_includes_position(name_node.range, position)
                         || lsp_range_includes_position(*type_keyword_range, position))
                 {
-                    Some(StillSyntaxNode {
+                    return Some(StillSyntaxNode {
                         value: StillSyntaxSymbol::ProjectDeclarationName {
                             name: &name_node.value,
                             declaration: still_syntax_declaration_node,
                             documentation: maybe_documentation,
                         },
                         range: name_node.range,
-                    })
-                } else {
-                    parameters
-                        .iter()
-                        .find_map(|parameter_node| {
-                            if lsp_range_includes_position(parameter_node.range, position) {
-                                Some(StillSyntaxNode {
-                                    value: StillSyntaxSymbol::TypeVariable {
-                                        scope_declaration: still_syntax_declaration_node.value,
-                                        name: &parameter_node.value,
-                                    },
-                                    range: parameter_node.range,
-                                })
-                            } else {
-                                None
-                            }
-                        })
-                        .or_else(|| {
-                            maybe_type.as_ref().and_then(|type_node| {
-                                still_syntax_type_find_symbol_at_position(
-                                    still_syntax_declaration_node.value,
-                                    still_syntax_node_as_ref(type_node),
-                                    position,
-                                )
-                            })
-                        })
+                    });
                 }
+                parameters
+                    .iter()
+                    .find_map(|parameter_node| {
+                        if lsp_range_includes_position(parameter_node.range, position) {
+                            Some(StillSyntaxNode {
+                                value: StillSyntaxSymbol::TypeVariable {
+                                    scope_declaration: still_syntax_declaration_node.value,
+                                    name: &parameter_node.value,
+                                },
+                                range: parameter_node.range,
+                            })
+                        } else {
+                            None
+                        }
+                    })
+                    .or_else(|| {
+                        maybe_type.as_ref().and_then(|type_node| {
+                            still_syntax_type_find_symbol_at_position(
+                                still_syntax_declaration_node.value,
+                                still_syntax_node_as_ref(type_node),
+                                position,
+                            )
+                        })
+                    })
             }
             StillSyntaxDeclaration::Variable {
                 name: name_node,
                 result: maybe_result,
             } => {
                 if lsp_range_includes_position(name_node.range, position) {
-                    Some(StillSyntaxNode {
+                    return Some(StillSyntaxNode {
                         value: StillSyntaxSymbol::ProjectDeclarationName {
                             name: &name_node.value,
                             declaration: still_syntax_declaration_node,
                             documentation: maybe_documentation,
                         },
                         range: name_node.range,
-                    })
-                } else {
-                    maybe_result.as_ref().and_then(|result_node| {
-                        still_syntax_expression_find_symbol_at_position(
-                            vec![],
-                            type_aliases,
-                            variable_declarations,
-                            still_syntax_declaration_node.value,
-                            still_syntax_node_as_ref(result_node),
-                            position,
-                        )
-                        .break_value()
-                    })
+                    });
                 }
+                maybe_result.as_ref().and_then(|result_node| {
+                    still_syntax_expression_find_symbol_at_position(
+                        vec![],
+                        type_aliases,
+                        variable_declarations,
+                        still_syntax_declaration_node.value,
+                        still_syntax_node_as_ref(result_node),
+                        position,
+                    )
+                    .break_value()
+                })
             }
         }
     }
