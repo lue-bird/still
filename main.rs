@@ -16646,10 +16646,6 @@ fn still_syntax_pattern_to_rust<'a>(
             }
         }
         StillSyntaxPattern::Record(fields) => {
-            // TODO check for duplictes
-            records_used.insert(sorted_field_names(
-                fields.iter().map(|field| &field.name.value),
-            ));
             let mut maybe_type_fields: Option<Vec<StillTypeField>> =
                 Some(Vec::with_capacity(fields.len()));
             let mut maybe_field_catches: Option<
@@ -16658,7 +16654,20 @@ fn still_syntax_pattern_to_rust<'a>(
             let mut maybe_rust_fields: Option<
                 syn::punctuated::Punctuated<syn::FieldPat, syn::token::Comma>,
             > = Some(syn::punctuated::Punctuated::new());
-            for field in fields {
+            'converting_fields: for field in fields {
+                if maybe_type_fields.as_ref().is_some_and(|type_fields| {
+                    type_fields
+                        .iter()
+                        .any(|type_field| type_field.name == field.name.value)
+                }) {
+                    errors.push(StillErrorNode {
+                        range: field.name.range,
+                        message: Box::from(
+                            "a field with this name already exists in the record pattern",
+                        ),
+                    });
+                    continue 'converting_fields;
+                }
                 let compiled_field_value: CompiledStillPattern = maybe_still_syntax_pattern_to_rust(
                     errors,
                     || StillErrorNode {
@@ -16714,6 +16723,11 @@ fn still_syntax_pattern_to_rust<'a>(
                         }
                     }
                 }
+            }
+            if let Some(type_fields) = &maybe_type_fields {
+                records_used.insert(sorted_field_names(
+                    type_fields.iter().map(|field| &field.name),
+                ));
             }
             CompiledStillPattern {
                 type_: maybe_type_fields.map(|type_fields| StillType::Record(type_fields)),
