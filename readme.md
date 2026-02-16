@@ -135,7 +135,7 @@ choice card Custom-joker-action
 :card unt:Joker 1
 
 # function (the first symbol is a backslash)
-\first-pattern, second_pattern > result-expression
+\first-pattern, second-pattern > result-expression
 
 # a pattern can be a number, string, character, record, variant or...
 # ...a variable 
@@ -222,6 +222,7 @@ cargo build
 Then point your editor to the created `???/target/debug/still lsp`.
 
 ## TODO (none are blocking, just additions)
+- check if types need to be added to generated rust for: `let`? lambdas that ignore/have a variable?
 - print variable declaration types more nicely (and generated types more concisely)
 - implement `StillIntoOwned::into_owned_overwriting` for generated structs and enums (or remove it)
 
