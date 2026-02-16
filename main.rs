@@ -16138,33 +16138,50 @@ fn still_syntax_type_to_type(
             })
         }
         StillSyntaxType::Record(fields) => {
-            // TODO fail if contains duplicate
-            let field_types: Vec<StillTypeField> = fields
-                .iter()
-                .map(|field| match &field.value {
+            let mut field_types: Vec<StillTypeField> = Vec::with_capacity(fields.capacity());
+            let mut any_field_value_has_error: bool = false;
+            for field in fields {
+                if field_types
+                    .iter()
+                    .any(|type_field| type_field.name == field.name.value)
+                {
+                    errors.push(StillErrorNode {
+                        range: field.name.range,
+                        message: Box::from(
+                            "a field with this name already exists in the record type",
+                        ),
+                    });
+                    return None;
+                }
+                let Some(field_value_node) = &field.value else {
+                    errors.push(StillErrorNode {
+                        range: field.name.range,
+                        message: Box::from(
+                            "missing field value after this name ..field-name.. here",
+                        ),
+                    });
+                    return None;
+                };
+                match still_syntax_type_to_type(
+                    errors,
+                    type_aliases,
+                    choice_types,
+                    still_syntax_node_as_ref(field_value_node),
+                ) {
                     None => {
-                        errors.push(StillErrorNode {
-                            range: field.name.range,
-                            message: Box::from(
-                                "missing field value after this name ..field-name.. here",
-                            ),
-                        });
-                        None
+                        any_field_value_has_error = true;
                     }
-                    Some(field_value_node) => {
-                        let field_value_type: StillType = still_syntax_type_to_type(
-                            errors,
-                            type_aliases,
-                            choice_types,
-                            still_syntax_node_as_ref(field_value_node),
-                        )?;
-                        Some(StillTypeField {
+                    Some(field_value_type) => {
+                        field_types.push(StillTypeField {
                             name: field.name.value.clone(),
                             value: field_value_type,
-                        })
+                        });
                     }
-                })
-                .collect::<Option<Vec<_>>>()?;
+                }
+            }
+            if any_field_value_has_error {
+                return None;
+            }
             Some(StillType::Record(field_types))
         }
     }
