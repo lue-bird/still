@@ -164,6 +164,26 @@ h z g-result
 ```
 Some syntax might not be listed, the examples may show more.
 
+## questions you might have
+
+### how is memory managed
+Regular types are passed by value, copying if necessary.
+`vec`, `str`, recursive variant values and closures however can be reference-counted,
+so passing structures containing them will clone if necessary.
+Reference-counting some `vec`s and `str`s enables a very important "trick":
+Mutating the underlying owned vector or string if only one instance is still alive.
+
+### why rust
+Massive piggyback: great stdlib, fast output, good ecosystem, much easier to compile to: native enum support, native pattern matching support, extensive compile-time checks, all that is gold.
+
+You might have heard that compilation can be slow for big projects
+but after switching to [the cranelift backend](https://github.com/rust-lang/rustc_codegen_cranelift) I haven't had any complaints (0.7-1.5s, 15k lines).
+
+### why no direct ffi, calling rust from still
+Inspired by elm, effects originate from a single place in your program,
+making it easy to: compile to other languages than rust, test in isolation, debug, reorder values without a hidden change in behavior.
+If you want to call a specific pure rust function, please ask me to add it to the still core declarations :3
+
 ## editor setups
 feel free to contribute as I only use vscodium
 
