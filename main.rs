@@ -14930,12 +14930,10 @@ fn still_name_to_uppercase_rust(name: &str) -> String {
         "Fn",
         // type variables used in core
         "A",
-        "N",
+        "B",
         "C",
         "E",
-        "State",
-        "Inputs",
-        "Output",
+        "N",
     ]
     .contains(&sanitized.as_str())
     {

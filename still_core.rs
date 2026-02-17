@@ -14,9 +14,7 @@ use std::marker::Copy;
 use std::ops::Fn;
 // core //
 
-fn closure_rc<Inputs, Output>(
-    closure: impl Fn(Inputs) -> Output + 'static,
-) -> std::rc::Rc<dyn Fn(Inputs) -> Output> {
+fn closure_rc<A, B>(closure: impl Fn(A) -> B + 'static) -> std::rc::Rc<dyn Fn(A) -> B> {
     std::rc::Rc::new(closure)
 }
 
@@ -338,11 +336,11 @@ fn chrs_to_str(chars: Vec<Chr>) -> Str {
 fn str_order(left: Str, right: Str) -> Order {
     Order::from_ordering(left.cmp(&right))
 }
-fn str_walk_chrs_from<State, E>(
+fn str_walk_chrs_from<C, E>(
     str: Str,
-    initial_state: State,
-    on_element: impl Fn(State, Chr) -> Continue_or_exit<State, E>,
-) -> Continue_or_exit<State, E> {
+    initial_state: C,
+    on_element: impl Fn(C, Chr) -> Continue_or_exit<C, E>,
+) -> Continue_or_exit<C, E> {
     Continue_or_exit::from_control_flow(std::iter::Iterator::try_fold(
         &mut str.as_str().chars(),
         initial_state,
@@ -533,11 +531,11 @@ fn vec_flatten<A: Clone>(vec_vec: Vec<Vec<A>>) -> Vec<A> {
         },
     })
 }
-fn vec_walk_from<A: Clone, State, E>(
+fn vec_walk_from<A: Clone, C, E>(
     vec: Vec<A>,
-    state: State,
-    on_element: impl Fn(State, A) -> Continue_or_exit<State, E>,
-) -> Continue_or_exit<State, E> {
+    state: C,
+    on_element: impl Fn(C, A) -> Continue_or_exit<C, E>,
+) -> Continue_or_exit<C, E> {
     match vec {
         Vec::Rc(vec) => match std::rc::Rc::try_unwrap(vec) {
             std::result::Result::Ok(vec) => {
