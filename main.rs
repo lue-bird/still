@@ -11824,7 +11824,7 @@ fn still_syntax_expression_to_rust<'a>(
                 FnRepresentation::Impl => rust_closure,
                 FnRepresentation::RcDyn => syn::Expr::Call(syn::ExprCall {
                     attrs: vec![],
-                    func: Box::new(syn_expr_reference(["closure_box"])),
+                    func: Box::new(syn_expr_reference(["closure_rc"])),
                     paren_token: syn::token::Paren(syn_span()),
                     args: std::iter::once(rust_closure).collect(),
                 }),
@@ -14914,7 +14914,7 @@ fn still_name_to_lowercase_rust(name: &str) -> String {
     if let Some(first) = sanitized.get_mut(0..=0) {
         first.make_ascii_lowercase();
     }
-    if rust_lowercase_keywords.contains(&sanitized.as_str()) || sanitized == "closure_box" {
+    if rust_lowercase_keywords.contains(&sanitized.as_str()) || sanitized == "closure_rc" {
         sanitized + "ø"
     } else {
         sanitized

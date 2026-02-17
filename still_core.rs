@@ -14,7 +14,7 @@ use std::marker::Copy;
 use std::ops::Fn;
 // core //
 
-fn closure_box<Inputs, Output>(
+fn closure_rc<Inputs, Output>(
     closure: impl Fn(Inputs) -> Output + 'static,
 ) -> std::rc::Rc<dyn Fn(Inputs) -> Output> {
     std::rc::Rc::new(closure)
