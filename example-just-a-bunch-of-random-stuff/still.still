@@ -119,3 +119,15 @@ rope-into \:str:builder :rope:rope >
     | :rope:Append { left :rope:left, right :rope:_ } >
         rope-into builder left
 
+temporary-function
+    let function \:int:_ > 0
+    2
+
+function-taking-function \:\unt > unt:f >
+    f 0
+
+using-function-taking-function \:\unt > unt:f >
+    function-taking-function f
+
+function-taking-function-taking-function-taking-function \:\\\unt > unt > unt > unt:f >
+    f (\:\unt > unt:g > g 0)

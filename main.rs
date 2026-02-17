@@ -10479,17 +10479,11 @@ fn variable_declaration_to_rust<'a>(
                     > = result_lambda
                         .inputs
                         .into_iter()
-                        .zip(input_types.iter())
-                        .map(|(parameter_pat, parameter_type)| {
-                            syn::FnArg::Typed(syn::PatType {
-                                pat: Box::new(parameter_pat),
-                                attrs: vec![],
-                                colon_token: syn::token::Colon(syn_span()),
-                                ty: Box::new(still_type_to_rust(
-                                    FnRepresentation::Impl,
-                                    parameter_type,
-                                )),
-                            })
+                        .filter_map(|parameter_pat| match parameter_pat {
+                            syn::Pat::Type(typed_parameter_pat) => {
+                                Some(syn::FnArg::Typed(typed_parameter_pat))
+                            }
+                            _ => None,
                         })
                         .collect();
                     Some(CompiledVariableDeclaration {
@@ -11676,6 +11670,31 @@ fn still_syntax_expression_to_rust<'a>(
             arrow_key_symbol_range: maybe_arrow_key_symbol_range,
             result: maybe_lambda_result,
         } => {
+            if parameters.is_empty() {
+                errors.push(StillErrorNode {
+                    range: lsp_types::Range {
+                        start: expression_node.range.start,
+                        end: maybe_arrow_key_symbol_range
+                            .map(|r| r.end)
+                            .unwrap_or(expression_node.range.end),
+                    },
+                    message: Box::from(
+                        "missing parameters between \\here, some, patterns > ..result... If you think you did put patterns there, re-check for syntax errors like a missing :type: before variables, _ or variants",
+                    ),
+                });
+            } else if maybe_arrow_key_symbol_range.is_none() {
+                errors.push(StillErrorNode {
+                    range: lsp_types::Range {
+                        start: expression_node.range.start,
+                        end: maybe_arrow_key_symbol_range
+                            .map(|r| r.end)
+                            .unwrap_or(expression_node.range.end),
+                    },
+                    message: Box::from(
+                        "missing > symbol between \\..patterns.. here ..result... If you think you did put a > there, re-check for syntax errors like a missing :type: before pattern variables, _ or variants",
+                    ),
+                });
+            }
             let mut parameter_introduced_bindings: std::collections::HashMap<
                 &str,
                 StillLocalBindingCompileInfo,
@@ -11707,7 +11726,15 @@ fn still_syntax_expression_to_rust<'a>(
                         },
                     }
                     (
-                        compiled_parameter.rust.unwrap_or_else(syn_pat_wild),
+                        compiled_parameter.rust.zip(compiled_parameter.type_.as_ref())
+                            .map(|(rust_pat, type_)| {
+                                syn::Pat::Type(syn::PatType {
+                                    attrs: vec![],
+                                    pat: Box::new(rust_pat),
+                                    colon_token: syn::token::Colon(syn_span()),
+                                    ty: Box::new(still_type_to_rust(closure_representation, type_))
+                                })
+                            }).unwrap_or_else(syn_pat_wild),
                         compiled_parameter.type_,
                     )
                 })
@@ -11794,7 +11821,10 @@ fn still_syntax_expression_to_rust<'a>(
                 FnRepresentation::RcDyn,
                 maybe_lambda_result.as_ref().map(still_syntax_node_unbox),
             );
-            if has_inexhaustive_pattern {
+            if parameters.is_empty()
+                || has_inexhaustive_pattern
+                || rust_patterns.len() < parameters.len()
+            {
                 return CompiledStillExpression {
                     rust: syn_expr_todo(),
                     type_: None,
