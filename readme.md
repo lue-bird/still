@@ -238,6 +238,7 @@ Then point your editor to the created `???/target/debug/still lsp`.
 - remove record access syntax in favor of destructuring,
   otherwise provide hover info for record field access
 - (leaning clear yes) add more core float operations like `sin`, `cos`, `pi`, `ln`
+- (leaning towards yes) add `unts-sum`, `decs-sum`, `ints-sum`, `unts-product`, `ints-product`, `decs-product`
 - (leaning towards yes) add core bitwise and, or, xor, shifts, complement for the integer number types
 - (leaning towards yes) add `vec-walk-backwards-from`, `str-walk-chrs-backwards-from`
 - (leaning towards yes) add `str-attach-unt`, `str-attach-int`, `str-attach-dec`
