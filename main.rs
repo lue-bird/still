@@ -4956,7 +4956,7 @@ fn still_syntax_expression_find_symbol_at_position<'a>(
                                     name: &name_node.value,
                                     type_: maybe_type.as_ref().map(|n| &n.value),
                                 },
-                                range: expression_node.range,
+                                range: name_node.range,
                             });
                         }
                         match maybe_value {
