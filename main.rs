@@ -11800,7 +11800,10 @@ fn still_syntax_expression_to_rust<'a>(
                 }
                 Ok(dec) => syn::Expr::Lit(syn::ExprLit {
                     attrs: vec![],
-                    lit: syn::Lit::Float(syn::LitFloat::new(&dec.to_string(), syn_span())),
+                    lit: syn::Lit::Float(syn::LitFloat::new(
+                        &(dec.to_string() + "f64"),
+                        syn_span(),
+                    )),
                 }),
             },
         },
