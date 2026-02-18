@@ -4,7 +4,9 @@
     non_shorthand_field_patterns,
     non_camel_case_types,
     clippy::needless_pass_by_value,
-    clippy::wrong_self_convention
+    clippy::wrong_self_convention,
+    clippy::redundant_field_names,
+    clippy::type_complexity
 )]
 extern crate std;
 use std::clone::Clone;
