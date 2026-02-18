@@ -7517,7 +7517,43 @@ fn parse_still_syntax_expression_space_separated(
             .or_else(|| parse_still_syntax_expression_lambda(state))
             .or_else(|| parse_still_syntax_expression_variable_or_call(state))
             .or_else(|| parse_still_syntax_expression_with_comment_node(state))
-            .or_else(|| parse_still_syntax_expression_not_space_separated(state))?;
+            .or_else(|| parse_still_syntax_expression_string(state))
+            .or_else(|| {
+                let start_position: lsp_types::Position = state.position;
+                parse_still_syntax_expression_parenthesized(state)
+                    .or_else(|| parse_still_syntax_expression_record_or_record_update(state))
+                    .or_else(|| parse_still_char(state).map(StillSyntaxExpression::Char))
+                    .map(|start_expression| {
+                        parse_still_syntax_expression_maybe_with_record_accesses(
+                            state,
+                            StillSyntaxNode {
+                                range: lsp_types::Range {
+                                    start: start_position,
+                                    end: state.position,
+                                },
+                                value: start_expression,
+                            },
+                        )
+                    })
+                    .or_else(|| {
+                        parse_still_syntax_expression_list(state).map(|node| StillSyntaxNode {
+                            range: lsp_types::Range {
+                                start: start_position,
+                                end: state.position,
+                            },
+                            value: node,
+                        })
+                    })
+                    .or_else(|| {
+                        parse_still_syntax_expression_number(state).map(|node| StillSyntaxNode {
+                            range: lsp_types::Range {
+                                start: start_position,
+                                end: state.position,
+                            },
+                            value: node,
+                        })
+                    })
+            })?;
     parse_still_whitespace(state);
     let mut cases: Vec<StillSyntaxExpressionCase> = Vec::new();
     'parsing_cases: while let Some(parsed_case) = parse_still_syntax_expression_case(state) {
@@ -7622,16 +7658,32 @@ fn parse_still_syntax_expression_variable_or_call(
             }
         }
     }
-    Some(StillSyntaxNode {
-        range: lsp_types::Range {
-            start: variable_node.range.start,
-            end: call_end_position,
-        },
-        value: StillSyntaxExpression::VariableOrCall {
-            variable: variable_node,
-            arguments,
-        },
-    })
+    if arguments.is_empty() {
+        Some(parse_still_syntax_expression_maybe_with_record_accesses(
+            state,
+            StillSyntaxNode {
+                range: lsp_types::Range {
+                    start: variable_node.range.start,
+                    end: call_end_position,
+                },
+                value: StillSyntaxExpression::VariableOrCall {
+                    variable: variable_node,
+                    arguments: arguments,
+                },
+            },
+        ))
+    } else {
+        Some(StillSyntaxNode {
+            range: lsp_types::Range {
+                start: variable_node.range.start,
+                end: call_end_position,
+            },
+            value: StillSyntaxExpression::VariableOrCall {
+                variable: variable_node,
+                arguments: arguments,
+            },
+        })
+    }
 }
 fn parse_still_syntax_expression_variant_node(
     state: &mut ParseState,
@@ -7678,28 +7730,54 @@ fn parse_still_syntax_expression_with_comment_node(
 fn parse_still_syntax_expression_not_space_separated(
     state: &mut ParseState,
 ) -> Option<StillSyntaxNode<StillSyntaxExpression>> {
-    let start_position: lsp_types::Position = state.position;
-    let mut result_node: StillSyntaxNode<StillSyntaxExpression> =
-        parse_still_syntax_expression_list(state)
-            .or_else(|| parse_still_syntax_expression_parenthesized(state))
+    parse_still_syntax_expression_string(state).or_else(|| {
+        let start_position: lsp_types::Position = state.position;
+        parse_still_syntax_expression_parenthesized(state)
             .or_else(|| parse_still_syntax_expression_variable(state))
             .or_else(|| parse_still_syntax_expression_record_or_record_update(state))
-            .or_else(|| parse_still_syntax_expression_number(state))
             .or_else(|| parse_still_char(state).map(StillSyntaxExpression::Char))
-            .map(|start_expression| StillSyntaxNode {
-                range: lsp_types::Range {
-                    start: start_position,
-                    end: state.position,
-                },
-                value: start_expression,
+            .map(|start_expression| {
+                parse_still_syntax_expression_maybe_with_record_accesses(
+                    state,
+                    StillSyntaxNode {
+                        range: lsp_types::Range {
+                            start: start_position,
+                            end: state.position,
+                        },
+                        value: start_expression,
+                    },
+                )
             })
-            .or_else(|| parse_still_syntax_expression_string(state))?;
+            .or_else(|| {
+                parse_still_syntax_expression_list(state).map(|node| StillSyntaxNode {
+                    range: lsp_types::Range {
+                        start: start_position,
+                        end: state.position,
+                    },
+                    value: node,
+                })
+            })
+            .or_else(|| {
+                parse_still_syntax_expression_number(state).map(|node| StillSyntaxNode {
+                    range: lsp_types::Range {
+                        start: start_position,
+                        end: state.position,
+                    },
+                    value: node,
+                })
+            })
+    })
+}
+fn parse_still_syntax_expression_maybe_with_record_accesses(
+    state: &mut ParseState,
+    mut result_node: StillSyntaxNode<StillSyntaxExpression>,
+) -> StillSyntaxNode<StillSyntaxExpression> {
     while parse_symbol(state, ".") {
         let maybe_field_name: Option<StillSyntaxNode<StillName>> =
             parse_still_lowercase_name_node(state);
         result_node = StillSyntaxNode {
             range: lsp_types::Range {
-                start: start_position,
+                start: result_node.range.start,
                 end: state.position,
             },
             value: StillSyntaxExpression::RecordAccess {
@@ -7708,7 +7786,7 @@ fn parse_still_syntax_expression_not_space_separated(
             },
         }
     }
-    Some(result_node)
+    result_node
 }
 fn parse_still_syntax_expression_variable_standalone(
     state: &mut ParseState,
