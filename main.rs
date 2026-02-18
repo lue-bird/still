@@ -763,7 +763,7 @@ fn local_binding_info_markdown(
             None => "variable introduced in pattern".to_string(),
             Some(type_) => {
                 let mut type_string: String = String::new();
-                still_type_into(&mut type_string, 1, type_);
+                still_type_info_into(&mut type_string, 1, type_);
                 format!(
                     "variable introduced in pattern
 ```still
@@ -785,7 +785,7 @@ fn let_declaration_info_markdown(maybe_type_type: Option<&StillType>) -> String 
         None => "let variable".to_string(),
         Some(hovered_local_binding_type) => {
             let mut type_string: String = String::new();
-            still_type_into(&mut type_string, 1, hovered_local_binding_type);
+            still_type_info_into(&mut type_string, 1, hovered_local_binding_type);
             format!(
                 "let variable
 ```still
@@ -1677,7 +1677,7 @@ fn present_variable_declaration_info_with_complete_type_markdown(
     let description: String = match maybe_variable_type {
         Some(variable_type) => {
             let mut type_string: String = String::new();
-            still_type_into(&mut type_string, 1, variable_type);
+            still_type_info_into(&mut type_string, 1, variable_type);
             format!(
                 "project variable
 ```still
@@ -9096,7 +9096,7 @@ str-find-spaces-in-first-line \:str:str >
 ```
 As you're probably realizing, this is powerful but
 both inconvenient and not very declarative (similar to a for each in loop in other languages).
-I recommend creating helpers for common cases like mapping to an `opt` and keeping the `Present` ones.
+I recommend creating helpers for common cases like splitting into lines.
 ",
             ),
             (
@@ -10441,7 +10441,7 @@ fn variable_declaration_to_rust<'a>(
                 });
                 if !output_type_parameters.is_empty() {
                     let mut full_type_as_string: String = String::new();
-                    still_type_into(&mut full_type_as_string, 0, &type_);
+                    still_type_info_into(&mut full_type_as_string, 0, &type_);
                     errors.push(StillErrorNode {
                         range: variable_declaration_info.name.range,
                         message: format!(
@@ -10590,7 +10590,7 @@ fn variable_declaration_to_rust<'a>(
                 still_type_variables_into(&mut type_parameters, type_not_function);
                 if !type_parameters.is_empty() {
                     let mut full_type_as_string: String = String::new();
-                    still_type_into(&mut full_type_as_string, 0, &type_);
+                    still_type_info_into(&mut full_type_as_string, 0, &type_);
                     errors.push(StillErrorNode {
                         range: variable_declaration_info.name.range,
                         message: format!(
@@ -11003,49 +11003,66 @@ fn still_type_diff_into(so_far: &mut String, indent: usize, type_diff: &StillTyp
     match type_diff {
         StillTypeDiff::Conflict { expected, actual } => {
             so_far.push_str("expected:");
-            linebreak_indented_into(so_far, next_indent(indent));
-            still_type_into(so_far, next_indent(indent), expected);
+            space_or_linebreak_indented_into(
+                so_far,
+                still_type_info_line_span(expected),
+                next_indent(indent),
+            );
+            still_type_info_into(so_far, next_indent(indent), expected);
             linebreak_indented_into(so_far, indent);
             so_far.push_str("actual:");
-            linebreak_indented_into(so_far, next_indent(indent));
-            still_type_into(so_far, next_indent(indent), actual);
+            space_or_linebreak_indented_into(
+                so_far,
+                still_type_info_line_span(actual),
+                next_indent(indent),
+            );
+            still_type_info_into(so_far, next_indent(indent), actual);
         }
         StillTypeDiff::Variable(name) => {
             so_far.push_str(name);
         }
         StillTypeDiff::Function { inputs, output } => {
-            so_far.push_str("\\ ");
+            so_far.push('\\');
+            let line_span: LineSpan = still_type_diff_line_span(type_diff);
+            if line_span == LineSpan::Multiple {
+                so_far.push(' ');
+            }
             if let Some((input0, input1_up)) = inputs.split_first() {
                 still_type_diff_into(so_far, indent + 2, input0);
                 for input in input1_up {
-                    linebreak_indented_into(so_far, indent);
+                    if line_span == LineSpan::Multiple {
+                        linebreak_indented_into(so_far, indent);
+                    }
                     so_far.push_str(", ");
                     still_type_diff_into(so_far, indent + 2, input);
                 }
             }
-            linebreak_indented_into(so_far, indent);
+            space_or_linebreak_indented_into(so_far, line_span, indent);
             so_far.push('>');
-            linebreak_indented_into(so_far, next_indent(indent));
+            space_or_linebreak_indented_into(so_far, line_span, next_indent(indent));
             still_type_diff_into(so_far, next_indent(indent), output);
         }
         StillTypeDiff::ChoiceConstruct { name, arguments } => {
             so_far.push_str(name);
+            let line_span: LineSpan = still_type_diff_line_span(type_diff);
             for argument in arguments {
-                linebreak_indented_into(so_far, next_indent(indent));
+                space_or_linebreak_indented_into(so_far, line_span, next_indent(indent));
                 let should_parenthesize_argument: bool = match argument {
-                    StillTypeDiff::Variable(_) => true,
+                    StillTypeDiff::Variable(_) => false,
                     StillTypeDiff::Conflict { .. } => true,
                     StillTypeDiff::Function { .. } => true,
                     StillTypeDiff::ChoiceConstruct {
                         name: _,
                         arguments: argument_arguments,
-                    } => argument_arguments.is_empty(),
+                    } => !argument_arguments.is_empty(),
                     StillTypeDiff::Record(_) => false,
                 };
                 if should_parenthesize_argument {
                     so_far.push('(');
                     still_type_diff_into(so_far, next_indent(indent) + 1, argument);
-                    linebreak_indented_into(so_far, next_indent(indent));
+                    if still_type_diff_line_span(argument) == LineSpan::Multiple {
+                        linebreak_indented_into(so_far, next_indent(indent));
+                    }
                     so_far.push(')');
                 } else {
                     still_type_diff_into(so_far, next_indent(indent), argument);
@@ -11058,13 +11075,14 @@ fn still_type_diff_into(so_far: &mut String, indent: usize, type_diff: &StillTyp
             }
             [field0, field1_up @ ..] => {
                 so_far.push_str("{ ");
+                let line_span: LineSpan = still_type_diff_line_span(type_diff);
                 still_type_diff_field_into(so_far, indent, field0);
                 for field in field1_up {
-                    linebreak_indented_into(so_far, indent);
+                    space_or_linebreak_indented_into(so_far, line_span, indent);
                     so_far.push_str(", ");
                     still_type_diff_field_into(so_far, indent, field);
                 }
-                linebreak_indented_into(so_far, indent);
+                space_or_linebreak_indented_into(so_far, line_span, indent);
                 so_far.push('}');
             }
         },
@@ -11076,49 +11094,94 @@ fn still_type_diff_field_into(
     type_diff_field: &StillTypeDiffField,
 ) {
     so_far.push_str(&type_diff_field.name);
-    linebreak_indented_into(so_far, next_indent(indent));
+    space_or_linebreak_indented_into(
+        so_far,
+        still_type_diff_line_span(&type_diff_field.value),
+        next_indent(indent),
+    );
     still_type_diff_into(so_far, next_indent(indent), &type_diff_field.value);
 }
-fn still_type_into(so_far: &mut String, indent: usize, type_: &StillType) {
+const type_info_line_length_estimate_maximum: usize = 56;
+fn still_type_diff_line_span(type_diff: &StillTypeDiff) -> LineSpan {
+    if still_type_diff_length_estimate(type_diff) <= type_info_line_length_estimate_maximum {
+        LineSpan::Single
+    } else {
+        LineSpan::Multiple
+    }
+}
+fn still_type_diff_length_estimate(type_diff: &StillTypeDiff) -> usize {
+    match type_diff {
+        StillTypeDiff::Conflict { .. } => type_info_line_length_estimate_maximum + 1,
+        StillTypeDiff::Variable(variable_name) => variable_name.len(),
+        StillTypeDiff::Function { inputs, output } => {
+            still_type_diff_length_estimate(output)
+                + inputs
+                    .iter()
+                    .map(still_type_diff_length_estimate)
+                    .sum::<usize>()
+        }
+        StillTypeDiff::ChoiceConstruct { name, arguments } => {
+            name.len()
+                + arguments
+                    .iter()
+                    .map(still_type_diff_length_estimate)
+                    .sum::<usize>()
+        }
+        StillTypeDiff::Record(fields) => fields
+            .iter()
+            .map(|field| field.name.len() + still_type_diff_length_estimate(&field.value))
+            .sum(),
+    }
+}
+fn still_type_info_into(so_far: &mut String, indent: usize, type_: &StillType) {
     match type_ {
         StillType::Variable(name) => {
             so_far.push_str(name);
         }
         StillType::Function { inputs, output } => {
-            so_far.push_str("\\ ");
+            so_far.push('\\');
+            let line_span: LineSpan = still_type_info_line_span(type_);
+            if line_span == LineSpan::Multiple {
+                so_far.push(' ');
+            }
             if let Some((input0, input1_up)) = inputs.split_first() {
-                still_type_into(so_far, indent + 2, input0);
+                still_type_info_into(so_far, indent + 2, input0);
                 for input in input1_up {
-                    linebreak_indented_into(so_far, indent);
+                    if line_span == LineSpan::Multiple {
+                        linebreak_indented_into(so_far, indent);
+                    }
                     so_far.push_str(", ");
-                    still_type_into(so_far, indent + 2, input);
+                    still_type_info_into(so_far, indent + 2, input);
                 }
             }
-            linebreak_indented_into(so_far, indent);
+            space_or_linebreak_indented_into(so_far, line_span, indent);
             so_far.push('>');
-            linebreak_indented_into(so_far, next_indent(indent));
-            still_type_into(so_far, next_indent(indent), output);
+            space_or_linebreak_indented_into(so_far, line_span, next_indent(indent));
+            still_type_info_into(so_far, next_indent(indent), output);
         }
         StillType::ChoiceConstruct { name, arguments } => {
             so_far.push_str(name);
+            let line_span: LineSpan = still_type_info_line_span(type_);
             for argument in arguments {
-                linebreak_indented_into(so_far, next_indent(indent));
+                space_or_linebreak_indented_into(so_far, line_span, next_indent(indent));
                 let should_parenthesize_argument: bool = match argument {
-                    StillType::Variable(_) => true,
+                    StillType::Variable(_) => false,
+                    StillType::Record(_) => false,
                     StillType::Function { .. } => true,
                     StillType::ChoiceConstruct {
                         name: _,
                         arguments: argument_arguments,
                     } => !argument_arguments.is_empty(),
-                    StillType::Record(_) => false,
                 };
                 if should_parenthesize_argument {
                     so_far.push('(');
-                    still_type_into(so_far, next_indent(indent) + 1, argument);
-                    linebreak_indented_into(so_far, next_indent(indent));
+                    still_type_info_into(so_far, next_indent(indent) + 1, argument);
+                    if still_type_info_line_span(argument) == LineSpan::Multiple {
+                        linebreak_indented_into(so_far, next_indent(indent));
+                    }
                     so_far.push(')');
                 } else {
-                    still_type_into(so_far, next_indent(indent), argument);
+                    still_type_info_into(so_far, next_indent(indent), argument);
                 }
             }
         }
@@ -11128,13 +11191,14 @@ fn still_type_into(so_far: &mut String, indent: usize, type_: &StillType) {
             }
             [field0, field1_up @ ..] => {
                 so_far.push_str("{ ");
+                let line_span: LineSpan = still_type_info_line_span(type_);
                 still_type_field_into(so_far, indent, field0);
                 for field in field1_up {
-                    linebreak_indented_into(so_far, indent);
+                    space_or_linebreak_indented_into(so_far, line_span, indent);
                     so_far.push_str(", ");
                     still_type_field_into(so_far, indent, field);
                 }
-                linebreak_indented_into(so_far, indent);
+                space_or_linebreak_indented_into(so_far, line_span, indent);
                 so_far.push('}');
             }
         },
@@ -11142,8 +11206,39 @@ fn still_type_into(so_far: &mut String, indent: usize, type_: &StillType) {
 }
 fn still_type_field_into(so_far: &mut String, indent: usize, type_field: &StillTypeField) {
     so_far.push_str(&type_field.name);
-    linebreak_indented_into(so_far, next_indent(indent));
-    still_type_into(so_far, next_indent(indent), &type_field.value);
+    space_or_linebreak_indented_into(
+        so_far,
+        still_type_info_line_span(&type_field.value),
+        next_indent(indent),
+    );
+    still_type_info_into(so_far, next_indent(indent), &type_field.value);
+}
+fn still_type_info_line_span(type_: &StillType) -> LineSpan {
+    if still_type_length_estimate(type_) <= type_info_line_length_estimate_maximum {
+        LineSpan::Single
+    } else {
+        LineSpan::Multiple
+    }
+}
+fn still_type_length_estimate(type_: &StillType) -> usize {
+    match type_ {
+        StillType::Variable(variable_name) => variable_name.len(),
+        StillType::Function { inputs, output } => {
+            still_type_length_estimate(output)
+                + inputs.iter().map(still_type_length_estimate).sum::<usize>()
+        }
+        StillType::ChoiceConstruct { name, arguments } => {
+            name.len()
+                + arguments
+                    .iter()
+                    .map(still_type_length_estimate)
+                    .sum::<usize>()
+        }
+        StillType::Record(fields) => fields
+            .iter()
+            .map(|field| field.name.len() + still_type_length_estimate(&field.value))
+            .sum(),
+    }
 }
 
 /// None means the types are equal
@@ -12153,7 +12248,7 @@ fn still_syntax_expression_to_rust<'a>(
                                 let mut error_message: String = String::from(
                                     "this variant is missing its value. In the origin choice declaration, it's type is declared as\n",
                                 );
-                                still_type_into(
+                                still_type_info_into(
                                     &mut error_message,
                                     0,
                                     &declared_variant_value_type.type_,
@@ -13016,7 +13111,7 @@ fn still_syntax_expression_to_rust<'a>(
                 let mut error_message: String = String::from(
                     "type of this record to update { ..here, ... ... } is not a record but\n",
                 );
-                still_type_into(&mut error_message, 0, &record_to_update_type);
+                still_type_info_into(&mut error_message, 0, &record_to_update_type);
                 errors.push(StillErrorNode {
                     range: record_to_update_node.range,
                     message: error_message.into_boxed_str(),
@@ -14559,7 +14654,7 @@ fn still_syntax_pattern_to_rust<'a>(
                                 let mut error_message: String = String::from(
                                     "this variant is missing its value. In the origin choice declaration, it's type is declared as\n",
                                 );
-                                still_type_into(
+                                still_type_info_into(
                                     &mut error_message,
                                     0,
                                     &declared_variant_value_type.type_,

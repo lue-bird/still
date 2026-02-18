@@ -234,11 +234,8 @@ cargo build
 Then point your editor to the created `???/target/debug/still lsp`.
 
 ## TODO (none are blocking, just additions)
-- check if types need to be added to generated rust for: `let`? lambdas that ignore/have a variable?
-- add Range<usize> manually to the Vec::Rc and Str::Rc case
-- print variable declaration types more nicely (and generated types more concisely)
-- implement `StillIntoOwned::into_owned_overwriting` for generated structs and enums (or remove it)
 - improve condition for printing escaped characters. Maybe only do it for control characters?
+- fix bug with completion suggestions only respecting the characters after -
 
 ## considering
 - (leaning clear yes) add more core float operations like `sin`, `cos`, `pi`, `ln`
@@ -246,13 +243,14 @@ Then point your editor to the created `???/target/debug/still lsp`.
 - (leaning towards yes) add `vec-walk-backwards-from`, `str-walk-chrs-backwards-from`
 - (leaning towards yes) add `str-attach-unt`, `str-attach-int`, `str-attach-dec`
 - (leaning towards yes) rename chr to char
+- switch all core numbers to either 32 bit or 64 bit (64 bit would be nice for conversions if there are 32bit variations in the future and also be a reasonable default fur use as posix time or random seed, 32 bit is nice for chr conversion, default memory efficiency)
 - (leaning towards yes) allow comments before variant (field name, case?, variant?)
 - (to make some parts almost infinitely scalable:) for formatting: leave declarations fully outside of "touched ranges" alone; for compilation: if touched only in one declaration and its type ends up the same, only change that declaration's output, (optionally: if type changed, recompile "downstream"); also, when edited range lies exclusively between existing declaration ranges, only compile that one
 - in syntax tree, use separate range type for single-line tokens like keywords, symbols, names etc to save on memory consumption
 - (seems not worth the analysis cost but a simpler version maybe is) avoid unnecessary clones by field
 - (leaning towards no, sadly) replace non-recursive nominal-ish choice types by structural-ish choice types. Should be fairly easy to implement as `enum Variant0Variant1<Variant0, Variant1>` but still alright for FFI (you always have to type `Variant0Variant1::Variant0` similar to record structs currently _but_ crucially you have the option to use a still-declared type alias like `type Choice<'a> = Variant0Variant1<usize, &'a str>` to write `Choice::Variant0`)
 - (currently no idea how to implement in rust, maybe can be done in user land given that it required Hash but I'd like order functions to be given for each operation or similar?) add `map`, `set` core types
-- switch all core numbers to either 32 bit or 64 bit (64 bit would be nice for conversions if there are 32bit variations in the future and also be a reasonable default fur use as posix time or random seed, 32 bit is nice for chr conversion, default memory efficiency)
+- add Range<usize> manually to the Vec::Rc and Str::Rc case (this does trap/"leak" big strings and vecs, JVM seems to have switched away for that reason)
 - (leaning towards no) extend typing model to only specify type variables, so `myFunction<int, str>`, `[]<int>`, `Present<int> 1`, similar to dhall and zig (but worse, because not first class. If it was you could pass types in records etc).
 
   ```still
