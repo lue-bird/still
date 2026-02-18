@@ -7932,7 +7932,7 @@ fn parse_still_syntax_expression_case(state: &mut ParseState) -> Option<ParsedSt
         }),
         Some(arrow_key_symbol_range) => {
             parse_still_whitespace(state);
-            if state.position.character <= u32::from(state.indent) {
+            if state.position.character <= bar_key_symbol_range.start.character {
                 let maybe_result: Option<StillSyntaxNode<StillSyntaxExpression>> =
                     parse_still_syntax_expression_space_separated(state);
                 Some(ParsedStillExpressionCase {
