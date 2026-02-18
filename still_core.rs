@@ -63,7 +63,7 @@ fn unt_to_int(unt: Unt) -> Int {
 }
 #[expect(clippy::cast_precision_loss)]
 fn unt_to_dec(unt: Unt) -> Dec {
-    unt as f32
+    unt as Dec
 }
 fn unt_to_str(unt: Unt) -> Str {
     Str::from_string(std::format!("{}", unt))
@@ -100,7 +100,7 @@ fn int_to_unt(int: Int) -> Opt<Unt> {
 }
 #[expect(clippy::cast_precision_loss)]
 fn int_to_dec(int: Int) -> Dec {
-    int as f32
+    int as Dec
 }
 fn int_to_str(int: Int) -> Str {
     Str::from_string(std::format!("{}", int))
@@ -112,7 +112,7 @@ fn str_to_int(str: Str) -> Opt<Int> {
     }
 }
 
-pub type Dec = f32;
+pub type Dec = f64;
 
 fn dec_negate(dec: Dec) -> Dec {
     -dec
