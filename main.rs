@@ -3598,7 +3598,7 @@ fn still_syntax_expression_not_parenthesized_into(
             }
             Ok(value) => {
                 use std::fmt::Write as _;
-                let _ = write!(so_far, "{}", value);
+                let _ = write!(so_far, "{:?}", value);
             }
         },
         StillSyntaxExpression::Unt(representation) => {
