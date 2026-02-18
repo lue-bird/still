@@ -162,7 +162,7 @@ g y first-result
 | :g-result:g-result >
 h z g-result
 ```
-Some syntax might not be listed, the examples may show more.
+That should be all. If not, the examples may show more.
 
 ## questions you might have
 
