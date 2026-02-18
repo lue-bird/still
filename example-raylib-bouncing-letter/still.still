@@ -1,0 +1,106 @@
+
+
+ansi-clear-screen
+    "\u{1B}c"
+
+type state =
+    { window-width dec
+    , window-height dec
+    , x dec
+    , y dec
+    , velocity-x dec
+    , velocity-y dec
+    }
+
+initial-state \{ window-width :dec:window-width, window-height :dec:window-height } >
+    :state:
+    { x 0.0
+    , y 0.0
+    , velocity-x 0.0
+    , velocity-y 0.4
+    , window-width window-width
+    , window-height window-height
+    }
+
+interface \:state:state >
+    [ :io state:Display
+        [ let explainer-text
+            "arrow keys"
+          let explainer-text-height
+            0.1
+          { str explainer-text
+          , x
+                dec-mul state.window-width
+                    (dec-add 0.5
+                        (dec-mul -0.5 (text-width explainer-text explainer-text-height))
+                    )
+          , y dec-mul state.window-height 0.2
+          , size dec-mul state.window-height explainer-text-height
+          }
+        , { str "Ö"
+          , x dec-mul state.window-width (dec-add 0.5 (dec-add state.x (dec-mul -0.5 player-width)))
+          , y dec-mul state.window-height (dec-add 0.5 (dec-negate (dec-add state.y (dec-mul 0.5 player-width))))
+          , size dec-mul state.window-height player-height
+          }
+        ]
+    , :io state:Key-pressed
+        \:unt:maybe-pressed-key >
+            maybe-pressed-key
+            | # right arrow
+              262
+            >
+                { ..state, velocity-x dec-add state.x 0.8 }
+            | # left arrow
+              263
+            >
+                { ..state, velocity-x dec-add state.x -0.8 }
+            | :unt:_ >
+                state
+    , :io state:Frame-passed
+        \:dec:seconds-since-last-frame >
+            let new-velocity-y
+                dec-add state.velocity-y (dec-mul -0.8 seconds-since-last-frame)
+            let future-x
+                dec-add state.x (dec-mul state.velocity-x seconds-since-last-frame)
+            let future-y
+                dec-add state.y (dec-mul new-velocity-y seconds-since-last-frame)
+            { ..state
+            , velocity-y
+                dec-order future-y (dec-add 0.5 (dec-mul -0.5 player-height))
+                | :order:Greater > dec-negate (dec-absolute new-velocity-y)
+                | :order:_ >
+                dec-order future-y (dec-add -0.5 (dec-mul 0.5 player-height))
+                | :order:Less > dec-absolute new-velocity-y
+                | :order:_ >
+                new-velocity-y
+            , velocity-x
+                dec-order future-x (dec-add 0.5 (dec-mul -0.5 player-width))
+                | :order:Greater > dec-negate (dec-absolute state.velocity-x)
+                | :order:_ >
+                dec-order future-x (dec-add -0.5 (dec-mul 0.5 player-width))
+                | :order:Less > dec-absolute state.velocity-x
+                | :order:_ >
+                state.velocity-x
+            , x future-x
+            , y future-y
+            }
+    ]
+
+player-height
+    0.2
+
+player-width
+    text-height-to-width player-height
+
+text-height-to-width \:dec:text-height >
+    dec-mul text-height 0.5
+
+text-width \:str:text, :dec:text-height >
+    dec-mul (text-height-to-width text-height)
+        (unt-to-dec (str-byte-count text))
+
+choice io Future
+    | Display vec { str str, x dec, y dec, size dec }
+    | Key-pressed \unt > Future
+    | Frame-passed \dec > Future
+

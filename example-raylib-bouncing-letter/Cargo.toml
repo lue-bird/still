@@ -1,0 +1,9 @@
+[package]
+name = "example"
+edition = "2024"
+[[bin]]
+name = "example"
+path = "main.rs"
+
+[dependencies]
+raylib = "5.5.1"
