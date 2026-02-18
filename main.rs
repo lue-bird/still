@@ -3831,7 +3831,9 @@ fn still_syntax_expression_not_parenthesized_into(
                 );
             }
             if let Some((field0, field1_up)) = fields.split_first() {
-                space_or_linebreak_indented_into(so_far, line_span, indent);
+                if line_span == LineSpan::Multiple {
+                    linebreak_indented_into(so_far, indent);
+                }
                 so_far.push_str(", ");
                 still_syntax_expression_fields_into_string(
                     so_far, indent, line_span, field0, field1_up,
@@ -6698,16 +6700,16 @@ fn still_syntax_highlight_expression_into(
             spread_key_symbol_range,
             fields,
         } => {
+            highlighted_so_far.push(StillSyntaxNode {
+                range: *spread_key_symbol_range,
+                value: StillSyntaxHighlightKind::KeySymbol,
+            });
             if let Some(record_node) = maybe_record {
                 highlighted_so_far.push(StillSyntaxNode {
                     range: record_node.range,
                     value: StillSyntaxHighlightKind::Variable,
                 });
             }
-            highlighted_so_far.push(StillSyntaxNode {
-                range: *spread_key_symbol_range,
-                value: StillSyntaxHighlightKind::KeySymbol,
-            });
             for field in fields {
                 highlighted_so_far.push(StillSyntaxNode {
                     range: field.name.range,
