@@ -8454,7 +8454,7 @@ If you wanted to start a declaration, try one of:
                         .value
                         .starts_with(|c: char| c.is_ascii_lowercase())
                     {
-                        "Maybe you forgot to add its :type: before it? Otherwise, it could be that an uppercase letter is expected here. Also, is it indented correctly?"
+                        "If you are trying to create a variable pattern, a :type: is required before it (so for example :int:my-input). Did you put one? Otherwise, it could be that a name starting with an uppercase letter is expected here. Also, is it indented correctly?"
                     } else if unknown_node
                         .value
                         .starts_with(|c: char| c.is_ascii_uppercase())
@@ -8465,6 +8465,11 @@ If you wanted to start a declaration, try one of:
                         .starts_with('#')
                     {
                         "Comments can only be put in front of expressions, patterns, types and project declarations? Is it indented correctly?"
+                    } else if unknown_node
+                        .value
+                        .starts_with('>')
+                    {
+                        "Function types and lambda expressions always start with a backslash (\\). Did you put one? Is everything indented correctly?"
                     } else {
                         "Is it indented correctly? Are brackets/braces/parens or similar closed prematurely?"
                     }).into_boxed_str(),
@@ -9218,6 +9223,21 @@ When building large strings, prefer `str-attach` and `str-attach-chr`.",
                 "Build a `vec` with a given length and a given element at each index",
             ),
             (
+                StillName::from("vec-by-index-for-length"),
+                function([still_type_unt, function([still_type_unt],variable("A"))], still_type_vec(variable("A"))),
+                r"Build a `vec` with a given length and for each index the element derived from the given function
+```still
+vec-unt-range-inclusive \:unt:start, :unt:end >
+    let length-int
+        int-add (unt-to-int end) (int-negate (unt-to-int (unt-add start 1)))
+    int-to-unt length-int
+    | :opt unt:Absent > :vec A:[]
+    | :opt unt:Present :unt:length >
+    vec-by-index-for-length length (\:unt:index > unt-add start index)
+```
+",
+            ),
+            (
                 StillName::from("vec-length"),
                 function([still_type_vec(variable("A"))], still_type_unt),
                 "Its element count",
@@ -9486,7 +9506,7 @@ Read if interested: [swift's grapheme cluster docs](https://docs.swift.org/swift
             ChoiceTypeInfo {
                 name_range: None,
                 documentation: Some(Box::from(
-                    r#"Text (or a text segment) like `"abc"` or `"\"hello 👀 \\\r\n world \u{2665}\""` (`\u{2665}` represents the hex code for ♥, `\"` represents ", `\\` represents \\, `\n` represents line break, `\r` represents carriage return).
+                    r#"Text like `"abc"` or `"\"hello 👀 \\\r\n world \u{2665}\""` (`\u{2665}` represents the hex code for ♥, `\"` represents ", `\\` represents \\, `\n` represents line break, `\r` represents carriage return).
 Internally, a string is compactly represented as UTF-8 bytes and can be accessed as such.
 ```still
 strs-flatten [ "My name is ", "Jenna", " and I'm ", int-to-str 60, " years old." ]
@@ -9533,6 +9553,8 @@ vec
 ```
 If necessary you can create order functions for your specific types,
 still does not have "traits"/"type classes" or similar, functions are always passed explicitly.
+
+When comparing `int`s for < 0 and >= 0, you might prefer `int-to-unt`
 "#
                 )),
                 parameters: vec![],
@@ -15142,6 +15164,7 @@ fn still_name_to_uppercase_rust(name: &str) -> String {
         "C",
         "E",
         "N",
+        "S",
     ]
     .contains(&sanitized.as_str())
     {

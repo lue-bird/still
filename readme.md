@@ -232,7 +232,6 @@ cargo build
 Then point your editor to the created `???/target/debug/still lsp`.
 
 ## considering
-- add `vec-with-length-by-index :\unt, \unt > A > vec A`
 - provide completions for record field names
 - remove record access syntax in favor of destructuring,
   otherwise provide hover info for record field access

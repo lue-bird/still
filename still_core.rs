@@ -416,6 +416,12 @@ fn vec_repeat<A: Clone>(length: Unt, element: A) -> Vec<A> {
         element, length,
     )))
 }
+fn vec_by_index_for_length<A>(length: Unt, index_to_element: impl Fn(Unt) -> A) -> Vec<A> {
+    Vec::from_vec(std::iter::Iterator::collect(std::iter::Iterator::map(
+        0..length,
+        index_to_element,
+    )))
+}
 fn vec_length<A>(vec: Vec<A>) -> Unt {
     vec.as_slice().len()
 }
