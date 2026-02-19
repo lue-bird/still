@@ -3068,11 +3068,6 @@ fn space_or_linebreak_indented_into(so_far: &mut String, line_span: LineSpan, in
     }
 }
 
-fn still_syntax_comment_into(so_far: &mut String, comment: &str) {
-    so_far.push('#');
-    so_far.push_str(comment);
-}
-
 fn still_syntax_type_to_unparenthesized(
     still_syntax_type: StillSyntaxNode<&StillSyntaxType>,
 ) -> StillSyntaxNode<&StillSyntaxType> {
@@ -3134,8 +3129,7 @@ fn still_syntax_type_not_parenthesized_into(
             comment: comment_node,
             type_: maybe_type_after_comment,
         } => {
-            still_syntax_comment_into(so_far, &comment_node.value);
-            linebreak_indented_into(so_far, indent);
+            still_syntax_comment_lines_then_linebreak_into(so_far, indent, &comment_node.value);
             if let Some(type_node_after_comment) = maybe_type_after_comment {
                 still_syntax_type_not_parenthesized_into(
                     so_far,
@@ -3311,8 +3305,7 @@ fn still_syntax_pattern_into(
             comment: comment_node,
             pattern: maybe_pattern_after_comment,
         } => {
-            still_syntax_comment_into(so_far, &comment_node.value);
-            linebreak_indented_into(so_far, indent);
+            still_syntax_comment_lines_then_linebreak_into(so_far, indent, &comment_node.value);
             if let Some(pattern_node_after_comment) = maybe_pattern_after_comment {
                 still_syntax_pattern_into(
                     so_far,
@@ -3718,8 +3711,7 @@ fn still_syntax_expression_not_parenthesized_into(
             comment: comment_node,
             expression: maybe_expression_after_expression,
         } => {
-            still_syntax_comment_into(so_far, &comment_node.value);
-            linebreak_indented_into(so_far, indent);
+            still_syntax_comment_lines_then_linebreak_into(so_far, indent, &comment_node.value);
             if let Some(expression_node_after_expression) = maybe_expression_after_expression {
                 still_syntax_expression_not_parenthesized_into(
                     so_far,
@@ -4088,8 +4080,17 @@ fn still_syntax_expression_parenthesized_if_space_separated_into(
 fn still_syntax_project_format(project_state: &ProjectState) -> String {
     let still_syntax_project: &StillSyntaxProject = &project_state.syntax;
     let mut builder: String = String::with_capacity(project_state.source.len());
-    // to make it easy to insert above
-    builder.push_str("\n\n");
+    if let Some(Ok(StillSyntaxDocumentedDeclaration {
+        declaration: None,
+        documentation: Some(_),
+    })) = still_syntax_project.declarations.first()
+    {
+        // do not put extra lines before an initial comment
+        // (for example because #! is only valid in the first line)
+    } else {
+        // to make it easy to insert above
+        builder.push_str("\n\n");
+    }
     for documented_declaration_or_err in &still_syntax_project.declarations {
         match documented_declaration_or_err {
             Err(unknown_node) => {
@@ -4097,8 +4098,9 @@ fn still_syntax_project_format(project_state: &ProjectState) -> String {
             }
             Ok(documented_declaration) => {
                 if let Some(project_documentation_node) = &documented_declaration.documentation {
-                    still_syntax_documentation_comment_then_linebreak_into(
+                    still_syntax_comment_lines_then_linebreak_into(
                         &mut builder,
+                        0,
                         &project_documentation_node.value,
                     );
                 }
@@ -4115,14 +4117,19 @@ fn still_syntax_project_format(project_state: &ProjectState) -> String {
     builder
 }
 
-fn still_syntax_documentation_comment_then_linebreak_into(so_far: &mut String, content: &str) {
+fn still_syntax_comment_lines_then_linebreak_into(
+    so_far: &mut String,
+    indent: usize,
+    content: &str,
+) {
     for line in content.lines() {
         so_far.push('#');
         so_far.push_str(line);
-        so_far.push('\n');
+        linebreak_indented_into(so_far, indent);
     }
-    if content.ends_with('\n') {
-        so_far.push_str("#\n");
+    if content.ends_with('\n') || content.is_empty() {
+        so_far.push('#');
+        linebreak_indented_into(so_far, indent);
     }
 }
 
@@ -6934,16 +6941,31 @@ fn parse_before_next_linebreak_or_end_as_str<'a>(state: &mut ParseState<'a>) -> 
 fn parse_still_whitespace(state: &mut ParseState) {
     while parse_linebreak(state) || parse_same_line_char_if(state, char::is_whitespace) {}
 }
-fn parse_still_comment_node(state: &mut ParseState) -> Option<StillSyntaxNode<Box<str>>> {
-    let position_before: lsp_types::Position = state.position;
-    let content: &str = parse_still_comment(state)?;
-    let full_range: lsp_types::Range = lsp_types::Range {
-        start: position_before,
-        end: state.position,
-    };
+fn parse_still_whitespace_until_linebreak(state: &mut ParseState) {
+    while parse_same_line_char_if(state, |c| c != '\n' && c != '\r' && c.is_whitespace()) {}
+}
+fn parse_still_comment_lines_then_same_line_whitespace(
+    state: &mut ParseState,
+) -> Option<StillSyntaxNode<Box<str>>> {
+    let start_position: lsp_types::Position = state.position;
+    let first_comment_line: &str = parse_still_comment(state)?;
+    let mut full_comment_content: String = first_comment_line.to_string();
+    let _: bool = parse_linebreak(state);
+    let mut end_position: lsp_types::Position = state.position;
+    parse_still_whitespace_until_linebreak(state);
+    while let Some(next_comment_line) = parse_still_comment(state) {
+        full_comment_content.push('\n');
+        full_comment_content.push_str(next_comment_line);
+        let _: bool = parse_linebreak(state);
+        end_position = state.position;
+        parse_still_whitespace_until_linebreak(state);
+    }
     Some(StillSyntaxNode {
-        range: full_range,
-        value: Box::from(content),
+        range: lsp_types::Range {
+            start: start_position,
+            end: end_position,
+        },
+        value: full_comment_content.into_boxed_str(),
     })
 }
 fn parse_still_comment<'a>(state: &mut ParseState<'a>) -> Option<&'a str> {
@@ -7022,7 +7044,8 @@ fn parse_still_syntax_type(state: &mut ParseState) -> Option<StillSyntaxNode<Sti
 fn parse_still_syntax_type_with_comment(
     state: &mut ParseState,
 ) -> Option<StillSyntaxNode<StillSyntaxType>> {
-    let comment_node: StillSyntaxNode<Box<str>> = parse_still_comment_node(state)?;
+    let comment_node: StillSyntaxNode<Box<str>> =
+        parse_still_comment_lines_then_same_line_whitespace(state)?;
     parse_still_whitespace(state);
     let maybe_type: Option<StillSyntaxNode<StillSyntaxType>> = parse_still_syntax_type(state);
     Some(StillSyntaxNode {
@@ -7294,7 +7317,8 @@ fn parse_still_syntax_pattern_variant(
 fn parse_still_syntax_pattern_with_comment(
     state: &mut ParseState,
 ) -> Option<StillSyntaxNode<StillSyntaxPattern>> {
-    let comment_node: StillSyntaxNode<Box<str>> = parse_still_comment_node(state)?;
+    let comment_node: StillSyntaxNode<Box<str>> =
+        parse_still_comment_lines_then_same_line_whitespace(state)?;
     parse_still_whitespace(state);
     let maybe_pattern: Option<StillSyntaxNode<StillSyntaxPattern>> =
         parse_still_syntax_pattern(state);
@@ -7709,7 +7733,8 @@ fn parse_still_syntax_expression_variant_node(
 fn parse_still_syntax_expression_with_comment_node(
     state: &mut ParseState,
 ) -> Option<StillSyntaxNode<StillSyntaxExpression>> {
-    let comment_node: StillSyntaxNode<Box<str>> = parse_still_comment_node(state)?;
+    let comment_node: StillSyntaxNode<Box<str>> =
+        parse_still_comment_lines_then_same_line_whitespace(state)?;
     parse_still_whitespace(state);
     let maybe_expression: Option<StillSyntaxNode<StillSyntaxExpression>> =
         parse_still_syntax_expression_space_separated(state);
@@ -8257,35 +8282,19 @@ fn parse_still_syntax_declaration_variable_node(
 fn parse_still_syntax_documented_declaration_followed_by_whitespace_and_whatever_indented(
     state: &mut ParseState,
 ) -> Option<StillSyntaxDocumentedDeclaration> {
-    let start_position: lsp_types::Position = state.position;
-    let maybe_documentation_node = parse_still_comment(state).map(|first_comment_line| {
-        let mut full_comment_content: String = first_comment_line.to_string();
-        let mut end_position: lsp_types::Position = state.position;
-        parse_still_whitespace(state);
-        while let Some(next_comment_line) = parse_still_comment(state) {
-            full_comment_content.push('\n');
-            full_comment_content.push_str(next_comment_line);
-            end_position = state.position;
-            parse_still_whitespace(state);
-        }
-        StillSyntaxNode {
-            range: lsp_types::Range {
-                start: start_position,
-                end: end_position,
-            },
-            value: full_comment_content.into_boxed_str(),
-        }
-    });
+    let maybe_documentation_node: Option<StillSyntaxNode<Box<str>>> =
+        parse_still_comment_lines_then_same_line_whitespace(state);
     match maybe_documentation_node {
-        None => parse_still_syntax_declaration_node(state).map(|declaration_node| {
+        None => {
+            let declaration_node: StillSyntaxNode<StillSyntaxDeclaration> =
+                parse_still_syntax_declaration_node(state)?;
             parse_still_whitespace(state);
-            StillSyntaxDocumentedDeclaration {
+            Some(StillSyntaxDocumentedDeclaration {
                 documentation: None,
                 declaration: Some(declaration_node),
-            }
-        }),
+            })
+        }
         Some(documentation_node) => {
-            parse_still_whitespace(state);
             let maybe_declaration: Option<StillSyntaxNode<StillSyntaxDeclaration>> =
                 parse_still_syntax_declaration_node(state);
             parse_still_whitespace(state);
