@@ -11,7 +11,7 @@ fn main() {
     let mut still_state: still::Opt<StillState> = still::Opt::Absent;
     'main_loop: loop {
         let interface = still::interface(still_state);
-        let maybe_new_state: Option<StillState> = interface.iter().find_map(|io| handle_io(io));
+        let maybe_new_state: Option<StillState> = interface.iter().find_map(handle_io);
         match maybe_new_state {
             None => {
                 break 'main_loop;
