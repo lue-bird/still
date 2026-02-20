@@ -193,7 +193,7 @@ For that reason, I recommend still package authors to follow
 # package-name
 ```
 And since licensing is a bit wishy washy like that (and with copy paste in general),
-I strongly recommend licensing your still package under ["unlicense"](https://unlicense.org/) or other public domain/"attribution not required" licenses.
+I strongly recommend licensing your still package under ["unlicense"](https://unlicense.org/) or other public domain/"attribution not required" licenses (e.g. WTFPL or CC0).
 
 ## editor setups
 feel free to contribute as I only use vscodium
