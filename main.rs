@@ -9111,7 +9111,7 @@ turns-to-radians \:dec:turns >
             (
                 StillName::from("dec-ln"),
                 function([still_type_dec], still_type_opt(still_type_dec)),
-                r"Its natural logarithm (log base e). If 0 or negative, results in :opt dec:Absent as ln(0) is defined as -infinity and ln(_ < 0) is not defined at all.
+                r"Its natural logarithm (log base e). If 0 or negative, results in :opt dec:Absent as ln(_ <= 0) is not concretely defined.
 ```still
 dec-log \:dec:base, :dec:n >
     dec-div (dec-ln n) (dec-ln base)
