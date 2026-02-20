@@ -182,6 +182,19 @@ Inspired by elm, effects originate from a single place in your program,
 making it easy to: compile to other languages than rust, test in isolation, debug, reorder values without a hidden change in behavior.
 If you want to call a specific pure rust function, please ask me to add it to the still core declarations :3
 
+### how to install packages?
+For rust: use `cargo add`.
+For still: just copy paste their code.
+For that reason, I recommend still package authors to follow
+```still
+# package-name
+# full license
+...
+# package-name
+```
+And since licensing is a bit wishy washy like that (and with copy paste in general),
+I strongly recommend licensing your still package under ["unlicense"](https://unlicense.org/) or other public domain/"attribution not required" licenses.
+
 ## editor setups
 feel free to contribute as I only use vscodium
 
