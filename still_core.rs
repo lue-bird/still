@@ -437,9 +437,7 @@ impl<A> Vec<A> {
     }
 }
 fn vec_repeat<A: Clone>(length: Unt, element: A) -> Vec<A> {
-    Vec::from_vec(std::iter::Iterator::collect(std::iter::repeat_n(
-        element, length,
-    )))
+    Vec::from_vec(std::vec::from_elem(element, length))
 }
 fn vec_by_index_for_length<A>(length: Unt, index_to_element: impl Fn(Unt) -> A) -> Vec<A> {
     Vec::from_vec(std::iter::Iterator::collect(std::iter::Iterator::map(
