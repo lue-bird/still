@@ -245,7 +245,6 @@ cargo build
 Then point your editor to the created `???/target/debug/still lsp`.
 
 ## considering
-- add still init/initialize/new/create/setup/boilerplate/new-project/new-app/new-program
 - provide completions for record field names
 - remove record access syntax in favor of destructuring,
   otherwise provide hover info for record field access

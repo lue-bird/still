@@ -39,6 +39,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             "init" | "initialize" | "new" | "create" | "setup" | "boilerplate" | "template"
             | "hello" | "hello-world" => {
+                println!(
+                    "Each project has one .still file. For applications, a rust project is also needed. Both will be initialized now."
+                );
                 if full_command.next().is_some() {
                     println!(
                         "Nothing was created. If you want to initialize a still project in a directory, please create that directory yourself and run still init from inside there."
