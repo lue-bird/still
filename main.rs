@@ -7415,6 +7415,9 @@ struct StillSyntaxLocalVariable {
     overwriting: Option<lsp_types::Position>,
 }
 fn parse_still_syntax_local_variable(state: &mut ParseState) -> Option<StillSyntaxLocalVariable> {
+    if state.position.character <= u32::from(state.indent) {
+        return None;
+    }
     let name_node: StillSyntaxNode<StillName> = parse_still_lowercase_name_node(state)?;
     parse_still_whitespace(state);
     let ends_in_caret_key_symbol = parse_symbol(state, "^");
@@ -8269,7 +8272,11 @@ fn parse_still_syntax_declaration_type_alias_node(
     let type_keyword_range: lsp_types::Range = parse_still_keyword_as_range(state, "type")?;
     parse_still_whitespace(state);
     let maybe_name_node: Option<StillSyntaxNode<StillName>> =
-        parse_still_lowercase_name_node(state);
+        if state.position.character <= u32::from(state.indent) {
+            None
+        } else {
+            parse_still_lowercase_name_node(state)
+        };
     parse_still_whitespace(state);
     let mut parameters: Vec<StillSyntaxNode<StillName>> = Vec::new();
     while let Some(parameter_node) = parse_still_uppercase_name_node(state) {
@@ -8310,7 +8317,11 @@ fn parse_still_syntax_declaration_choice_type_node(
     let choice_keyword_range: lsp_types::Range = parse_still_keyword_as_range(state, "choice")?;
     parse_still_whitespace(state);
     let maybe_name_node: Option<StillSyntaxNode<StillName>> =
-        parse_still_lowercase_name_node(state);
+        if state.position.character <= u32::from(state.indent) {
+            None
+        } else {
+            parse_still_lowercase_name_node(state)
+        };
     parse_still_whitespace(state);
     let mut parameters: Vec<StillSyntaxNode<StillName>> = Vec::new();
     while let Some(parameter_node) = parse_still_uppercase_name_node(state) {
@@ -13810,7 +13821,7 @@ fn still_syntax_let_declaration_to_rust_into(
             || StillErrorNode {
                 range: declaration_node.range,
                 message: Box::from(
-                    "missing assigned local variable declaration expression in let ..name.. here",
+                    "missing assigned local variable declaration expression in = ..name.. here",
                 ),
             },
             records_used,
