@@ -2516,7 +2516,10 @@ struct StillSyntaxPatternField {
 }
 #[derive(Clone, Debug)]
 enum StillSyntaxPatternUntyped {
-    Variable(StillName),
+    Variable {
+        overwriting: bool,
+        name: StillName,
+    },
     Ignored,
     Variant {
         name: StillSyntaxNode<StillName>,
@@ -2532,6 +2535,7 @@ enum StillSyntaxStringQuotingStyle {
 #[derive(Clone, Debug)]
 struct StillSyntaxLetDeclaration {
     name: StillSyntaxNode<StillName>,
+    overwriting: Option<lsp_types::Position>,
     result: Option<StillSyntaxNode<Box<StillSyntaxExpression>>>,
 }
 #[derive(Clone, Debug)]
@@ -3437,7 +3441,10 @@ fn still_syntax_pattern_into(
                     StillSyntaxPatternUntyped::Ignored => {
                         so_far.push('_');
                     }
-                    StillSyntaxPatternUntyped::Variable(name) => {
+                    StillSyntaxPatternUntyped::Variable { overwriting, name } => {
+                        if *overwriting {
+                            so_far.push('^');
+                        }
                         so_far.push_str(name);
                     }
                     StillSyntaxPatternUntyped::Variant {
@@ -4621,34 +4628,39 @@ fn still_syntax_pattern_find_symbol_at_position<'a>(
                 let pattern_node_in_typed = maybe_pattern_node_in_typed.as_ref()?;
                 match &pattern_node_in_typed.value {
                     StillSyntaxPatternUntyped::Ignored => None,
-                    StillSyntaxPatternUntyped::Variable(name) => Some(StillSyntaxNode {
-                        range: pattern_node_in_typed.range,
-                        value: StillSyntaxSymbol::Variable {
-                            name: name,
-                            local_bindings: vec![(
-                                // this is a bit silly but works for now
-                                scope_expression.unwrap_or_else(|| {
-                                    still_syntax_node_empty(&StillSyntaxExpression::Parenthesized(
-                                        None,
-                                    ))
-                                }),
-                                vec![StillLocalBinding {
-                                    name: name,
-                                    type_: maybe_type_node.as_ref().and_then(|type_node| {
-                                        still_syntax_type_to_type(
-                                            &mut Vec::new(),
-                                            type_aliases,
-                                            choice_types,
-                                            still_syntax_node_as_ref(type_node),
+                    StillSyntaxPatternUntyped::Variable {
+                        overwriting: _,
+                        name,
+                    } => {
+                        Some(StillSyntaxNode {
+                            range: pattern_node_in_typed.range,
+                            value: StillSyntaxSymbol::Variable {
+                                name: name,
+                                local_bindings: vec![(
+                                    // this is a bit silly but works for now
+                                    scope_expression.unwrap_or_else(|| {
+                                        still_syntax_node_empty(
+                                            &StillSyntaxExpression::Parenthesized(None),
                                         )
                                     }),
-                                    origin: LocalBindingOrigin::PatternVariable(
-                                        pattern_node_in_typed.range,
-                                    ),
-                                }],
-                            )],
-                        },
-                    }),
+                                    vec![StillLocalBinding {
+                                        name: name,
+                                        type_: maybe_type_node.as_ref().and_then(|type_node| {
+                                            still_syntax_type_to_type(
+                                                &mut Vec::new(),
+                                                type_aliases,
+                                                choice_types,
+                                                still_syntax_node_as_ref(type_node),
+                                            )
+                                        }),
+                                        origin: LocalBindingOrigin::PatternVariable(
+                                            pattern_node_in_typed.range,
+                                        ),
+                                    }],
+                                )],
+                            },
+                        })
+                    }
                     StillSyntaxPatternUntyped::Variant {
                         name: variable,
                         value: maybe_value,
@@ -5826,7 +5838,7 @@ fn still_syntax_pattern_uses_of_symbol_into(
             if let Some(pattern_node_in_typed) = maybe_pattern_node_in_typed {
                 match &pattern_node_in_typed.value {
                     StillSyntaxPatternUntyped::Ignored => {}
-                    StillSyntaxPatternUntyped::Variable(_) => {}
+                    StillSyntaxPatternUntyped::Variable { .. } => {}
                     StillSyntaxPatternUntyped::Variant {
                         name: variant_name_node,
                         value: maybe_value,
@@ -5949,12 +5961,15 @@ fn still_syntax_pattern_bindings_into<'a>(
             if let Some(pattern_node_in_typed) = maybe_pattern_node_in_typed {
                 match &pattern_node_in_typed.value {
                     StillSyntaxPatternUntyped::Ignored => {}
-                    StillSyntaxPatternUntyped::Variable(variable) => {
+                    StillSyntaxPatternUntyped::Variable {
+                        overwriting: _,
+                        name: variable_name,
+                    } => {
                         bindings_so_far.push(StillLocalBinding {
                             origin: LocalBindingOrigin::PatternVariable(
                                 pattern_node_in_typed.range,
                             ),
-                            name: variable,
+                            name: variable_name,
                             type_: maybe_type.as_ref().and_then(|type_node| {
                                 still_syntax_type_to_type(
                                     &mut Vec::new(),
@@ -6025,8 +6040,11 @@ fn still_syntax_pattern_binding_names_into<'a>(
             if let Some(pattern_node_in_typed) = maybe_pattern_node_in_typed {
                 match &pattern_node_in_typed.value {
                     StillSyntaxPatternUntyped::Ignored => {}
-                    StillSyntaxPatternUntyped::Variable(variable) => {
-                        bindings_so_far.push(variable);
+                    StillSyntaxPatternUntyped::Variable {
+                        overwriting: _,
+                        name: variable_name,
+                    } => {
+                        bindings_so_far.push(variable_name);
                     }
                     StillSyntaxPatternUntyped::Variant {
                         name: _,
@@ -6084,9 +6102,12 @@ fn still_syntax_pattern_binding_types_into<'a>(
             if let Some(pattern_node_in_typed) = maybe_pattern_node_in_typed {
                 match &pattern_node_in_typed.value {
                     StillSyntaxPatternUntyped::Ignored => {}
-                    StillSyntaxPatternUntyped::Variable(variable) => {
+                    StillSyntaxPatternUntyped::Variable {
+                        overwriting: _,
+                        name: variable_name,
+                    } => {
                         bindings_so_far.insert(
-                            variable,
+                            variable_name,
                             maybe_type.as_ref().and_then(|type_node| {
                                 still_syntax_type_to_type(
                                     &mut Vec::new(),
@@ -6364,11 +6385,34 @@ fn still_syntax_highlight_pattern_into(
                             value: StillSyntaxHighlightKind::KeySymbol,
                         });
                     }
-                    StillSyntaxPatternUntyped::Variable(_) => {
-                        highlighted_so_far.push(StillSyntaxNode {
-                            range: pattern_node_in_typed.range,
-                            value: StillSyntaxHighlightKind::Variable,
-                        });
+                    StillSyntaxPatternUntyped::Variable { overwriting, name } => {
+                        if *overwriting {
+                            highlighted_so_far.push(StillSyntaxNode {
+                                range: lsp_types::Range {
+                                    start: pattern_node_in_typed.range.start,
+                                    end: lsp_position_add_characters(
+                                        pattern_node_in_typed.range.start,
+                                        name.len() as i32,
+                                    ),
+                                },
+                                value: StillSyntaxHighlightKind::Variable,
+                            });
+                            highlighted_so_far.push(StillSyntaxNode {
+                                range: lsp_types::Range {
+                                    start: lsp_position_add_characters(
+                                        pattern_node_in_typed.range.end,
+                                        -1,
+                                    ),
+                                    end: pattern_node_in_typed.range.end,
+                                },
+                                value: StillSyntaxHighlightKind::KeySymbol,
+                            });
+                        } else {
+                            highlighted_so_far.push(StillSyntaxNode {
+                                range: pattern_node_in_typed.range,
+                                value: StillSyntaxHighlightKind::Variable,
+                            });
+                        }
                     }
                     StillSyntaxPatternUntyped::Variant {
                         name: name_node,
@@ -6641,7 +6685,7 @@ fn still_syntax_highlight_expression_into(
                 value: StillSyntaxHighlightKind::KeySymbol,
             });
             if let Some(let_declaration_node) = maybe_declaration {
-                still_syntax_highlight_let_declaration_into(
+                still_syntax_highlight_local_variable_declaration_into(
                     highlighted_so_far,
                     still_syntax_node_as_ref(let_declaration_node),
                 );
@@ -6824,7 +6868,7 @@ fn still_syntax_highlight_expression_into(
     }
 }
 
-fn still_syntax_highlight_let_declaration_into(
+fn still_syntax_highlight_local_variable_declaration_into(
     highlighted_so_far: &mut Vec<StillSyntaxNode<StillSyntaxHighlightKind>>,
     still_syntax_let_declaration_node: StillSyntaxNode<&StillSyntaxLetDeclaration>,
 ) {
@@ -6832,6 +6876,17 @@ fn still_syntax_highlight_let_declaration_into(
         range: still_syntax_let_declaration_node.value.name.range,
         value: StillSyntaxHighlightKind::DeclaredVariable,
     });
+    if let Some(caret_key_symbol_start_position) =
+        still_syntax_let_declaration_node.value.overwriting
+    {
+        highlighted_so_far.push(StillSyntaxNode {
+            range: lsp_types::Range {
+                start: caret_key_symbol_start_position,
+                end: lsp_position_add_characters(caret_key_symbol_start_position, 1),
+            },
+            value: StillSyntaxHighlightKind::DeclaredVariable,
+        });
+    }
     if let Some(result_node) = &still_syntax_let_declaration_node.value.result {
         still_syntax_highlight_expression_into(
             highlighted_so_far,
@@ -7084,6 +7139,9 @@ fn parse_still_uppercase_name_node(state: &mut ParseState) -> Option<StillSyntax
 }
 
 fn parse_still_syntax_type(state: &mut ParseState) -> Option<StillSyntaxNode<StillSyntaxType>> {
+    if state.position.character <= u32::from(state.indent) {
+        return None;
+    }
     parse_still_syntax_type_construct(state)
         .or_else(|| parse_still_syntax_function(state))
         .or_else(|| parse_still_syntax_type_with_comment(state))
@@ -7336,10 +7394,38 @@ fn parse_still_syntax_pattern_untyped(
             value: StillSyntaxPatternUntyped::Ignored,
         })
         .or_else(|| {
-            parse_still_lowercase_name_node(state)
-                .map(|n| still_syntax_node_map(n, StillSyntaxPatternUntyped::Variable))
+            parse_still_syntax_local_variable(state).map(|local_variable| StillSyntaxNode {
+                range: local_variable
+                    .overwriting
+                    .map(|end| lsp_types::Range {
+                        start: local_variable.name.range.start,
+                        end: end,
+                    })
+                    .unwrap_or(local_variable.name.range),
+                value: StillSyntaxPatternUntyped::Variable {
+                    overwriting: local_variable.overwriting.is_some(),
+                    name: local_variable.name.value,
+                },
+            })
         })
         .or_else(|| parse_still_syntax_pattern_variant(state))
+}
+struct StillSyntaxLocalVariable {
+    name: StillSyntaxNode<StillName>,
+    overwriting: Option<lsp_types::Position>,
+}
+fn parse_still_syntax_local_variable(state: &mut ParseState) -> Option<StillSyntaxLocalVariable> {
+    let name_node: StillSyntaxNode<StillName> = parse_still_lowercase_name_node(state)?;
+    parse_still_whitespace(state);
+    let ends_in_caret_key_symbol = parse_symbol(state, "^");
+    Some(StillSyntaxLocalVariable {
+        name: name_node,
+        overwriting: if ends_in_caret_key_symbol {
+            Some(state.position)
+        } else {
+            None
+        },
+    })
 }
 fn parse_still_syntax_pattern_variant(
     state: &mut ParseState,
@@ -7583,6 +7669,9 @@ fn parse_still_text_content_char(state: &mut ParseState) -> Option<char> {
 fn parse_still_syntax_expression_space_separated(
     state: &mut ParseState,
 ) -> Option<StillSyntaxNode<StillSyntaxExpression>> {
+    if state.position.character <= u32::from(state.indent) {
+        return None;
+    }
     let start_expression_node: StillSyntaxNode<StillSyntaxExpression> =
         parse_still_syntax_expression_typed(state)
             .or_else(|| parse_still_syntax_expression_after_local_variable(state))
@@ -7716,9 +7805,6 @@ fn parse_still_syntax_expression_variable_or_call(
     let mut arguments: Vec<StillSyntaxNode<StillSyntaxExpression>> = Vec::new();
     let mut call_end_position: lsp_types::Position = variable_node.range.end;
     'parsing_arguments: loop {
-        if state.position.character <= u32::from(state.indent) {
-            break 'parsing_arguments;
-        }
         match parse_still_syntax_expression_not_space_separated(state) {
             None => {
                 break 'parsing_arguments;
@@ -7803,6 +7889,9 @@ fn parse_still_syntax_expression_with_comment_node(
 fn parse_still_syntax_expression_not_space_separated(
     state: &mut ParseState,
 ) -> Option<StillSyntaxNode<StillSyntaxExpression>> {
+    if state.position.character <= u32::from(state.indent) {
+        return None;
+    }
     parse_still_syntax_expression_string(state).or_else(|| {
         let start_position: lsp_types::Position = state.position;
         parse_still_syntax_expression_parenthesized(state)
@@ -8041,41 +8130,30 @@ fn parse_still_syntax_expression_after_local_variable(
 ) -> Option<StillSyntaxNode<StillSyntaxExpression>> {
     let equals_key_symbol_range: lsp_types::Range = parse_symbol_as_range(state, "=")?;
     parse_still_whitespace(state);
-    Some(if state.position.character <= u32::from(state.indent) {
-        StillSyntaxNode {
-            range: equals_key_symbol_range,
-            value: StillSyntaxExpression::AfterLocalVariable {
-                declaration: None,
-                result: None,
+
+    parse_state_push_indent(state, equals_key_symbol_range.start.character as u16);
+    let maybe_declaration: Option<StillSyntaxNode<StillSyntaxLetDeclaration>> =
+        parse_still_syntax_let_declaration(state);
+    parse_state_pop_indent(state);
+
+    parse_still_whitespace(state);
+    let maybe_result: Option<StillSyntaxNode<StillSyntaxExpression>> =
+        parse_still_syntax_expression_space_separated(state);
+    Some(StillSyntaxNode {
+        range: lsp_types::Range {
+            start: equals_key_symbol_range.start,
+            end: match &maybe_result {
+                None => maybe_declaration
+                    .as_ref()
+                    .map(|n| n.range.end)
+                    .unwrap_or(equals_key_symbol_range.end),
+                Some(result_node) => result_node.range.end,
             },
-        }
-    } else {
-        parse_state_push_indent(state, equals_key_symbol_range.start.character as u16);
-        let mut syntax_before_in_key_symbol_end_position: lsp_types::Position =
-            equals_key_symbol_range.end;
-        let maybe_declaration: Option<StillSyntaxNode<StillSyntaxLetDeclaration>> =
-            parse_still_syntax_let_declaration(state);
-        if let Some(declaration_node) = &maybe_declaration {
-            syntax_before_in_key_symbol_end_position = declaration_node.range.end;
-            parse_still_whitespace(state);
-        }
-        parse_state_pop_indent(state);
-        parse_still_whitespace(state);
-        let maybe_result: Option<StillSyntaxNode<StillSyntaxExpression>> =
-            parse_still_syntax_expression_space_separated(state);
-        StillSyntaxNode {
-            range: lsp_types::Range {
-                start: equals_key_symbol_range.start,
-                end: match &maybe_result {
-                    None => syntax_before_in_key_symbol_end_position,
-                    Some(result_node) => result_node.range.end,
-                },
-            },
-            value: StillSyntaxExpression::AfterLocalVariable {
-                declaration: maybe_declaration,
-                result: maybe_result.map(still_syntax_node_box),
-            },
-        }
+        },
+        value: StillSyntaxExpression::AfterLocalVariable {
+            declaration: maybe_declaration,
+            result: maybe_result.map(still_syntax_node_box),
+        },
     })
 }
 fn parse_still_syntax_let_declaration(
@@ -8084,24 +8162,26 @@ fn parse_still_syntax_let_declaration(
     if state.position.character < u32::from(state.indent) {
         return None;
     }
-    let name_node: StillSyntaxNode<StillName> = parse_still_lowercase_name_node(state)?;
+    let variable: StillSyntaxLocalVariable = parse_still_syntax_local_variable(state)?;
     parse_still_whitespace(state);
     let maybe_result: Option<StillSyntaxNode<StillSyntaxExpression>> =
-        if state.position.character <= u32::from(state.indent) {
-            None
-        } else {
-            parse_still_syntax_expression_space_separated(state)
-        };
+        parse_still_syntax_expression_space_separated(state);
     Some(StillSyntaxNode {
         range: lsp_types::Range {
-            start: name_node.range.start,
+            start: variable.name.range.start,
             end: maybe_result
                 .as_ref()
                 .map(|node| node.range.end)
-                .unwrap_or(name_node.range.end),
+                .or_else(|| {
+                    variable
+                        .overwriting
+                        .map(|r| lsp_position_add_characters(r, 1))
+                })
+                .unwrap_or(variable.name.range.end),
         },
         value: StillSyntaxLetDeclaration {
-            name: name_node,
+            name: variable.name,
+            overwriting: variable.overwriting,
             result: maybe_result.map(still_syntax_node_box),
         },
     })
@@ -8198,12 +8278,7 @@ fn parse_still_syntax_declaration_type_alias_node(
     }
     let maybe_equals_key_symbol_range: Option<lsp_types::Range> = parse_symbol_as_range(state, "=");
     parse_still_whitespace(state);
-    let maybe_type: Option<StillSyntaxNode<StillSyntaxType>> =
-        if state.position.character <= u32::from(state.indent) {
-            None
-        } else {
-            parse_still_syntax_type(state)
-        };
+    let maybe_type: Option<StillSyntaxNode<StillSyntaxType>> = parse_still_syntax_type(state);
     let full_end_location: lsp_types::Position = maybe_type
         .as_ref()
         .map(|type_node| type_node.range.end)
@@ -11883,6 +11958,7 @@ struct StillLocalBindingCompileInfo {
     origin_range: lsp_types::Range,
     type_: Option<StillType>,
     is_copy: bool,
+    overwriting: bool,
     last_uses: Vec<lsp_types::Range>,
     closures_it_is_used_in: Vec<lsp_types::Range>,
 }
@@ -12226,7 +12302,7 @@ fn still_syntax_expression_to_rust<'a>(
                 || StillErrorNode {
                     range: expression_node.range,
                     message: Box::from(
-                        "missing result expression after let declaration let ... here",
+                        "missing result expression after local variable declaration = ..name.. here",
                     ),
                 },
                 records_used,
@@ -13696,11 +13772,11 @@ fn push_error_if_introduced_local_binding_collides_or_is_unused(
                 ),
             });
         }
-    } else if local_bindings.contains_key(binding_name) {
+    } else if !binding_info.overwriting && local_bindings.contains_key(binding_name) {
         errors.push(StillErrorNode {
             range: binding_info.origin_range,
             message: Box::from(
-                "a variable with this name is already declared locally. Rename one of them",
+                "a variable with this name is already declared locally. If this was not intended, rename one of them. If reusing an existing name and thus making that earlier variable not accessible is intended, append a ^ to the end of the variable name to explicitly shadow it.",
             ),
         });
     } else if binding_info.last_uses.is_empty() {
@@ -13734,7 +13810,7 @@ fn still_syntax_let_declaration_to_rust_into(
             || StillErrorNode {
                 range: declaration_node.range,
                 message: Box::from(
-                    "missing assigned let variable declaration expression in let ..name.. here",
+                    "missing assigned local variable declaration expression in let ..name.. here",
                 ),
             },
             records_used,
@@ -13779,6 +13855,7 @@ fn still_syntax_let_declaration_to_rust_into(
             type_: compiled_declaration_result.type_,
             last_uses: vec![],
             closures_it_is_used_in: vec![],
+            overwriting: declaration_node.value.overwriting.is_some(),
         },
     )]);
     if let Some(result_node) = maybe_result {
@@ -13793,7 +13870,7 @@ fn still_syntax_let_declaration_to_rust_into(
             errors,
             project_variable_declarations,
             &local_bindings,
-            "remove this let variable declaration",
+            "remove this local variable declaration",
             introduced_binding_name,
             introduced_binding_info,
         );
@@ -13805,7 +13882,9 @@ fn still_syntax_let_declaration_to_rust_into(
         errors,
         || StillErrorNode {
             range: declaration_node.value.name.range,
-            message: Box::from("missing result expression after let declaration let ... here"),
+            message: Box::from(
+                "missing result expression after local variable declaration = ..name.. here",
+            ),
         },
         records_used,
         type_aliases,
@@ -14779,13 +14858,14 @@ fn still_syntax_pattern_to_rust<'a>(
                 };
             };
             match &untyped_pattern_node.value {
-                StillSyntaxPatternUntyped::Variable(name) => {
+                StillSyntaxPatternUntyped::Variable { overwriting, name } => {
                     let maybe_existing_pattern_variable_with_same_name_info: Option<
                         StillLocalBindingCompileInfo,
                     > = introduced_bindings.insert(
                         name,
                         StillLocalBindingCompileInfo {
                             origin_range: untyped_pattern_node.range,
+                            overwriting: *overwriting,
                             is_copy: maybe_type.as_ref().is_some_and(|type_| {
                                 still_type_is_copy(false, type_aliases, choice_types, type_)
                             }),
@@ -14796,9 +14876,9 @@ fn still_syntax_pattern_to_rust<'a>(
                     );
                     if maybe_existing_pattern_variable_with_same_name_info.is_some() {
                         errors.push(StillErrorNode {
-                                range: untyped_pattern_node.range,
-                                message: Box::from("a variable with this name is already used in another part of the patterns. Rename one of them")
-                            });
+                            range: untyped_pattern_node.range,
+                            message: Box::from("a variable with this name is already used in another part of the patterns. Rename one of them")
+                        });
                     }
                     let is_not_reference_or_copy: bool = !is_reference
                         || maybe_type.as_ref().is_some_and(|type_| {

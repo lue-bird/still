@@ -153,12 +153,22 @@ variant
 result
 
 # or something close to pipelines
-# You will probably prefer `let` for most cases, though.
+# You will probably prefer local variables (= name ...) in most cases, though.
 f x argument
 | :f-result:f-result >
 g y first-result
 | :g-result:g-result >
 h z g-result
+
+# suffixing a local variable with ^ shadows a previous variable (also in patterns)
+# This is often used in situations similar to where you'd typically
+# use mutation/pipelines in other languages,
+# for example builders, random seed state or parse state
+= s "("
+= s^ str-attach-char s ' '
+= s^ str-attach-unt s 10
+= s^ str-attach s " > "
+str-attach-dec s 0.2
 ```
 That should be all. If not, the examples may show more.
 
@@ -243,9 +253,6 @@ Rebuild the project with
 cargo build
 ```
 Then point your editor to the created `???/target/debug/still lsp`.
-
-## TODO
-- introduce ^variable to explicitly shadow a local (maybe also global?) variable
 
 ## considering
 - provide completions for record field names
