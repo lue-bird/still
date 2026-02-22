@@ -9527,7 +9527,7 @@ vec-remove-first \:vec A:vec >
             ),
             (
                 StillName::from("vec-attach-element"),
-                function([still_type_vec(variable("A")), still_type_vec(variable("A"))], still_type_vec(variable("A"))),
+                function([still_type_vec(variable("A")), variable("A")], still_type_vec(variable("A"))),
                 "Glue a single given element after the first given `vec`.
 To append a `vec` of elements, use `vec-attach`",
             ),
