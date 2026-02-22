@@ -1,0 +1,245 @@
+
+
+type state =
+    { count unt
+    , mouse-x unt
+    , mouse-y unt
+    , mouse-trail vec { x unt, y unt }
+    }
+
+choice event
+    | CounterClicked
+    | MouseMoved { x unt, y unt }
+
+initial-state :state:
+    { count 0
+    , mouse-x 0
+    , mouse-y 0
+    , mouse-trail :vec { x unt, y unt }:[]
+    }
+
+view \:state:state >
+    :html event:Element
+        { tag "div"
+        , modifiers
+            [ :modifier event:Style { key "width", value "100vw" }
+            , :modifier event:Style { key "height", value "100vh" }
+            , :modifier event:Style { key "box-sizing", value "border-box" }
+            , :modifier event:Listen
+                { name "mousemove"
+                , on
+                    \:json:json >
+                        json-to-client-position json
+                        | :opt { x unt, y unt }:Absent >
+                            :event:MouseMoved { x 0, y 0 }
+                        | :opt { x unt, y unt }:Present :{ x unt, y unt }:position >
+                            :event:MouseMoved position
+                }
+            ]
+        , subs
+            [ :html event:Element
+                { tag "h1"
+                , modifiers :vec (modifier event):[]
+                , subs [ :html event:Text "Hello, wanderer!" ]
+                }
+            , :html event:Element
+                { tag "p"
+                , modifiers :vec (modifier event):[]
+                , subs
+                    [ :html event:Text
+                        strs-flatten
+                            [ "You are at x="
+                            , unt-to-str state.mouse-x
+                            , " y="
+                            , unt-to-str state.mouse-y
+                            ]
+                    ]
+                }
+            , :html event:Element
+                { tag "button"
+                , modifiers
+                    [ :modifier event:Style { key "padding", value "20px" }
+                    , :modifier event:Listen
+                        { name "click"
+                        , on
+                            \:json:_ > :event:CounterClicked
+                        }
+                    ]
+                , subs
+                    [ :html event:Text
+                        unt-to-str state.count
+                    ]
+                }
+            , :html event:Element
+                { tag "br"
+                , modifiers :vec (modifier event):[]
+                , subs :vec (html event):[]
+                }
+            , :html event:Element
+                { tag "br"
+                , modifiers :vec (modifier event):[]
+                , subs :vec (html event):[]
+                }
+            , :html event:Element
+                { tag "p"
+                , modifiers :vec (modifier event):[]
+                , subs
+                    [ :html event:Text "inspired by"
+                    ]
+                }
+            , :html event:Element
+                { tag "a"
+                , modifiers
+                    [ :modifier event:Attribute
+                        { key "title"
+                        , value "Evan Czaplicki, Public domain, via Wikimedia Commons"
+                        }
+                    , :modifier event:Attribute
+                        { key "href"
+                        , value "https://commons.wikimedia.org/wiki/File:Elm_logo.svg"
+                        }
+                    ]
+                , subs
+                    [ :html event:Element
+                        { tag "img"
+                        , modifiers
+                            [ :modifier event:Attribute
+                                { key "src"
+                                , value "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f3/Elm_logo.svg/256px-Elm_logo.svg.png?20160911065740"
+                                }
+                            , :modifier event:Attribute
+                                { key "alt"
+                                , value "the elm logo"
+                                }
+                            ]
+                        , subs
+                            [ :html event:Text "the elm logo"
+                            ]
+                        }
+                    ]
+                }
+            , :html event:Element
+                { tag "br"
+                , modifiers :vec (modifier event):[]
+                , subs :vec (html event):[]
+                }
+            , :html event:Element
+                { tag "br"
+                , modifiers :vec (modifier event):[]
+                , subs :vec (html event):[]
+                }
+            , :html event:Element
+                { tag "svg"
+                , modifiers
+                    [ :modifier event:Style { key "position", value "fixed" }
+                    , :modifier event:Style { key "left", value "0" }
+                    , :modifier event:Style { key "top", value "0" }
+                    , :modifier event:Style { key "width", value "100vw" }
+                    , :modifier event:Style { key "height", value "100vh" }
+                    , :modifier event:Style { key "pointer-events", value "none" }
+                    ]
+                , subs
+                    [ :html event:Element
+                        { tag "polyline"
+                        , modifiers
+                            [ :modifier event:Attribute { key "fill", value "none" }
+                            , :modifier event:Attribute { key "stroke", value "green" }
+                            , :modifier event:Attribute
+                                { key "points"
+                                , value svg-points-to-str state.mouse-trail
+                                }
+                            ]
+                        , subs :vec (html event):[]
+                        }
+                    ]
+                }
+            ]
+        }
+
+svg-points-to-str \:vec { x unt, y unt }:points >
+    vec-walk-from points
+        ""
+        (\:str:str, { x :unt:x, y :unt:y } >
+            :continue-or-exit str str:Continue
+                str-attach-char
+                    (str-attach-unt (str-attach-char (str-attach-unt str x) ',') y)
+                    ' '
+        )
+    | :continue-or-exit str str:Continue :str:str > str
+    | :continue-or-exit str str:Exit :str:str > str
+
+json-to-client-position \:json:json >
+    :opt { x unt, y unt }:
+    json
+    | :json:Object :vec { key str, value json }:fields >
+        { x json-fields-find fields "clientX"
+        , y json-fields-find fields "clientY"
+        }
+        | { x :opt json:Present :json:Number :dec:x, y :opt json:Present :json:Number :dec:y } >
+            :opt { x unt, y unt }:Present
+                { x int-absolute (dec-round x)
+                , y int-absolute (dec-round y)
+                }
+        | :{ x opt json, y opt json }:_ >
+            :opt { x unt, y unt }:Absent
+    | :json:_ > :opt { x unt, y unt }:Absent
+
+json-fields-find \:vec { key str, value json }:json-fields, :str:needle >
+    vec-walk-from json-fields
+        {}
+        (\{}, { key :str:field-key, value :json:field-value } >
+            str-order field-key needle
+            | :order:Equal > :continue-or-exit {} json:Exit field-value
+            | :order:_ > :continue-or-exit {} json:Continue {}
+        )
+    | :continue-or-exit {} json:Continue {} > :opt json:Absent
+    | :continue-or-exit {} json:Exit :json:field-value > :opt json:Present field-value
+
+update \:event:event, :state:state >
+    event
+    | :event:CounterClicked >
+        { ..state, count unt-add state.count 1 }
+    | :event:MouseMoved :{ x unt, y unt }:new-mouse-position >
+        { ..state
+        , mouse-x new-mouse-position.x
+        , mouse-y new-mouse-position.y
+        , mouse-trail
+            { x unt-order state.mouse-x 0, y unt-order state.mouse-x 0 }
+            | { x :order:Equal, y :order:Equal } >
+                state.mouse-trail
+            | :{ x order, y order }:_ >
+                vec-attach-element
+                    (unt-order (vec-length state.mouse-trail) 1000
+                     | :order:Greater >
+                        vec-slice-from-index-with-length state.mouse-trail
+                            1
+                            1000
+                     | :order:_ > state.mouse-trail
+                    )
+                    { x state.mouse-x, y state.mouse-y }
+        }
+
+choice html Event
+    | Element
+        # for namespace, use xmlns attribute
+        { tag str
+        , modifiers vec (modifier Event)
+        , subs vec (html Event)
+        }
+    | Text str
+
+choice modifier Event
+    | Style { key str, value str }
+    | Attribute { key str, value str }
+    | Property { key str, value json }
+    | Listen { name str, on \json > Event }
+
+choice json
+    | Null
+    | False
+    | True
+    | Number dec
+    | String str
+    | Array vec json
+    | Object vec { key str, value json }
+

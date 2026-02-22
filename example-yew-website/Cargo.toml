@@ -1,0 +1,9 @@
+[package]
+name = "example-yew-website"
+edition = "2024"
+[[bin]]
+name = "example-yew-website"
+path = "main.rs"
+[dependencies]
+web-sys = { version = "0.3.77", features = ["Event"] }
+yew = { version = "0.21", features = ["csr"] }
