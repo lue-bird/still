@@ -515,14 +515,14 @@ fn vec_slice_from_index_with_length<A: Clone>(
                 return Vec::from_array([]);
             }
             let slice_range: std::ops::Range<usize> =
-                start_index..(start_index + slice_length).max(rc.len());
+                start_index..(start_index + slice_length).min(rc.len());
             match std::rc::Rc::try_unwrap(rc) {
                 std::result::Result::Ok(mut owned_vec) => Vec::from_vec(
                     std::iter::Iterator::collect::<std::vec::Vec<_>>(owned_vec.drain(slice_range)),
                 ),
                 std::result::Result::Err(rc) => rc
                     .get(slice_range)
-                    .map(|slice: &[A]| Vec::from_vec(slice.to_vec()))
+                    .map(|slice| Vec::from_vec(slice.to_vec()))
                     .unwrap_or_else(|| Vec::from_array([])),
             }
         }

@@ -9493,7 +9493,7 @@ vec-remove-last \:vec A:vec >
             (
                 StillName::from("vec-slice-from-index-with-length"),
                 function(
-                    [still_type_vec(variable("A")), still_type_unt],
+                    [still_type_vec(variable("A")), still_type_unt, still_type_unt],
                     still_type_vec(variable("A")),
                 ),
                 r"Take at most a given count of elements from a given start index
