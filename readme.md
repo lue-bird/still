@@ -251,32 +251,13 @@ Then point your editor to the created `???/target/debug/still lsp`.
 - (leaning towards yes) add `unts-sum`, `decs-sum`, `ints-sum`, `unts-product`, `ints-product`, `decs-product`
 - (leaning towards yes) add core bitwise and, or, xor, shifts, complement for the integer number types
 - (leaning towards yes) add `vec-walk-backwards-from`, `str-walk-chrs-backwards-from`
-- (leaning towards yes) add `str-attach-unt`, `str-attach-int`, `str-attach-dec`
 - (leaning towards yes) rename chr to char
-- switch all core numbers to either 32 bit or 64 bit (64 bit would be nice for conversions if there are 32bit variations in the future and also be a reasonable default fur use as posix time or random seed, 32 bit is nice for chr conversion, default memory efficiency)
+- switch all core numbers to 64 bit
 - (leaning towards yes) allow comments before variant (field name, case?, variant?)
 - (to make some parts almost infinitely scalable:) for formatting: leave declarations fully outside of "touched ranges" alone; for compilation: if touched only in one declaration and its type ends up the same, only change that declaration's output, (optionally: if type changed, recompile "downstream"); also, when edited range lies exclusively between existing declaration ranges, only compile that one
 - in syntax tree, use separate range type for single-line tokens like keywords, symbols, names etc to save on memory consumption
 - (seems not worth the analysis cost but a simpler version maybe is) avoid unnecessary clones by field
-- (leaning towards no, sadly) replace non-recursive nominal-ish choice types by structural-ish choice types. Should be fairly easy to implement as `enum Variant0Variant1<Variant0, Variant1>` but still alright for FFI (you always have to type `Variant0Variant1::Variant0` similar to record structs currently _but_ crucially you have the option to use a still-declared type alias like `type Choice<'a> = Variant0Variant1<usize, &'a str>` to write `Choice::Variant0`)
-- (currently no idea how to implement in rust, maybe can be done in user land given that it required Hash but I'd like order functions to be given for each operation or similar?) add `map`, `set` core types
-- add Range<usize> manually to the Vec::Rc and Str::Rc case (this does trap/"leak" big strings and vecs, JVM seems to have switched away for that reason)
-- (leaning towards no) extend typing model to only specify type variables, so `myFunction<int, str>`, `[]<int>`, `Present<int> 1`, similar to dhall and zig (but worse, because not first class. If it was you could pass types in records etc).
-
-  ```still
-  stack-map<A, B> \:\A > B:element-change, :stack<A>:stack >
-      case stack of
-      Empty<A> > Empty<B>
-      Cons<A> { head :A:head, tail :stack<A>:tail } >
-          Cons<B>
-              { head element-change head
-              , tail stack-map<A, B> element-change tail
-              }
-  ```
-  This generally removes some verbosity, is consistent with choice type/ type alias construction,
-  allows non-called generic functions, would allow the removal of all "::Typed" patterns and expressions (except recursion? but maybe there is a better solution for that).
-- (seems completely useless) infer constness of generated variable/fn items
-- (leaning towards no) allow concrete bounded variables in some type aliases and choice types instead of &dyn
+- add `map` (either tree or index map), `set` core types. currently no idea how to implement in few lines in rust. I'd like order functions to be given for each operation
 - (maybe in the future) add or pattern `( first | second | third )`
 - reimplement [strongly_connected_components](https://docs.rs/strongly-connected-components/latest/strongly_connected_components/) myself
 
