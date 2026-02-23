@@ -9935,9 +9935,8 @@ vec-element 3 my-vec
 };
 
 fn still_syntax_record_to_rust(used_still_record_fields: &[StillName]) -> syn::Item {
-    let rust_struct_name: String = still_field_names_to_rust_record_struct_name(
-        used_still_record_fields.iter().map(StillName::as_str),
-    );
+    let rust_struct_name: String =
+        still_field_names_to_rust_record_struct_name(used_still_record_fields.iter());
     let rust_struct: syn::Item = syn::Item::Struct(syn::ItemStruct {
         attrs: vec![syn_attribute_derive(
             [
@@ -11848,7 +11847,7 @@ fn still_type_to_rust(fn_representation: FnRepresentation, type_: &StillType) ->
                     leading_colon: None,
                     segments: std::iter::once(syn::PathSegment {
                         ident: syn_ident(&still_field_names_to_rust_record_struct_name(
-                            fields_sorted.iter().map(|field| field.name.as_ref()),
+                            fields_sorted.iter().map(|field| &field.name),
                         )),
                         arguments: syn::PathArguments::AngleBracketed(
                             syn::AngleBracketedGenericArguments {
@@ -13248,12 +13247,9 @@ fn still_syntax_expression_to_rust<'a>(
             }
         }
         StillSyntaxExpression::Record(fields) => {
-            records_used.insert(sorted_field_names(
-                fields.iter().map(|field| &field.name.value),
-            ));
             let (rust_fields, field_maybe_types): (
                 syn::punctuated::Punctuated<syn::FieldValue, syn::token::Comma>,
-                Vec<Option<StillTypeField>>,
+                Vec<(StillName, Option<StillType>)>,
             ) = fields
                 .iter()
                 .map(|field| {
@@ -13283,20 +13279,20 @@ fn still_syntax_expression_to_rust<'a>(
                             colon_token: Some(syn::token::Colon(syn_span())),
                             expr: compiled_field_value.rust,
                         },
-                        compiled_field_value.type_.map(|value_type| StillTypeField {
-                            name: field.name.value.clone(),
-                            value: value_type,
-                        }),
+                        (field.name.value.clone(), compiled_field_value.type_),
                     )
                 })
                 .unzip();
+            let field_names: Vec<StillName> =
+                sorted_field_names(field_maybe_types.iter().map(|(field_name, _)| field_name));
+            let rust_struct_name: String =
+                still_field_names_to_rust_record_struct_name(field_names.iter());
+            records_used.insert(field_names);
             CompiledStillExpression {
                 rust: syn::Expr::Struct(syn::ExprStruct {
                     attrs: vec![],
                     qself: None,
-                    path: syn_path_reference([&still_field_names_to_rust_record_struct_name(
-                        fields.iter().map(|field| field.name.value.as_ref()),
-                    )]),
+                    path: syn_path_reference([&rust_struct_name]),
                     brace_token: syn::token::Brace(syn_span()),
                     fields: rust_fields,
                     dot2_token: None,
@@ -13304,6 +13300,12 @@ fn still_syntax_expression_to_rust<'a>(
                 }),
                 type_: field_maybe_types
                     .into_iter()
+                    .map(|(name, maybe_value_type)| {
+                        maybe_value_type.map(|value_type| StillTypeField {
+                            name: name,
+                            value: value_type,
+                        })
+                    })
                     .collect::<Option<Vec<StillTypeField>>>()
                     .map(StillType::Record),
             }
@@ -13490,9 +13492,7 @@ fn still_syntax_expression_to_rust<'a>(
                     attrs: vec![],
                     qself: None,
                     path: syn_path_reference([&still_field_names_to_rust_record_struct_name(
-                        record_to_update_fields
-                            .iter()
-                            .map(|field| field.name.as_str()),
+                        record_to_update_fields.iter().map(|field| &field.name),
                     )]),
                     brace_token: syn::token::Brace(syn_span()),
                     fields: rust_fields,
@@ -15279,7 +15279,7 @@ fn still_syntax_pattern_to_rust<'a>(
                         attrs: vec![],
                         qself: None,
                         path: syn_path_reference([&still_field_names_to_rust_record_struct_name(
-                            fields.iter().map(|field| field.name.value.as_ref()),
+                            fields.iter().map(|field| &field.name.value),
                         )]),
                         brace_token: syn::token::Brace(syn_span()),
                         fields: field_values_rust,
@@ -15436,10 +15436,10 @@ fn still_type_variable_to_rust(name: &str) -> String {
     still_name_to_uppercase_rust(name) + "ø"
 }
 fn still_field_names_to_rust_record_struct_name<'a>(
-    field_names: impl Iterator<Item = &'a str>,
+    field_names: impl Iterator<Item = &'a StillName>,
 ) -> String {
     let mut rust_field_names_vec: Vec<String> = field_names
-        .map(still_name_to_lowercase_rust)
+        .map(|field_name| still_name_to_lowercase_rust(field_name))
         .collect::<Vec<_>>();
     rust_field_names_vec.sort_unstable();
     /*
