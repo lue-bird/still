@@ -19,9 +19,7 @@
   "engines": {
     "vscode": "^1.85.0"
   },
-  "activationEvents": [
-    "workspaceContains:**/still.json"
-  ],
+  "activationEvents": [],
   "main": "./out/extension",
   "contributes": {
     "languages": [
