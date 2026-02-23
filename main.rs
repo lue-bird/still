@@ -13616,35 +13616,47 @@ fn still_syntax_expression_uses_of_local_bindings_into<'a>(
                 }
                 // we collect last uses separately for each case because
                 // cases are not run in sequence but exclusively one of them
+                let mut local_bindings_last_uses_in_branch: std::collections::HashMap<
+                    &str,
+                    StillLocalBindingCompileInfo,
+                > = std::collections::HashMap::new();
                 for case_result in cases_before_last
                     .iter()
                     .filter_map(|case| case.result.as_ref())
                 {
-                    let mut local_bindings_last_uses_in_branch: std::collections::HashMap<
-                        &str,
-                        StillLocalBindingCompileInfo,
-                    > = std::collections::HashMap::new();
+                    // cloning all local binding types can maybe be optimized,
+                    // e.g. by duplicating still_syntax_expression_uses_of_local_bindings_into
+                    // with only the relevant info
+                    local_bindings_last_uses_in_branch.extend(local_binding_infos.iter().map(
+                        |(&local_binding, local_binding_info)| {
+                            (
+                                local_binding,
+                                StillLocalBindingCompileInfo {
+                                    type_: local_binding_info.type_.clone(),
+                                    origin_range: local_binding_info.origin_range,
+                                    is_copy: local_binding_info.is_copy,
+                                    overwriting: local_binding_info.overwriting,
+                                    last_uses: vec![],
+                                    closures_it_is_used_in: vec![],
+                                },
+                            )
+                        },
+                    ));
                     still_syntax_expression_uses_of_local_bindings_into(
                         &mut local_bindings_last_uses_in_branch,
                         maybe_in_closure,
                         still_syntax_node_as_ref(case_result),
                     );
                     for (local_binding_name, local_binding_info_in_branch) in
-                        local_bindings_last_uses_in_branch
+                        local_bindings_last_uses_in_branch.drain()
                     {
-                        match local_binding_infos.get_mut(local_binding_name) {
-                            None => {
-                                local_binding_infos
-                                    .insert(local_binding_name, local_binding_info_in_branch);
-                            }
-                            Some(existing) => {
-                                existing
-                                    .last_uses
-                                    .extend(local_binding_info_in_branch.last_uses);
-                                existing
-                                    .closures_it_is_used_in
-                                    .extend(local_binding_info_in_branch.closures_it_is_used_in);
-                            }
+                        if let Some(existing) = local_binding_infos.get_mut(local_binding_name) {
+                            existing
+                                .last_uses
+                                .extend(local_binding_info_in_branch.last_uses);
+                            existing
+                                .closures_it_is_used_in
+                                .extend(local_binding_info_in_branch.closures_it_is_used_in);
                         }
                     }
                 }
