@@ -753,6 +753,17 @@ fn respond_to_hover(
                 range: Some(hovered_symbol_node.range),
             })
         }
+        StillSyntaxSymbol::Field {
+            name: _,
+            value_type: maybe_value_type,
+            fields_sorted,
+        } => Some(lsp_types::Hover {
+            contents: lsp_types::HoverContents::Markup(lsp_types::MarkupContent {
+                kind: lsp_types::MarkupKind::Markdown,
+                value: field_info_markdown(maybe_value_type.as_ref(), fields_sorted.as_deref()),
+            }),
+            range: Some(hovered_symbol_node.range),
+        }),
         StillSyntaxSymbol::Variant {
             name: hovered_name,
             type_: maybe_type,
@@ -878,6 +889,40 @@ fn local_binding_info_markdown(
         }
     }
 }
+fn field_info_markdown(
+    maybe_type: Option<&StillType>,
+    maybe_fields_sorted: Option<&[StillName]>,
+) -> String {
+    match maybe_type {
+        None => format!(
+            "record field{}",
+            match maybe_fields_sorted {
+                None => "".to_string(),
+                Some(fields_sorted) =>
+                    format!(". available fields are: {}", fields_sorted.join(", ")),
+            }
+        ),
+        Some(type_) => {
+            let mut type_string: String = String::new();
+            still_type_info_into(&mut type_string, 1, type_);
+            format!(
+                "record field
+```still
+:{}{}:
+```
+{}
+",
+                type_string,
+                if type_string.contains('\n') { "\n" } else { "" },
+                match maybe_fields_sorted {
+                    None => "".to_string(),
+                    Some(fields_sorted) =>
+                        format!("available fields are: {}", fields_sorted.join(", ")),
+                }
+            )
+        }
+    }
+}
 fn let_declaration_info_markdown(maybe_type_type: Option<&StillType>) -> String {
     match maybe_type_type {
         None => "let variable".to_string(),
@@ -919,7 +964,8 @@ fn respond_to_goto_definition(
         )?;
     match goto_symbol_node.value {
         StillSyntaxSymbol::LetDeclarationName { .. }
-        | StillSyntaxSymbol::ProjectDeclarationName { .. } => {
+        | StillSyntaxSymbol::ProjectDeclarationName { .. }
+        | StillSyntaxSymbol::Field { .. } => {
             // already at definition
             None
         }
@@ -1129,7 +1175,15 @@ fn respond_to_prepare_rename(
             &project_state.variable_declarations,
             prepare_rename_arguments.position,
         )?;
-    Some(match prepare_rename_symbol_node.value {
+    match prepare_rename_symbol_node.value {
+        StillSyntaxSymbol::Field {
+            name: _,
+            value_type: _,
+            fields_sorted: _,
+        } => {
+            // TODO?
+            None
+        }
         StillSyntaxSymbol::ProjectDeclarationName {
             name,
             declaration: _,
@@ -1150,12 +1204,12 @@ fn respond_to_prepare_rename(
         }
         | StillSyntaxSymbol::Variant { name, type_: _ }
         | StillSyntaxSymbol::Type(name) => {
-            Ok(lsp_types::PrepareRenameResponse::RangeWithPlaceholder {
+            Some(Ok(lsp_types::PrepareRenameResponse::RangeWithPlaceholder {
                 range: prepare_rename_symbol_node.range,
                 placeholder: name.to_string(),
-            })
+            }))
         }
-    })
+    }
 }
 
 fn respond_to_rename(
@@ -1173,7 +1227,15 @@ fn respond_to_rename(
             &to_prepare_for_rename_project_state.variable_declarations,
             rename_arguments.text_document_position.position,
         )?;
-    Some(match symbol_to_rename_node.value {
+    match symbol_to_rename_node.value {
+        StillSyntaxSymbol::Field {
+            name: _,
+            value_type: _,
+            fields_sorted: _,
+        } => {
+            // TODO?
+            None
+        }
         StillSyntaxSymbol::TypeVariable {
             scope_declaration,
             name: type_variable_to_rename,
@@ -1186,7 +1248,7 @@ fn respond_to_rename(
                 scope_declaration,
                 StillSymbolToReference::TypeVariable(type_variable_to_rename),
             );
-            vec![lsp_types::TextDocumentEdit {
+            Some(vec![lsp_types::TextDocumentEdit {
                 text_document: lsp_types::OptionalVersionedTextDocumentIdentifier {
                     uri: rename_arguments.text_document_position.text_document.uri,
                     version: None,
@@ -1200,7 +1262,7 @@ fn respond_to_rename(
                         })
                     })
                     .collect::<Vec<_>>(),
-            }]
+            }])
         }
         StillSyntaxSymbol::ProjectDeclarationName {
             name: to_rename_declaration_name,
@@ -1247,7 +1309,7 @@ fn respond_to_rename(
                 &to_prepare_for_rename_project_state.syntax,
                 still_declared_symbol_to_rename,
             );
-            vec![lsp_types::TextDocumentEdit {
+            Some(vec![lsp_types::TextDocumentEdit {
                 text_document: lsp_types::OptionalVersionedTextDocumentIdentifier {
                     uri: rename_arguments.text_document_position.text_document.uri,
                     version: None,
@@ -1261,7 +1323,7 @@ fn respond_to_rename(
                         })
                     })
                     .collect::<Vec<_>>(),
-            }]
+            }])
         }
         StillSyntaxSymbol::LetDeclarationName {
             name: to_rename_name,
@@ -1280,7 +1342,7 @@ fn respond_to_rename(
                     including_let_declaration_name: true,
                 },
             );
-            vec![lsp_types::TextDocumentEdit {
+            Some(vec![lsp_types::TextDocumentEdit {
                 text_document: lsp_types::OptionalVersionedTextDocumentIdentifier {
                     uri: rename_arguments.text_document_position.text_document.uri,
                     version: None,
@@ -1294,7 +1356,7 @@ fn respond_to_rename(
                         })
                     })
                     .collect::<Vec<_>>(),
-            }]
+            }])
         }
         StillSyntaxSymbol::Variable {
             name: to_rename_name,
@@ -1323,7 +1385,7 @@ fn respond_to_rename(
                         including_let_declaration_name: true,
                     },
                 );
-                vec![lsp_types::TextDocumentEdit {
+                Some(vec![lsp_types::TextDocumentEdit {
                     text_document: lsp_types::OptionalVersionedTextDocumentIdentifier {
                         uri: rename_arguments.text_document_position.text_document.uri,
                         version: None,
@@ -1337,7 +1399,7 @@ fn respond_to_rename(
                             })
                         })
                         .collect::<Vec<_>>(),
-                }]
+                }])
             } else {
                 let symbol_to_find: StillSymbolToReference = StillSymbolToReference::Variable {
                     name: to_rename_name,
@@ -1350,7 +1412,7 @@ fn respond_to_rename(
                     &to_prepare_for_rename_project_state.syntax,
                     symbol_to_find,
                 );
-                vec![lsp_types::TextDocumentEdit {
+                Some(vec![lsp_types::TextDocumentEdit {
                     text_document: lsp_types::OptionalVersionedTextDocumentIdentifier {
                         uri: rename_arguments.text_document_position.text_document.uri,
                         version: None,
@@ -1364,7 +1426,7 @@ fn respond_to_rename(
                             })
                         })
                         .collect::<Vec<_>>(),
-                }]
+                }])
             }
         }
         StillSyntaxSymbol::Variant {
@@ -1390,7 +1452,7 @@ fn respond_to_rename(
                 &to_prepare_for_rename_project_state.syntax,
                 symbol_to_find,
             );
-            vec![lsp_types::TextDocumentEdit {
+            Some(vec![lsp_types::TextDocumentEdit {
                 text_document: lsp_types::OptionalVersionedTextDocumentIdentifier {
                     uri: rename_arguments.text_document_position.text_document.uri,
                     version: None,
@@ -1404,7 +1466,7 @@ fn respond_to_rename(
                         })
                     })
                     .collect::<Vec<_>>(),
-            }]
+            }])
         }
         StillSyntaxSymbol::Type(type_name_to_rename) => {
             let still_declared_symbol_to_rename: StillSymbolToReference =
@@ -1420,7 +1482,7 @@ fn respond_to_rename(
                 &to_prepare_for_rename_project_state.syntax,
                 still_declared_symbol_to_rename,
             );
-            vec![lsp_types::TextDocumentEdit {
+            Some(vec![lsp_types::TextDocumentEdit {
                 text_document: lsp_types::OptionalVersionedTextDocumentIdentifier {
                     uri: rename_arguments.text_document_position.text_document.uri,
                     version: None,
@@ -1434,9 +1496,9 @@ fn respond_to_rename(
                         })
                     })
                     .collect::<Vec<_>>(),
-            }]
+            }])
         }
-    })
+    }
 }
 fn respond_to_references(
     state: &State,
@@ -1456,7 +1518,15 @@ fn respond_to_references(
             &to_find_project_state.variable_declarations,
             references_arguments.text_document_position.position,
         )?;
-    Some(match symbol_to_find_node.value {
+    match symbol_to_find_node.value {
+        StillSyntaxSymbol::Field {
+            name: _,
+            value_type: _,
+            fields_sorted: _,
+        } => {
+            // TODO?
+            None
+        }
         StillSyntaxSymbol::TypeVariable {
             scope_declaration,
             name: type_variable_to_find,
@@ -1468,17 +1538,19 @@ fn respond_to_references(
                 scope_declaration,
                 StillSymbolToReference::TypeVariable(type_variable_to_find),
             );
-            all_uses_of_found_type_variable
-                .into_iter()
-                .map(|use_range_of_found_project| lsp_types::Location {
-                    uri: references_arguments
-                        .text_document_position
-                        .text_document
-                        .uri
-                        .clone(),
-                    range: use_range_of_found_project,
-                })
-                .collect::<Vec<_>>()
+            Some(
+                all_uses_of_found_type_variable
+                    .into_iter()
+                    .map(|use_range_of_found_project| lsp_types::Location {
+                        uri: references_arguments
+                            .text_document_position
+                            .text_document
+                            .uri
+                            .clone(),
+                        range: use_range_of_found_project,
+                    })
+                    .collect::<Vec<_>>(),
+            )
         }
         StillSyntaxSymbol::ProjectDeclarationName {
             name: to_find_name,
@@ -1505,17 +1577,19 @@ fn respond_to_references(
                 &to_find_project_state.syntax,
                 still_declared_symbol_to_find,
             );
-            all_uses_of_found_project_member
-                .into_iter()
-                .map(|use_range_of_found_project| lsp_types::Location {
-                    uri: references_arguments
-                        .text_document_position
-                        .text_document
-                        .uri
-                        .clone(),
-                    range: use_range_of_found_project,
-                })
-                .collect::<Vec<_>>()
+            Some(
+                all_uses_of_found_project_member
+                    .into_iter()
+                    .map(|use_range_of_found_project| lsp_types::Location {
+                        uri: references_arguments
+                            .text_document_position
+                            .text_document
+                            .uri
+                            .clone(),
+                        range: use_range_of_found_project,
+                    })
+                    .collect::<Vec<_>>(),
+            )
         }
         StillSyntaxSymbol::LetDeclarationName {
             name: to_find_name,
@@ -1536,17 +1610,19 @@ fn respond_to_references(
                         .include_declaration,
                 },
             );
-            all_uses_of_found_let_declaration
-                .into_iter()
-                .map(|use_range_of_found_project| lsp_types::Location {
-                    uri: references_arguments
-                        .text_document_position
-                        .text_document
-                        .uri
-                        .clone(),
-                    range: use_range_of_found_project,
-                })
-                .collect::<Vec<_>>()
+            Some(
+                all_uses_of_found_let_declaration
+                    .into_iter()
+                    .map(|use_range_of_found_project| lsp_types::Location {
+                        uri: references_arguments
+                            .text_document_position
+                            .text_document
+                            .uri
+                            .clone(),
+                        range: use_range_of_found_project,
+                    })
+                    .collect::<Vec<_>>(),
+            )
         }
         StillSyntaxSymbol::Variable {
             name: to_find_name,
@@ -1579,17 +1655,19 @@ fn respond_to_references(
                             .include_declaration,
                     },
                 );
-                all_uses_of_found_local_binding
-                    .into_iter()
-                    .map(|use_range_of_found_project| lsp_types::Location {
-                        uri: references_arguments
-                            .text_document_position
-                            .text_document
-                            .uri
-                            .clone(),
-                        range: use_range_of_found_project,
-                    })
-                    .collect::<Vec<_>>()
+                Some(
+                    all_uses_of_found_local_binding
+                        .into_iter()
+                        .map(|use_range_of_found_project| lsp_types::Location {
+                            uri: references_arguments
+                                .text_document_position
+                                .text_document
+                                .uri
+                                .clone(),
+                            range: use_range_of_found_project,
+                        })
+                        .collect::<Vec<_>>(),
+                )
             } else {
                 let symbol_to_find: StillSymbolToReference = StillSymbolToReference::Variable {
                     name: to_find_name,
@@ -1603,17 +1681,19 @@ fn respond_to_references(
                     symbol_to_find,
                 );
 
-                all_uses_of_found_variable
-                    .into_iter()
-                    .map(|use_range_of_found_project| lsp_types::Location {
-                        uri: references_arguments
-                            .text_document_position
-                            .text_document
-                            .uri
-                            .clone(),
-                        range: use_range_of_found_project,
-                    })
-                    .collect::<Vec<_>>()
+                Some(
+                    all_uses_of_found_variable
+                        .into_iter()
+                        .map(|use_range_of_found_project| lsp_types::Location {
+                            uri: references_arguments
+                                .text_document_position
+                                .text_document
+                                .uri
+                                .clone(),
+                            range: use_range_of_found_project,
+                        })
+                        .collect::<Vec<_>>(),
+                )
             }
         }
         StillSyntaxSymbol::Variant {
@@ -1639,17 +1719,19 @@ fn respond_to_references(
                 &to_find_project_state.syntax,
                 symbol_to_find,
             );
-            all_uses_of_found_variable
-                .into_iter()
-                .map(|use_range_of_found_project| lsp_types::Location {
-                    uri: references_arguments
-                        .text_document_position
-                        .text_document
-                        .uri
-                        .clone(),
-                    range: use_range_of_found_project,
-                })
-                .collect::<Vec<_>>()
+            Some(
+                all_uses_of_found_variable
+                    .into_iter()
+                    .map(|use_range_of_found_project| lsp_types::Location {
+                        uri: references_arguments
+                            .text_document_position
+                            .text_document
+                            .uri
+                            .clone(),
+                        range: use_range_of_found_project,
+                    })
+                    .collect::<Vec<_>>(),
+            )
         }
         StillSyntaxSymbol::Type(type_name_to_find) => {
             let still_declared_symbol_to_find: StillSymbolToReference =
@@ -1664,19 +1746,21 @@ fn respond_to_references(
                 &to_find_project_state.syntax,
                 still_declared_symbol_to_find,
             );
-            all_uses_of_found_type
-                .into_iter()
-                .map(|use_range_of_found_project| lsp_types::Location {
-                    uri: references_arguments
-                        .text_document_position
-                        .text_document
-                        .uri
-                        .clone(),
-                    range: use_range_of_found_project,
-                })
-                .collect::<Vec<_>>()
+            Some(
+                all_uses_of_found_type
+                    .into_iter()
+                    .map(|use_range_of_found_project| lsp_types::Location {
+                        uri: references_arguments
+                            .text_document_position
+                            .text_document
+                            .uri
+                            .clone(),
+                        range: use_range_of_found_project,
+                    })
+                    .collect::<Vec<_>>(),
+            )
         }
-    })
+    }
 }
 
 fn respond_to_semantic_tokens_full(
@@ -1861,6 +1945,22 @@ fn respond_to_completion(
     {
         StillSyntaxSymbol::LetDeclarationName { .. } => None,
         StillSyntaxSymbol::ProjectDeclarationName { .. } => None,
+        StillSyntaxSymbol::Field {
+            name: _,
+            value_type: _,
+            fields_sorted,
+        } => Some(
+            fields_sorted
+                .iter()
+                .flatten()
+                .map(|field_name| lsp_types::CompletionItem {
+                    label: field_name.to_string(),
+                    kind: Some(lsp_types::CompletionItemKind::VARIABLE),
+                    documentation: None,
+                    ..lsp_types::CompletionItem::default()
+                })
+                .collect(),
+        ),
         StillSyntaxSymbol::Variable {
             name: _,
             local_bindings,
@@ -4386,6 +4486,11 @@ enum StillSyntaxSymbol<'a> {
         scope_declaration: &'a StillSyntaxDeclaration,
         name: &'a StillName,
     },
+    Field {
+        name: &'a StillName,
+        value_type: Option<StillType>,
+        fields_sorted: Option<Vec<StillName>>,
+    },
 }
 type StillLocalBindings<'a> = Vec<(
     StillSyntaxNode<&'a StillSyntaxExpression>,
@@ -4834,6 +4939,11 @@ fn still_syntax_expression_find_symbol_at_position<'a>(
         return std::ops::ControlFlow::Continue(local_bindings);
     }
     match expression_node.value {
+        StillSyntaxExpression::Char(_) => std::ops::ControlFlow::Continue(local_bindings),
+        StillSyntaxExpression::Dec(_) => std::ops::ControlFlow::Continue(local_bindings),
+        StillSyntaxExpression::Unt(_) => std::ops::ControlFlow::Continue(local_bindings),
+        StillSyntaxExpression::Int(_) => std::ops::ControlFlow::Continue(local_bindings),
+        StillSyntaxExpression::String { .. } => std::ops::ControlFlow::Continue(local_bindings),
         StillSyntaxExpression::VariableOrCall {
             variable: variable_node,
             arguments,
@@ -4921,10 +5031,6 @@ fn still_syntax_expression_find_symbol_at_position<'a>(
                     }
                 })
         }
-        StillSyntaxExpression::Char(_) => std::ops::ControlFlow::Continue(local_bindings),
-        StillSyntaxExpression::Dec(_) => std::ops::ControlFlow::Continue(local_bindings),
-        StillSyntaxExpression::Unt(_) => std::ops::ControlFlow::Continue(local_bindings),
-        StillSyntaxExpression::Int(_) => std::ops::ControlFlow::Continue(local_bindings),
         StillSyntaxExpression::Lambda {
             parameters,
             arrow_key_symbol_range: _,
@@ -4987,7 +5093,7 @@ fn still_syntax_expression_find_symbol_at_position<'a>(
                 declarations
                     .iter()
                     .try_fold(local_bindings, |local_bindings, declaration| {
-                        still_syntax_let_declaration_find_symbol_at_position(
+                        still_syntax_local_declaration_find_symbol_at_position(
                             type_aliases,
                             choice_types,
                             variable_declarations,
@@ -5115,38 +5221,110 @@ fn still_syntax_expression_find_symbol_at_position<'a>(
                 },
             }
         }
-        StillSyntaxExpression::Record(fields) => {
-            fields
-                .iter()
-                .try_fold(local_bindings, |local_bindings, field| match &field.value {
-                    Some(field_value_node) => still_syntax_expression_find_symbol_at_position(
-                        type_aliases,
-                        choice_types,
-                        variable_declarations,
-                        scope_declaration,
-                        local_bindings,
-                        still_syntax_node_as_ref(field_value_node),
-                        position,
+        StillSyntaxExpression::RecordAccess {
+            record: record_node,
+            field: maybe_field_name,
+        } => {
+            if let Some(field_name_node) = maybe_field_name
+                && lsp_range_includes_position(field_name_node.range, position)
+            {
+                let maybe_type_fields = still_syntax_expression_type_with(
+                    type_aliases,
+                    choice_types,
+                    variable_declarations,
+                    std::rc::Rc::new(
+                        local_bindings
+                            .iter()
+                            .flat_map(|(_, scope_bindings)| scope_bindings)
+                            .map(|binding| (binding.name, binding.type_.clone()))
+                            .collect::<std::collections::HashMap<_, _>>(),
                     ),
-                    None => std::ops::ControlFlow::Continue(local_bindings),
-                })
-        }
-        StillSyntaxExpression::RecordAccess { record, field: _ } => {
+                    still_syntax_node_unbox(record_node),
+                )
+                .and_then(|record_type| match record_type {
+                    StillType::Record(fields) => Some(fields),
+                    _ => None,
+                });
+                return std::ops::ControlFlow::Break(StillSyntaxNode {
+                    value: StillSyntaxSymbol::Field {
+                        name: &field_name_node.value,
+                        fields_sorted: maybe_type_fields.as_ref().map(|type_fields| {
+                            sorted_field_names(
+                                type_fields.iter().map(|record_field| &record_field.name),
+                            )
+                        }),
+                        value_type: maybe_type_fields.and_then(|type_fields| {
+                            type_fields
+                                .into_iter()
+                                .find(|type_field| type_field.name == field_name_node.value)
+                                .map(|field| field.value)
+                        }),
+                    },
+                    range: field_name_node.range,
+                });
+            }
             still_syntax_expression_find_symbol_at_position(
                 type_aliases,
                 choice_types,
                 variable_declarations,
                 scope_declaration,
                 local_bindings,
-                still_syntax_node_unbox(record),
+                still_syntax_node_unbox(record_node),
                 position,
             )
+        }
+        StillSyntaxExpression::Record(fields) => {
+            fields
+                .iter()
+                .try_fold(local_bindings, |local_bindings, field| {
+                    if lsp_range_includes_position(field.name.range, position) {
+                        return std::ops::ControlFlow::Break(StillSyntaxNode {
+                            value: StillSyntaxSymbol::Field {
+                                name: &field.name.value,
+                                value_type: field.value.as_ref().and_then(|field_value_node| {
+                                    still_syntax_expression_type_with(
+                                        type_aliases,
+                                        choice_types,
+                                        variable_declarations,
+                                        std::rc::Rc::new(
+                                            local_bindings
+                                                .iter()
+                                                .flat_map(|(_, scope_bindings)| scope_bindings)
+                                                .map(|binding| {
+                                                    (binding.name, binding.type_.clone())
+                                                })
+                                                .collect::<std::collections::HashMap<_, _>>(),
+                                        ),
+                                        still_syntax_node_as_ref(field_value_node),
+                                    )
+                                }),
+                                fields_sorted: Some(sorted_field_names(
+                                    fields.iter().map(|record_field| &record_field.name.value),
+                                )),
+                            },
+                            range: field.name.range,
+                        });
+                    }
+                    match &field.value {
+                        Some(field_value_node) => still_syntax_expression_find_symbol_at_position(
+                            type_aliases,
+                            choice_types,
+                            variable_declarations,
+                            scope_declaration,
+                            local_bindings,
+                            still_syntax_node_as_ref(field_value_node),
+                            position,
+                        ),
+                        None => std::ops::ControlFlow::Continue(local_bindings),
+                    }
+                })
         }
         StillSyntaxExpression::RecordUpdate {
             record: maybe_record,
             spread_key_symbol_range: _,
             fields,
         } => {
+            // TODO check field names
             if let Some(record_node) = maybe_record
                 && lsp_range_includes_position(record_node.range, position)
             {
@@ -5175,11 +5353,10 @@ fn still_syntax_expression_find_symbol_at_position<'a>(
                     None => std::ops::ControlFlow::Continue(local_bindings),
                 })
         }
-        StillSyntaxExpression::String { .. } => std::ops::ControlFlow::Continue(local_bindings),
     }
 }
 
-fn still_syntax_let_declaration_find_symbol_at_position<'a>(
+fn still_syntax_local_declaration_find_symbol_at_position<'a>(
     type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
     choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
     variable_declarations: &std::collections::HashMap<StillName, CompiledVariableDeclarationInfo>,
@@ -5201,10 +5378,17 @@ fn still_syntax_let_declaration_find_symbol_at_position<'a>(
                     .result
                     .as_ref()
                     .and_then(|result_node| {
-                        still_syntax_expression_type(
+                        still_syntax_expression_type_with(
                             type_aliases,
                             choice_types,
                             variable_declarations,
+                            std::rc::Rc::new(
+                                local_bindings
+                                    .iter()
+                                    .flat_map(|(_, scope_bindings)| scope_bindings)
+                                    .map(|binding| (binding.name, binding.type_.clone()))
+                                    .collect::<std::collections::HashMap<_, _>>(),
+                            ),
                             still_syntax_node_unbox(result_node),
                         )
                     }),
