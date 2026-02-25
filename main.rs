@@ -2626,6 +2626,7 @@ enum StillSyntaxPatternUntyped {
         name: StillSyntaxNode<StillName>,
         value: Option<StillSyntaxNode<Box<StillSyntaxPattern>>>,
     },
+    Other(Box<StillSyntaxPattern>),
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum StillSyntaxStringQuotingStyle {
@@ -3565,6 +3566,16 @@ fn still_syntax_pattern_into(
                                 still_syntax_node_unbox(value_node),
                             );
                         }
+                    }
+                    StillSyntaxPatternUntyped::Other(other_in_typed) => {
+                        still_syntax_pattern_into(
+                            so_far,
+                            indent,
+                            StillSyntaxNode {
+                                range: pattern_node_in_typed.range,
+                                value: other_in_typed,
+                            },
+                        );
                     }
                 }
             }
@@ -4798,6 +4809,19 @@ fn still_syntax_pattern_find_symbol_at_position<'a>(
                                 )
                             })
                         }
+                    }
+                    StillSyntaxPatternUntyped::Other(other_in_typed) => {
+                        still_syntax_pattern_find_symbol_at_position(
+                            type_aliases,
+                            choice_types,
+                            scope_declaration,
+                            scope_expression,
+                            StillSyntaxNode {
+                                range: pattern_node_in_typed.range,
+                                value: other_in_typed,
+                            },
+                            position,
+                        )
                     }
                 }
             }),
@@ -6139,6 +6163,17 @@ fn still_syntax_pattern_uses_of_symbol_into(
                             );
                         }
                     }
+                    StillSyntaxPatternUntyped::Other(other_in_typed) => {
+                        still_syntax_pattern_uses_of_symbol_into(
+                            uses_so_far,
+                            type_aliases,
+                            StillSyntaxNode {
+                                range: pattern_node_in_typed.range,
+                                value: other_in_typed,
+                            },
+                            symbol_to_collect_uses_of,
+                        );
+                    }
                 }
             }
         }
@@ -6253,6 +6288,17 @@ fn still_syntax_pattern_bindings_into<'a>(
                             );
                         }
                     }
+                    StillSyntaxPatternUntyped::Other(other_in_typed) => {
+                        still_syntax_pattern_bindings_into(
+                            bindings_so_far,
+                            type_aliases,
+                            choice_types,
+                            StillSyntaxNode {
+                                range: pattern_node_in_typed.range,
+                                value: other_in_typed,
+                            },
+                        );
+                    }
                 }
             }
         }
@@ -6316,6 +6362,15 @@ fn still_syntax_pattern_binding_names_into<'a>(
                                 still_syntax_node_unbox(value_node),
                             );
                         }
+                    }
+                    StillSyntaxPatternUntyped::Other(other_in_typed) => {
+                        still_syntax_pattern_binding_names_into(
+                            bindings_so_far,
+                            StillSyntaxNode {
+                                range: pattern_node_in_typed.range,
+                                value: other_in_typed,
+                            },
+                        );
                     }
                 }
             }
@@ -6390,6 +6445,17 @@ fn still_syntax_pattern_binding_types_into<'a>(
                                 still_syntax_node_unbox(value_node),
                             );
                         }
+                    }
+                    StillSyntaxPatternUntyped::Other(other_in_typed) => {
+                        still_syntax_pattern_binding_types_into(
+                            bindings_so_far,
+                            type_aliases,
+                            choice_types,
+                            StillSyntaxNode {
+                                range: pattern_node_in_typed.range,
+                                value: other_in_typed,
+                            },
+                        );
                     }
                 }
             }
@@ -6688,6 +6754,15 @@ fn still_syntax_highlight_pattern_into(
                                 still_syntax_node_unbox(value_node),
                             );
                         }
+                    }
+                    StillSyntaxPatternUntyped::Other(other_in_typed) => {
+                        still_syntax_highlight_pattern_into(
+                            highlighted_so_far,
+                            StillSyntaxNode {
+                                range: pattern_node_in_typed.range,
+                                value: other_in_typed,
+                            },
+                        );
                     }
                 }
             }
@@ -7669,6 +7744,13 @@ fn parse_still_syntax_pattern_untyped(
             })
         })
         .or_else(|| parse_still_syntax_pattern_variant(state))
+        .or_else(|| {
+            parse_still_syntax_pattern(state).map(|other_node| {
+                still_syntax_node_map(other_node, |other| {
+                    StillSyntaxPatternUntyped::Other(Box::new(other))
+                })
+            })
+        })
 }
 struct StillSyntaxLocalVariable {
     name: StillSyntaxNode<StillName>,
@@ -15446,6 +15528,20 @@ fn still_syntax_pattern_to_rust<'a>(
                         }
                     }
                 }
+                StillSyntaxPatternUntyped::Other(other_in_typed) => still_syntax_pattern_to_rust(
+                    errors,
+                    records_used,
+                    introduced_str_bindings_to_match,
+                    introduced_bindings,
+                    bindings_to_clone,
+                    type_aliases,
+                    choice_types,
+                    is_reference,
+                    StillSyntaxNode {
+                        range: untyped_pattern_node.range,
+                        value: other_in_typed,
+                    },
+                ),
             }
         }
         StillSyntaxPattern::Record(fields) => {

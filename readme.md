@@ -61,7 +61,7 @@ Then point your editor to `still lsp`, see also [specific setups](#editor-setups
 # declared variable, type and field names use ascii letters, digits and -
 s0me-Name
 
-# any expression can have an explicit :type:
+# any expression/pattern can have an explicit :type:
 :str:some-variable-name
 
 # string (of type str)
