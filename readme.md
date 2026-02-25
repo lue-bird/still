@@ -52,7 +52,7 @@ Then point your editor to `still lsp`, see also [specific setups](#editor-setups
 - no blocking compile errors. You can always build, even if your record is still missing a field value, your matching is still inexhaustive, some parens are empty, etc.
   You will still see all the errors, though.
 
-- no features that obfuscate ("shiny, cool features" that ruin languages in my opinion): infix operators, currying, lifetime tracking, traits/type classes/overloading, objects, task/async, hidden mutation, macros & reflection, side effects, modules, hidden context values, exceptions, undefined
+- no features that obfuscate ("shiny, cool features" that ruin languages in my opinion): infix operators, currying, traits/type classes/overloading, objects, task/async, hidden mutation, macros & reflection, lifetime tracking, hidden side effects, modules, hidden context values, exceptions, undefined
 
 ## syntax overview
 ```still
@@ -256,11 +256,11 @@ Then point your editor to the created `???/target/debug/still lsp`.
 
 ## considering
 - do not format declarations followed by Err
-- (leaning towards yes) add `unts-sum`, `decs-sum`, `ints-sum`, `unts-product`, `ints-product`, `decs-product`
-- (leaning towards yes) add core bitwise and, or, xor, shifts, complement for the integer number types
-- (leaning towards yes) add `vec-walk-backwards-from`, `str-walk-chars-backwards-from`
-- switch unt and int to 64 bit
 - (leaning towards yes) allow comments before variant (field name, case?, variant?)
+- (leaning towards yes) add `unts-sum`, `decs-sum`, `ints-sum`, `unts-product`, `ints-product`, `decs-product`
+- (leaning towards yes) add `vec-walk-backwards-from`, `str-walk-chars-backwards-from`
+- (leaning towards no) switch unt and int to 64 bit
+- (once a use case is found) add core bitwise and, or, xor, shifts, complement for the integer number types
 - (seems not worth the analysis cost but a simpler version maybe is) avoid unnecessary clones by field
 - (to make some parts almost infinitely scalable:) for formatting: leave declarations fully outside of "touched ranges" alone; for compilation: if touched only in one declaration and its type ends up the same, only change that declaration's output, (optionally: if type changed, recompile "downstream"); also, when edited range lies exclusively between existing declaration ranges, only compile that one
 - in syntax tree, use separate range type for single-line tokens like keywords, symbols, names etc to save on memory consumption
