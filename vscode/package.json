@@ -1,20 +1,20 @@
 {
-  "name": "still",
-  "displayName": "still",
-  "description": "language server for still",
+  "name": "lily",
+  "displayName": "lily",
+  "description": "language server for lily",
   "author": "lue_bird",
   "icon": "images/icon.png",
   "license": "MIT",
   "version": "0.0.1",
   "repository": {
     "type": "git",
-    "url": "https://github.com/lue-bird/still"
+    "url": "https://github.com/lue-bird/lily"
   },
   "categories": [
     "Programming Languages"
   ],
   "keywords": [
-    "still"
+    "lily"
   ],
   "engines": {
     "vscode": "^1.85.0"
@@ -24,9 +24,9 @@
   "contributes": {
     "languages": [
       {
-        "id": "still",
+        "id": "lily",
         "extensions": [
-          ".still"
+          ".lily"
         ],
         "configuration": "./language-configuration.json",
         "icon": {
@@ -37,26 +37,26 @@
     ],
     "grammars": [
       {
-        "scopeName": "markdown.still.codeblock",
+        "scopeName": "markdown.lily.codeblock",
         "path": "./syntaxes/codeblock.json",
         "injectTo": [
           "text.html.markdown"
         ],
         "embeddedLanguages": {
-          "meta.embedded.block.still": "still"
+          "meta.embedded.block.lily": "lily"
         }
       },
       {
-        "language": "still",
-        "scopeName": "source.still",
-        "path": "./syntaxes/still-syntax.json"
+        "language": "lily",
+        "scopeName": "source.lily",
+        "path": "./syntaxes/lily-syntax.json"
       }
     ],
     "commands": [
       {
-        "command": "still.commands.restart",
-        "title": "restart still",
-        "category": "still"
+        "command": "lily.commands.restart",
+        "title": "restart lily",
+        "category": "lily"
       }
     ]
   },

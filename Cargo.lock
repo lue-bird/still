@@ -181,6 +181,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a5f13b858c8d314ee3e8f639011f7ccefe71f97f96e50151fb991f267928e2c"
 
 [[package]]
+name = "lily"
+version = "0.0.0"
+dependencies = [
+ "compact_str",
+ "lsp-server",
+ "lsp-types",
+ "prettyplease",
+ "proc-macro2",
+ "quote",
+ "serde_json",
+ "strongly-connected-components",
+ "syn",
+]
+
+[[package]]
 name = "litemap"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -350,21 +365,6 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
-
-[[package]]
-name = "still"
-version = "0.0.0"
-dependencies = [
- "compact_str",
- "lsp-server",
- "lsp-types",
- "prettyplease",
- "proc-macro2",
- "quote",
- "serde_json",
- "strongly-connected-components",
- "syn",
-]
 
 [[package]]
 name = "strongly-connected-components"

@@ -1,3 +1,3 @@
 ```bash
-still build ; cargo run
+lily build ; cargo run
 ```

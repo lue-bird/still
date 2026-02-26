@@ -1,9 +1,9 @@
 cargo-features = ["codegen-backend"]
 [package]
-name = "still"
+name = "lily"
 edition = "2024"
 [[bin]]
-name = "still"
+name = "lily"
 path = "main.rs"
 
 [dependencies]

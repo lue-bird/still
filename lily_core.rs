@@ -115,7 +115,7 @@ fn str_to_int(str: Str) -> Opt<Int> {
     }
 }
 
-/// Please sanitize before passing it to still (drop infinities and NaN)
+/// Please sanitize before passing it to lily (drop infinities and NaN)
 pub type Dec = f64;
 fn dec_pi() -> Dec {
     std::f64::consts::PI

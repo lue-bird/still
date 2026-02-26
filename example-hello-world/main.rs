@@ -1,8 +1,8 @@
-mod still;
+mod lily;
 
 fn main() {
     print!(
         "{}",
-        still::greet(still::Str::Slice("insert your name here"))
+        lily::greet(lily::Str::Slice("insert your name here"))
     );
 }

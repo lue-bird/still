@@ -2,22 +2,22 @@ very small, explicitly boring, purely functional programming language that compi
 > ⚠️ Experimental, subject to change, use with caution.
 
 ### hello world
-```still
+```lily
 greet \:str:name >
     strs-flatten [ "Hello, ", name, "\n" ]
 ```
 Variables don't perform any effects.
 The compiled code can however be used from rust to actually do something:
 ```rust
-mod still;
+mod lily;
 fn main() {
-    print!("{}", still::greet(still::Str::Slice("insert your name here")));
+    print!("{}", lily::greet(lily::Str::Slice("insert your name here")));
 }
 ```
-→ complete setup: [`example-hello-world/`](https://github.com/lue-bird/still/tree/main/example-hello-world)
+→ complete setup: [`example-hello-world/`](https://github.com/lue-bird/lily/tree/main/example-hello-world)
 
 ### echo in loop
-```still
+```lily
 ansi-clear-screen
     "\u{001B}c"
 
@@ -35,13 +35,13 @@ choice io Future
     | Standard-out-write str
     | Standard-in-read-line \str > Future
 ```
-→ [`example-echo-in-loop/`](https://github.com/lue-bird/still/tree/main/example-echo-in-loop)
+→ [`example-echo-in-loop/`](https://github.com/lue-bird/lily/tree/main/example-echo-in-loop)
 
 To use, [install rust](https://rust-lang.org/tools/install/) and
 ```bash
-cargo +nightly install --git https://github.com/lue-bird/still
+cargo +nightly install --git https://github.com/lue-bird/lily
 ```
-Then point your editor to `still lsp`, see also [specific setups](#editor-setups).
+Then point your editor to `lily lsp`, see also [specific setups](#editor-setups).
 
 ## maybe interesting
 
@@ -49,13 +49,13 @@ Then point your editor to `still lsp`, see also [specific setups](#editor-setups
 
   → faster type checking, clear errors, a few less bugs, easy compilation to almost any language
 
-- no blocking compile errors. You can always build, even if your record is still missing a field value, your matching is still inexhaustive, some parens are empty, etc.
-  You will still see all the errors, though.
+- no blocking compile errors. You can always build, even if your record is lily missing a field value, your matching is lily inexhaustive, some parens are empty, etc.
+  You will lily see all the errors, though.
 
 - no features that obfuscate ("shiny, cool features" that ruin languages in my opinion): infix operators, currying, traits/type classes/overloading, objects, task/async, hidden mutation, macros & reflection, lifetime tracking, hidden side effects, modules, hidden context values, exceptions, undefined
 
 ## syntax overview
-```still
+```lily
 # this is a comment.
 
 # declared variable, type and field names use ascii letters, digits and -
@@ -179,7 +179,7 @@ Regular types are passed by value, copying if necessary.
 `vec`, `str`, recursive variant values and closures however can be reference-counted,
 so passing structures containing them will clone if necessary.
 Reference-counting some `vec`s and `str`s enables a very important "trick":
-Mutating the underlying owned vector or string if only one instance is still alive.
+Mutating the underlying owned vector or string if only one instance is lily alive.
 
 ### why rust
 Massive piggyback: great stdlib, fast output, good ecosystem, much easier to compile to: native enum support, native pattern matching support, extensive compile-time checks, all that is gold.
@@ -187,30 +187,30 @@ Massive piggyback: great stdlib, fast output, good ecosystem, much easier to com
 You might have heard that compilation can be slow for big projects
 but after switching to [the cranelift backend](https://github.com/rust-lang/rustc_codegen_cranelift) I haven't had any complaints (0.7-1.6s, 16k lines).
 
-### why no direct ffi, calling rust from still
+### why no direct ffi, calling rust from lily
 Inspired by elm, effects originate from a single place in your program,
 making it easy to: compile to other languages than rust, test in isolation, debug, reorder values without a hidden change in behavior.
-If you want to call a specific pure rust function, please ask me to add it to the still core declarations :3
+If you want to call a specific pure rust function, please ask me to add it to the lily core declarations :3
 
 ### how to install packages?
 For rust: use `cargo add`.
-For still: just copy paste their code.
-For that reason, I recommend still package authors to follow
-```still
+For lily: just copy paste their code.
+For that reason, I recommend lily package authors to follow
+```lily
 # package-name
 # full license
 ...
 # package-name
 ```
 And since licensing is a bit wishy washy like that (and with copy paste in general),
-I strongly recommend licensing your still package under ["unlicense"](https://unlicense.org/) or other public domain/"attribution not required" licenses (e.g. WTFPL or CC0).
+I strongly recommend licensing your lily package under ["unlicense"](https://unlicense.org/) or other public domain/"attribution not required" licenses (e.g. WTFPL or CC0).
 
 ## editor setups
 feel free to contribute as I only use vscodium
 
 ### vscode-like
 #### pre-built
-1. download https://github.com/lue-bird/still/blob/main/vscode/still-0.0.1.vsix
+1. download https://github.com/lue-bird/lily/blob/main/vscode/lily-0.0.1.vsix
 2. open the command bar at the top and select: `>Extensions: Install from VSIX`
 #### build from source
 1. clone this repo
@@ -223,10 +223,10 @@ Then add a `.vscode/lsp-proxy.json` like
 ```json
 [
   {
-    "languageId": "still",
-    "command": "still",
+    "languageId": "lily",
+    "command": "lily",
     "fileExtensions": [
-      ".still"
+      ".lily"
     ]
   }
 ]
@@ -235,15 +235,15 @@ Then add a `.vscode/lsp-proxy.json` like
 ### helix
 write to `~/.config/helix/languages.toml`:
 ```toml
-[language-server.still]
-command = "still lsp"
+[language-server.lily]
+command = "lily lsp"
 [[language]]
-name = "still"
-scope = "source.still"
-injection-regex = "still"
-file-types = ["still"]
+name = "lily"
+scope = "source.lily"
+injection-regex = "lily"
+file-types = ["lily"]
 indent = { tab-width = 4, unit = "    " }
-language-servers = [ "still" ]
+language-servers = [ "lily" ]
 auto-format = true
 ```
 
@@ -252,7 +252,7 @@ Rebuild the project with
 ```bash
 cargo build
 ```
-Then point your editor to the created `???/target/debug/still lsp`.
+Then point your editor to the created `???/target/debug/lily lsp`.
 
 ## considering
 - (leaning towards yes) allow comments before variant (field name, case?, variant?)

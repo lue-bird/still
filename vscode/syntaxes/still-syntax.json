@@ -1,16 +1,16 @@
 {
   "fileTypes": [
-    "still"
+    "lily"
   ],
-  "name": "still",
-  "scopeName": "source.still",
+  "name": "lily",
+  "scopeName": "source.lily",
   "patterns": [
     {
       "include": "#comments"
     },
     {
       "match": "\\b(_)\\b",
-      "name": "keyword.unused.still"
+      "name": "keyword.unused.lily"
     },
     {
       "include": "#colon-type-colon"
@@ -33,15 +33,15 @@
     {
       "comment": "Floats are always decimal",
       "match": "\\b([0-9]+\\.[0-9]+([eE][+-]?[0-9]+)?|[0-9]+[eE][+-]?[0-9]+)\\b",
-      "name": "constant.numeric.float.still"
+      "name": "constant.numeric.float.lily"
     },
     {
       "match": "\\b([0-9]+)\\b",
-      "name": "constant.numeric.still"
+      "name": "constant.numeric.lily"
     },
     {
       "match": "\\b(0x[0-9a-fA-F]+)\\b",
-      "name": "constant.numeric.still"
+      "name": "constant.numeric.lily"
     },
     {
       "include": "#record-prefix"
@@ -50,83 +50,83 @@
       "include": "#variant"
     },
     {
-      "name": "meta.record.field.update.still",
+      "name": "meta.record.field.update.lily",
       "match": "(\\{)\\s+\\.\\.([a-z][a-zA-Z0-9-]*)\\s+(\\,)\\s+([a-z][a-zA-Z0-9-]*)",
       "captures": {
         "1": {
-          "name": "punctuation.bracket.still"
+          "name": "punctuation.bracket.lily"
         },
         "2": {
-          "name": "record.name.still"
+          "name": "record.name.lily"
         },
         "3": {
-          "name": "punctuation.dotdot.still"
+          "name": "punctuation.dotdot.lily"
         },
         "4": {
-          "name": "entity.name.record.field.still"
+          "name": "entity.name.record.field.lily"
         }
       }
     },
     {
-      "name": "meta.record.field.update.still",
+      "name": "meta.record.field.update.lily",
       "match": "(,)\\s+([a-z][a-zA-Z0-9-]*)\\s+",
       "captures": {
         "1": {
-          "name": "keyword.pipe.still"
+          "name": "keyword.pipe.lily"
         },
         "2": {
-          "name": "entity.name.record.field.still"
+          "name": "entity.name.record.field.lily"
         },
         "3": {
-          "name": "keyword.operator.assignment.still"
+          "name": "keyword.operator.assignment.lily"
         }
       }
     },
     {
-      "name": "meta.record.field.update.still",
+      "name": "meta.record.field.update.lily",
       "match": "(\\{)\\s+([a-z][a-zA-Z0-9-]*)\\s+$",
       "captures": {
         "1": {
-          "name": "punctuation.bracket.still"
+          "name": "punctuation.bracket.lily"
         },
         "2": {
-          "name": "record.name.still"
+          "name": "record.name.lily"
         }
       }
     },
     {
-      "name": "meta.record.field.still",
+      "name": "meta.record.field.lily",
       "match": "(\\{)\\s+([a-z][a-zA-Z0-9-]*)\\s+",
       "captures": {
         "1": {
-          "name": "punctuation.bracket.still"
+          "name": "punctuation.bracket.lily"
         },
         "2": {
-          "name": "entity.name.record.field.still"
+          "name": "entity.name.record.field.lily"
         },
         "3": {
-          "name": "keyword.operator.assignment.still"
+          "name": "keyword.operator.assignment.lily"
         }
       }
     },
     {
-      "name": "meta.record.field.still",
+      "name": "meta.record.field.lily",
       "match": "(,)\\s+([a-z][a-zA-Z0-9-]*)\\s+",
       "captures": {
         "1": {
-          "name": "punctuation.separator.comma.still"
+          "name": "punctuation.separator.comma.lily"
         },
         "2": {
-          "name": "entity.name.record.field.still"
+          "name": "entity.name.record.field.lily"
         },
         "3": {
-          "name": "keyword.operator.assignment.still"
+          "name": "keyword.operator.assignment.lily"
         }
       }
     },
     {
       "match": "(\\}|\\{)",
-      "name": "punctuation.bracket.still"
+      "name": "punctuation.bracket.lily"
     },
     {
       "include": "#comma"
@@ -136,19 +136,19 @@
     },
     {
       "match": "(>)",
-      "name": "keyword.operator.arrow.still"
+      "name": "keyword.operator.arrow.lily"
     },
     {
       "match": "(\\=|\\:|\\||\\\\)",
-      "name": "keyword.other.still"
+      "name": "keyword.other.lily"
     },
     {
       "match": "\\b(type|choice)\\s+",
-      "name": "keyword.other.still"
+      "name": "keyword.other.lily"
     },
     {
       "match": "\\b(>|\\\\)\\s+",
-      "name": "keyword.control.still"
+      "name": "keyword.control.lily"
     },
     {
       "include": "#record-accessor"
@@ -169,155 +169,155 @@
   "repository": {
     "comma": {
       "match": "(,)",
-      "name": "punctuation.separator.comma.still"
+      "name": "punctuation.separator.comma.lily"
     },
     "parens": {
       "match": "(\\(|\\))",
-      "name": "punctuation.parens.still"
+      "name": "punctuation.parens.lily"
     },
     "comments": {
       "patterns": [
         {
           "captures": {
             "1": {
-              "name": "punctuation.definition.comment.still"
+              "name": "punctuation.definition.comment.lily"
             }
           },
           "begin": "#",
           "end": "$",
-          "name": "comment.line.still"
+          "name": "comment.line.lily"
         }
       ]
     },
     "string-quote": {
-      "name": "string.quoted.double.still",
+      "name": "string.quoted.double.lily",
       "begin": "\"",
       "beginCaptures": {
         "0": {
-          "name": "punctuation.definition.string.begin.still"
+          "name": "punctuation.definition.string.begin.lily"
         }
       },
       "end": "\"",
       "endCaptures": {
         "0": {
-          "name": "punctuation.definition.string.end.still"
+          "name": "punctuation.definition.string.end.lily"
         }
       },
       "patterns": [
         {
           "match": "\\\\(NUL|SOH|STX|ETX|EOT|ENQ|ACK|BEL|BS|HT|LF|VT|FF|CR|SO|SI|DLE|DC1|DC2|DC3|DC4|NAK|SYN|ETB|CAN|EM|SUB|ESC|FS|GS|RS|US|SP|DEL|[abfnrtv\\\\\\\"'\\&]|x[0-9a-fA-F]{1,5})",
-          "name": "constant.character.escape.still"
+          "name": "constant.character.escape.lily"
         },
         {
           "match": "\\^[A-Z@\\[\\]\\\\\\^_]",
-          "name": "constant.character.escape.control.still"
+          "name": "constant.character.escape.control.lily"
         }
       ]
     },
     "string-ticked-lines": {
-      "name": "string.quoted.double.still",
+      "name": "string.quoted.double.lily",
       "begin": "\"",
       "beginCaptures": {
         "0": {
-          "name": "punctuation.definition.string.begin.still"
+          "name": "punctuation.definition.string.begin.lily"
         }
       },
       "end": "(\\r\\n|\\r|\\n)",
       "endCaptures": {
         "0": {
-          "name": "punctuation.definition.string.end.still"
+          "name": "punctuation.definition.string.end.lily"
         }
       },
       "patterns": []
     },
     "char": {
-      "name": "string.quoted.single.still",
+      "name": "string.quoted.single.lily",
       "begin": "'",
       "beginCaptures": {
         "0": {
-          "name": "punctuation.definition.char.begin.still"
+          "name": "punctuation.definition.char.begin.lily"
         }
       },
       "end": "'",
       "endCaptures": {
         "0": {
-          "name": "punctuation.definition.char.end.still"
+          "name": "punctuation.definition.char.end.lily"
         }
       },
       "patterns": [
         {
           "match": "\\\\(NUL|SOH|STX|ETX|EOT|ENQ|ACK|BEL|BS|HT|LF|VT|FF|CR|SO|SI|DLE|DC1|DC2|DC3|DC4|NAK|SYN|ETB|CAN|EM|SUB|ESC|FS|GS|RS|US|SP|DEL|[abfnrtv\\\\\\\"'\\&]|x[0-9a-fA-F]{1,5})",
-          "name": "constant.character.escape.still"
+          "name": "constant.character.escape.lily"
         },
         {
           "match": "\\^[A-Z@\\[\\]\\\\\\^_]",
-          "name": "constant.character.escape.control.still"
+          "name": "constant.character.escape.control.lily"
         }
       ]
     },
     "period": {
       "match": "[.]",
-      "name": "keyword.other.period.still"
+      "name": "keyword.other.period.lily"
     },
     "square_brackets": {
       "match": "[\\[\\]]",
-      "name": "punctuation.definition.list.still"
+      "name": "punctuation.definition.list.lily"
     },
     "record-prefix": {
       "match": "([a-z][a-zA-Z0-9-]*)(\\.)([a-z][a-zA-Z0-9-]*)",
-      "name": "record.accessor.still",
+      "name": "record.accessor.lily",
       "captures": {
         "1": {
-          "name": "record.name.still"
+          "name": "record.name.lily"
         },
         "2": {
-          "name": "keyword.other.period.still"
+          "name": "keyword.other.period.lily"
         },
         "3": {
-          "name": "entity.name.record.field.accessor.still"
+          "name": "entity.name.record.field.accessor.lily"
         }
       }
     },
     "variant": {
       "match": "\\b[A-Z][a-zA-Z0-9-]*\\b",
-      "name": "constant.type-variant.still"
+      "name": "constant.type-variant.lily"
     },
     "value": {
       "match": "\\b[a-z][a-zA-Z0-9-]*\\b",
-      "name": "meta.value.still"
+      "name": "meta.value.lily"
     },
     "top_level_value": {
       "match": "^[a-z][a-zA-Z0-9-]*\\b",
-      "name": "entity.name.function.top_level.still"
+      "name": "entity.name.function.top_level.lily"
     },
     "record-accessor": {
       "match": "(\\.)([a-z][a-zA-Z0-9-]*)",
       "name": "meta.record.accessor",
       "captures": {
         "1": {
-          "name": "keyword.other.period.still"
+          "name": "keyword.other.period.lily"
         },
         "2": {
-          "name": "entity.name.record.field.accessor.still"
+          "name": "entity.name.record.field.accessor.lily"
         }
       }
     },
     "colon-type-colon": {
       "begin": "^(:)",
       "end": "^(:)",
-      "name": "meta.colon-type-colon.still",
+      "name": "meta.colon-type-colon.lily",
       "patterns": [
         {
           "match": "\\n\\s+",
-          "name": "punctuation.spaces.still"
+          "name": "punctuation.spaces.lily"
         },
         {
           "match": "\\b[a-z][a-zA-Z0-9-]*\\b",
-          "name": "storage.type.still"
+          "name": "storage.type.lily"
         },
         {
           "match": "\\b[A-Z][a-zA-Z0-9-]*\\b",
-          "name": "variable.type.still"
+          "name": "variable.type.lily"
         },
         {
           "include": "#comments"
@@ -331,51 +331,51 @@
       "begin": "^(choice\\s+)([a-z][a-zA-Z0-9-]*)\\s+",
       "beginCaptures": {
         "1": {
-          "name": "keyword.other.still"
+          "name": "keyword.other.lily"
         },
         "2": {
-          "name": "storage.type.still"
+          "name": "storage.type.lily"
         }
       },
       "end": "^(?=\\S)",
-      "name": "meta.function.choice-declaration.still",
+      "name": "meta.function.choice-declaration.lily",
       "patterns": [
         {
-          "name": "meta.record.field.still",
+          "name": "meta.record.field.lily",
           "match": "^\\s*([A-Z][a-zA-Z0-9-]*)\\b",
           "captures": {
             "1": {
-              "name": "constant.type-variant.still"
+              "name": "constant.type-variant.lily"
             }
           }
         },
         {
           "match": "\\s+",
-          "name": "punctuation.spaces.still"
+          "name": "punctuation.spaces.lily"
         },
         {
-          "name": "meta.record.field.still",
+          "name": "meta.record.field.lily",
           "match": "(\\=|\\|)\\s+([A-Z][a-zA-Z0-9-]*)\\b",
           "captures": {
             "1": {
-              "name": "keyword.operator.assignment.still"
+              "name": "keyword.operator.assignment.lily"
             },
             "2": {
-              "name": "constant.type-variant.still"
+              "name": "constant.type-variant.lily"
             }
           }
         },
         {
           "match": ">",
-          "name": "keyword.operator.arrow.still"
+          "name": "keyword.operator.arrow.lily"
         },
         {
           "match": "\\b[A-Z][a-zA-Z0-9-]*\\b",
-          "name": "variable.type.still"
+          "name": "variable.type.lily"
         },
         {
           "match": "\\b[a-z][a-zA-Z0-9-]*\\b",
-          "name": "storage.type.still"
+          "name": "storage.type.lily"
         },
         {
           "include": "#comments"
@@ -389,30 +389,30 @@
       "begin": "^(type\\s+)([a-z][a-zA-Z0-9-']*)\\s+",
       "beginCaptures": {
         "1": {
-          "name": "keyword.other.still"
+          "name": "keyword.other.lily"
         },
         "2": {
-          "name": "storage.type.still"
+          "name": "storage.type.lily"
         }
       },
       "end": "^(?=\\S)",
-      "name": "meta.function.choice-declaration.still",
+      "name": "meta.function.choice-declaration.lily",
       "patterns": [
         {
           "match": "\\n\\s+",
-          "name": "punctuation.spaces.still"
+          "name": "punctuation.spaces.lily"
         },
         {
           "match": "\\=",
-          "name": "keyword.operator.assignment.still"
+          "name": "keyword.operator.assignment.lily"
         },
         {
           "match": "\\b[a-z][a-zA-Z0-9-]*\\b",
-          "name": "storage.type.still"
+          "name": "storage.type.lily"
         },
         {
           "match": "\\b[A-Z][a-zA-Z0-9-]*\\b",
-          "name": "variable.type.still"
+          "name": "variable.type.lily"
         },
         {
           "include": "#comments"
@@ -435,47 +435,47 @@
           "name": "punctuation.section.braces.end"
         }
       },
-      "name": "meta.function.type-record.still",
+      "name": "meta.function.type-record.lily",
       "patterns": [
         {
           "match": "\\\\",
-          "name": "keyword.start.lambda.still"
+          "name": "keyword.start.lambda.lily"
         },
         {
           "match": "\\s+",
-          "name": "punctuation.spaces.still"
+          "name": "punctuation.spaces.lily"
         },
         {
           "match": ">",
-          "name": "keyword.operator.arrow.still"
+          "name": "keyword.operator.arrow.lily"
         },
         {
-          "name": "meta.record.field.still",
+          "name": "meta.record.field.lily",
           "match": "([a-z][a-zA-Z0-9-]*)\\s+",
           "captures": {
             "1": {
-              "name": "entity.name.record.field.still"
+              "name": "entity.name.record.field.lily"
             },
             "2": {
-              "name": "keyword.other.still"
+              "name": "keyword.other.lily"
             }
           }
         },
         {
           "match": "\\,",
-          "name": "punctuation.separator.comma.still"
+          "name": "punctuation.separator.comma.lily"
         },
         {
           "match": "\\.",
-          "name": "punctuation.dotdot.comma.still"
+          "name": "punctuation.dotdot.comma.lily"
         },
         {
           "match": "\\b[a-z][a-zA-Z0-9-]*\\b",
-          "name": "variable.type.still"
+          "name": "variable.type.lily"
         },
         {
           "match": "\\b[a-z][a-zA-Z0-9-]*\\b",
-          "name": "storage.type.still"
+          "name": "storage.type.lily"
         },
         {
           "include": "#comments"
@@ -489,19 +489,19 @@
       "patterns": [
         {
           "match": ">",
-          "name": "keyword.operator.arrow.still"
+          "name": "keyword.operator.arrow.lily"
         },
         {
           "match": "\\s+",
-          "name": "punctuation.spaces.still"
+          "name": "punctuation.spaces.lily"
         },
         {
           "match": "\\b[A-Z][a-zA-Z0-9-]*\\b",
-          "name": "variable.type.still"
+          "name": "variable.type.lily"
         },
         {
           "match": "\\b[a-z][a-zA-Z0-9-]*\\b",
-          "name": "storage.type.still"
+          "name": "storage.type.lily"
         },
         {
           "include": "#comma"

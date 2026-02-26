@@ -1,7 +1,7 @@
-// lsp still reports this specific error even when it is allowed in the cargo.toml
+// lsp lily reports this specific error even when it is allowed in the cargo.toml
 #![allow(non_upper_case_globals)]
-// just to get analysis on still_core, not actually used here
-mod still_core;
+// just to get analysis on lily_core, not actually used here
+mod lily_core;
 
 struct State {
     projects: std::collections::HashMap<lsp_types::Url, ProjectState>,
@@ -9,11 +9,11 @@ struct State {
 
 struct ProjectState {
     source: String,
-    syntax: StillSyntaxProject,
-    type_aliases: std::collections::HashMap<StillName, TypeAliasInfo>,
-    choice_types: std::collections::HashMap<StillName, ChoiceTypeInfo>,
-    variable_declarations: std::collections::HashMap<StillName, CompiledVariableDeclarationInfo>,
-    records: std::collections::HashSet<Vec<StillName>>,
+    syntax: LilySyntaxProject,
+    type_aliases: std::collections::HashMap<LilyName, TypeAliasInfo>,
+    choice_types: std::collections::HashMap<LilyName, ChoiceTypeInfo>,
+    variable_declarations: std::collections::HashMap<LilyName, CompiledVariableDeclarationInfo>,
+    records: std::collections::HashSet<Vec<LilyName>>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -41,17 +41,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "init" | "initialize" | "new" | "create" | "setup" | "boilerplate" | "template"
             | "hello" | "hello-world" => {
                 println!(
-                    "Each project has one .still file. For applications, a rust project is also needed. Both will be initialized now."
+                    "Each project has one .lily file. For applications, a rust project is also needed. Both will be initialized now."
                 );
                 if full_command.next().is_some() {
                     println!(
-                        "Nothing was created. If you want to initialize a still project in a directory, please create that directory yourself and run still init from inside there."
+                        "Nothing was created. If you want to initialize a lily project in a directory, please create that directory yourself and run lily init from inside there."
                     );
                     return Ok(());
                 }
                 try_generate_file(
-                    "still.still",
-                    "this is where all your still code goes",
+                    "lily.lily",
+                    "this is where all your lily code goes",
                     r#"
 
 greet \:str:name >
@@ -66,10 +66,10 @@ greet \:str:name >
 #![feature(deref_patterns)]
 #![allow(incomplete_features)]
 
-mod still;
+mod lily;
 
 fn main() {
-    print!("{}", still::greet(still::Str::Slice("insert your name here")));
+    print!("{}", lily::greet(lily::Str::Slice("insert your name here")));
 }
 "#,
                 );
@@ -88,28 +88,28 @@ path = "main.rs"
                     ".gitignore",
                     "this tells git to not track the generated rust code",
                     r"# Generated rust code
-still/
+lily/
 ",
                 );
-                match std::fs::exists("still") {
+                match std::fs::exists("lily") {
                     Ok(true) => {
-                        println!("still/ directory already exists, skipping generating it.");
+                        println!("lily/ directory already exists, skipping generating it.");
                     }
                     Ok(false) => {
-                        let write_result: Result<(), std::io::Error> = std::fs::create_dir("still");
+                        let write_result: Result<(), std::io::Error> = std::fs::create_dir("lily");
                         match write_result {
                             Ok(()) => {
                                 println!(
-                                    "generated still/ directory, this will contain the generated rust file still/mod.rs."
+                                    "generated lily/ directory, this will contain the generated rust file lily/mod.rs."
                                 );
                             }
                             Err(error) => {
-                                println!("failed to generate still/ directory: {error}");
+                                println!("failed to generate lily/ directory: {error}");
                             }
                         }
                     }
                     Err(error) => {
-                        println!("failed to check if still/ directory already exists: {error}");
+                        println!("failed to check if lily/ directory already exists: {error}");
                     }
                 }
                 Ok(())
@@ -122,10 +122,10 @@ still/
     }
 }
 const command_help: &str = r"try
-  - compile to a rust file: still build [input-file.still [output-file.rs]]
-  - start the language server: still lsp
-  - copy the hello-world project setup into the current directory: still init
-  - print this command help message: still help";
+  - compile to a rust file: lily build [input-file.lily [output-file.rs]]
+  - start the language server: lily lsp
+  - copy the hello-world project setup into the current directory: lily init
+  - print this command help message: lily help";
 
 fn try_generate_file(path: &str, purpose: &str, content: &str) {
     match std::fs::exists(path) {
@@ -148,7 +148,7 @@ fn try_generate_file(path: &str, purpose: &str, content: &str) {
         }
     }
 }
-fn default_still_output_file_path_for_input_file_path(
+fn default_lily_output_file_path_for_input_file_path(
     input_file_path: &std::path::Path,
 ) -> std::path::PathBuf {
     std::path::Path::join(&input_file_path.with_extension(""), "mod.rs")
@@ -163,7 +163,7 @@ fn compiled_rust_to_file_content(compiled_rust: &syn::File) -> String {
 
 
 {}",
-        include_str!("still_core.rs"),
+        include_str!("lily_core.rs"),
         prettyplease::unparse(compiled_rust),
     )
 }
@@ -172,12 +172,12 @@ fn build_main(
     maybe_output_file_path: Option<&std::path::Path>,
 ) {
     let input_file_path: &std::path::Path = match maybe_input_file_path {
-        Some(input_file_path) => &input_file_path.with_extension("still"),
-        None => std::path::Path::new("still.still"),
+        Some(input_file_path) => &input_file_path.with_extension("lily"),
+        None => std::path::Path::new("lily.lily"),
     };
     let output_file_path: &std::path::Path = match maybe_output_file_path {
         Some(output_file_path) => &output_file_path.with_extension(".rs"),
-        None => &default_still_output_file_path_for_input_file_path(input_file_path),
+        None => &default_lily_output_file_path_for_input_file_path(input_file_path),
     };
     println!("...compiling {input_file_path:?} into {output_file_path:?}.");
     match std::fs::read_to_string(input_file_path) {
@@ -188,11 +188,10 @@ fn build_main(
             std::process::exit(1)
         }
         Ok(project_source) => {
-            let still_syntax_project: StillSyntaxProject =
-                parse_still_syntax_project(&project_source);
-            let mut output_errors: Vec<StillErrorNode> = Vec::new();
+            let lily_syntax_project: LilySyntaxProject = parse_lily_syntax_project(&project_source);
+            let mut output_errors: Vec<LilyErrorNode> = Vec::new();
             let compiled_project: CompiledProject =
-                still_project_compile_to_rust(&mut output_errors, &still_syntax_project);
+                lily_project_compile_to_rust(&mut output_errors, &lily_syntax_project);
             for output_error in &output_errors {
                 eprintln!(
                     "{input_file_path:?}:{range_start_line}:{range_start_column} {message}",
@@ -239,7 +238,7 @@ fn lsp_main() -> Result<(), Box<dyn std::error::Error>> {
         serde_json::to_value(lsp_types::InitializeResult {
             capabilities: server_capabilities(),
             server_info: Some(lsp_types::ServerInfo {
-                name: "still".to_string(),
+                name: "lily".to_string(),
                 version: Some("0.0.1".to_string()),
             }),
         })?,
@@ -375,12 +374,12 @@ fn update_state_on_did_open_text_document(
     connection: &lsp_server::Connection,
     arguments: lsp_types::DidOpenTextDocumentParams,
 ) {
-    if arguments.text_document.language_id == "still"
+    if arguments.text_document.language_id == "lily"
         || (arguments
             .text_document
             .uri
             .to_file_path()
-            .is_ok_and(|opened_path| opened_path.extension().is_some_and(|ext| ext == "still")))
+            .is_ok_and(|opened_path| opened_path.extension().is_some_and(|ext| ext == "lily")))
     {
         state.projects.insert(
             arguments.text_document.uri.clone(),
@@ -591,15 +590,15 @@ fn initialize_project_state_from_source(
     url: lsp_types::Url,
     source: String,
 ) -> ProjectState {
-    let mut errors: Vec<StillErrorNode> = Vec::new();
-    let parsed_project: StillSyntaxProject = parse_still_syntax_project(&source);
+    let mut errors: Vec<LilyErrorNode> = Vec::new();
+    let parsed_project: LilySyntaxProject = parse_lily_syntax_project(&source);
     let compiled_project: CompiledProject =
-        still_project_compile_to_rust(&mut errors, &parsed_project);
+        lily_project_compile_to_rust(&mut errors, &parsed_project);
     if let Ok(input_file_path) = url.to_file_path()
         && std::fs::exists(input_file_path.with_extension("")).is_ok_and(|exists| exists)
     {
         let _: std::io::Result<()> = std::fs::write(
-            default_still_output_file_path_for_input_file_path(&input_file_path),
+            default_lily_output_file_path_for_input_file_path(&input_file_path),
             compiled_rust_to_file_content(&compiled_project.rust),
         );
     }
@@ -609,7 +608,7 @@ fn initialize_project_state_from_source(
             uri: url,
             diagnostics: errors
                 .iter()
-                .map(still_error_node_to_diagnostic)
+                .map(lily_error_node_to_diagnostic)
                 .collect::<Vec<_>>(),
             version: None,
         },
@@ -624,7 +623,7 @@ fn initialize_project_state_from_source(
     }
 }
 
-type StillName = compact_str::CompactString;
+type LilyName = compact_str::CompactString;
 
 fn respond_to_hover(
     state: &State,
@@ -636,8 +635,8 @@ fn respond_to_hover(
             .text_document
             .uri,
     )?;
-    let hovered_symbol_node: StillSyntaxNode<StillSyntaxSymbol> =
-        still_syntax_project_find_symbol_at_position(
+    let hovered_symbol_node: LilySyntaxNode<LilySyntaxSymbol> =
+        lily_syntax_project_find_symbol_at_position(
             &hovered_project_state.syntax,
             &hovered_project_state.type_aliases,
             &hovered_project_state.choice_types,
@@ -645,14 +644,14 @@ fn respond_to_hover(
             hover_arguments.text_document_position_params.position,
         )?;
     match hovered_symbol_node.value {
-        StillSyntaxSymbol::TypeVariable { .. } => None,
-        StillSyntaxSymbol::ProjectDeclarationName {
+        LilySyntaxSymbol::TypeVariable { .. } => None,
+        LilySyntaxSymbol::ProjectDeclarationName {
             name: hovered_declaration_name,
             documentation,
             declaration: declaration_node,
         } => {
             let origin_declaration_info_markdown: String = match &declaration_node.value {
-                StillSyntaxDeclaration::ChoiceType {
+                LilySyntaxDeclaration::ChoiceType {
                     name: origin_project_declaration_maybe_name,
                     parameters: origin_project_declaration_parameters,
                     variants: origin_project_declaration_variants,
@@ -677,7 +676,7 @@ fn respond_to_hover(
                         )
                     )
                 }
-                StillSyntaxDeclaration::TypeAlias {
+                LilySyntaxDeclaration::TypeAlias {
                     type_keyword_range: _,
                     name: maybe_declaration_name,
                     parameters: origin_project_declaration_parameters,
@@ -687,9 +686,9 @@ fn respond_to_hover(
                     maybe_declaration_name.as_ref().map(|n| &n.value),
                     documentation,
                     origin_project_declaration_parameters,
-                    type_.as_ref().map(still_syntax_node_as_ref),
+                    type_.as_ref().map(lily_syntax_node_as_ref),
                 ),
-                StillSyntaxDeclaration::Variable {
+                LilySyntaxDeclaration::Variable {
                     name: variable_name,
                     result: _,
                 } => present_variable_declaration_info_with_complete_type_markdown(
@@ -708,7 +707,7 @@ fn respond_to_hover(
                 range: Some(hovered_symbol_node.range),
             })
         }
-        StillSyntaxSymbol::LocalVariableDeclarationName {
+        LilySyntaxSymbol::LocalVariableDeclarationName {
             name: _,
             type_: maybe_type_type,
             scope_expression: _,
@@ -719,7 +718,7 @@ fn respond_to_hover(
             }),
             range: Some(hovered_symbol_node.range),
         }),
-        StillSyntaxSymbol::Variable {
+        LilySyntaxSymbol::Variable {
             name: hovered_name,
             local_bindings,
         } => {
@@ -755,7 +754,7 @@ fn respond_to_hover(
                 range: Some(hovered_symbol_node.range),
             })
         }
-        StillSyntaxSymbol::Field {
+        LilySyntaxSymbol::Field {
             name: _,
             value_type: maybe_value_type,
             fields_sorted,
@@ -766,18 +765,18 @@ fn respond_to_hover(
             }),
             range: Some(hovered_symbol_node.range),
         }),
-        StillSyntaxSymbol::Variant {
+        LilySyntaxSymbol::Variant {
             name: hovered_name,
             type_: maybe_type,
         } => {
             let (
                 origin_project_choice_type_declaration_name,
                 origin_project_choice_type_declaration,
-            ): (StillName, &ChoiceTypeInfo) = maybe_type
+            ): (LilyName, &ChoiceTypeInfo) = maybe_type
                 .and_then(|type_| {
-                    still_syntax_type_to_choice_type(
+                    lily_syntax_type_to_choice_type(
                         &hovered_project_state.type_aliases,
-                        still_syntax_node_empty(type_),
+                        lily_syntax_node_empty(type_),
                     )
                     .and_then(|(origin_choice_type_name, _)| {
                         hovered_project_state
@@ -829,7 +828,7 @@ fn respond_to_hover(
                 range: Some(hovered_symbol_node.range),
             })
         }
-        StillSyntaxSymbol::Type(hovered_name) => {
+        LilySyntaxSymbol::Type(hovered_name) => {
             let info_markdown: String = if let Some(origin_choice_type_info) =
                 hovered_project_state.choice_types.get(hovered_name)
             {
@@ -849,7 +848,7 @@ fn respond_to_hover(
                     origin_type_alias_info
                         .type_syntax
                         .as_ref()
-                        .map(still_syntax_node_as_ref),
+                        .map(lily_syntax_node_as_ref),
                 )
             } else {
                 return None;
@@ -866,7 +865,7 @@ fn respond_to_hover(
 }
 
 fn local_binding_info_markdown(
-    maybe_type: Option<&StillType>,
+    maybe_type: Option<&LilyType>,
     origin: LocalBindingOrigin,
 ) -> String {
     match origin {
@@ -874,10 +873,10 @@ fn local_binding_info_markdown(
             None => "variable introduced in pattern".to_string(),
             Some(type_) => {
                 let mut type_string: String = String::new();
-                still_type_info_into(&mut type_string, 1, type_);
+                lily_type_info_into(&mut type_string, 1, type_);
                 format!(
                     "variable introduced in pattern
-```still
+```lily
 :{}{}:
 ```
 ",
@@ -891,7 +890,7 @@ fn local_binding_info_markdown(
         }
     }
 }
-fn field_info_markdown(maybe_type: Option<&StillType>, fields_sorted: &[StillName]) -> String {
+fn field_info_markdown(maybe_type: Option<&LilyType>, fields_sorted: &[LilyName]) -> String {
     match maybe_type {
         None => format!(
             "record field. existing fields are: {}",
@@ -899,10 +898,10 @@ fn field_info_markdown(maybe_type: Option<&StillType>, fields_sorted: &[StillNam
         ),
         Some(type_) => {
             let mut type_string: String = String::new();
-            still_type_info_into(&mut type_string, 1, type_);
+            lily_type_info_into(&mut type_string, 1, type_);
             format!(
                 "record field
-```still
+```lily
 :{}{}:
 ```
 existing fields are: {}
@@ -914,15 +913,15 @@ existing fields are: {}
         }
     }
 }
-fn local_variable_declaration_info_markdown(maybe_type_type: Option<&StillType>) -> String {
+fn local_variable_declaration_info_markdown(maybe_type_type: Option<&LilyType>) -> String {
     match maybe_type_type {
         None => "let variable".to_string(),
         Some(hovered_local_binding_type) => {
             let mut type_string: String = String::new();
-            still_type_info_into(&mut type_string, 1, hovered_local_binding_type);
+            lily_type_info_into(&mut type_string, 1, hovered_local_binding_type);
             format!(
                 "local variable
-```still
+```lily
 :{}{}:
 ```
 ",
@@ -943,8 +942,8 @@ fn respond_to_goto_definition(
             .text_document
             .uri,
     )?;
-    let goto_symbol_node: StillSyntaxNode<StillSyntaxSymbol> =
-        still_syntax_project_find_symbol_at_position(
+    let goto_symbol_node: LilySyntaxNode<LilySyntaxSymbol> =
+        lily_syntax_project_find_symbol_at_position(
             &goto_symbol_project_state.syntax,
             &goto_symbol_project_state.type_aliases,
             &goto_symbol_project_state.choice_types,
@@ -954,18 +953,18 @@ fn respond_to_goto_definition(
                 .position,
         )?;
     match goto_symbol_node.value {
-        StillSyntaxSymbol::LocalVariableDeclarationName { .. }
-        | StillSyntaxSymbol::ProjectDeclarationName { .. }
-        | StillSyntaxSymbol::Field { .. } => {
+        LilySyntaxSymbol::LocalVariableDeclarationName { .. }
+        | LilySyntaxSymbol::ProjectDeclarationName { .. }
+        | LilySyntaxSymbol::Field { .. } => {
             // already at definition
             None
         }
-        StillSyntaxSymbol::TypeVariable {
+        LilySyntaxSymbol::TypeVariable {
             scope_declaration,
             name: goto_type_variable_name,
         } => {
             match scope_declaration {
-                StillSyntaxDeclaration::ChoiceType {
+                LilySyntaxDeclaration::ChoiceType {
                     name: _,
                     parameters: origin_type_parameters,
                     variants: _,
@@ -985,7 +984,7 @@ fn respond_to_goto_definition(
                         },
                     ))
                 }
-                StillSyntaxDeclaration::TypeAlias {
+                LilySyntaxDeclaration::TypeAlias {
                     type_keyword_range: _,
                     name: _,
                     parameters: origin_type_parameters,
@@ -1007,10 +1006,10 @@ fn respond_to_goto_definition(
                         },
                     ))
                 }
-                StillSyntaxDeclaration::Variable { .. } => None,
+                LilySyntaxDeclaration::Variable { .. } => None,
             }
         }
-        StillSyntaxSymbol::Variable {
+        LilySyntaxSymbol::Variable {
             name: goto_name,
             local_bindings,
         } => {
@@ -1035,14 +1034,14 @@ fn respond_to_goto_definition(
                 .declarations
                 .iter()
                 .find_map(|origin_project_declaration_or_err| {
-                    let Ok(StillSyntaxDocumentedDeclaration {
+                    let Ok(LilySyntaxDocumentedDeclaration {
                         documentation: _,
                         declaration: Some(declaration_node),
                     }) = origin_project_declaration_or_err
                     else {
                         return None;
                     };
-                    let StillSyntaxDeclaration::Variable {
+                    let LilySyntaxDeclaration::Variable {
                         name: name_node,
                         result: _,
                     } = &declaration_node.value
@@ -1065,15 +1064,15 @@ fn respond_to_goto_definition(
                 },
             ))
         }
-        StillSyntaxSymbol::Variant {
+        LilySyntaxSymbol::Variant {
             name: goto_name,
             type_: maybe_type,
         } => {
             let origin_choice_type_variant_name_range: lsp_types::Range = maybe_type
                 .and_then(|type_| {
-                    still_syntax_type_to_choice_type(
+                    lily_syntax_type_to_choice_type(
                         &goto_symbol_project_state.type_aliases,
-                        still_syntax_node_empty(type_),
+                        lily_syntax_node_empty(type_),
                     )
                     .and_then(|(origin_choice_type_name, _)| {
                         goto_symbol_project_state
@@ -1126,7 +1125,7 @@ fn respond_to_goto_definition(
                 },
             ))
         }
-        StillSyntaxSymbol::Type(goto_name) => {
+        LilySyntaxSymbol::Type(goto_name) => {
             let declaration_name_range: lsp_types::Range = if let Some(origin_type_alias_info) =
                 goto_symbol_project_state.type_aliases.get(goto_name)
             {
@@ -1158,8 +1157,8 @@ fn respond_to_prepare_rename(
     let project_state = state
         .projects
         .get(&prepare_rename_arguments.text_document.uri)?;
-    let prepare_rename_symbol_node: StillSyntaxNode<StillSyntaxSymbol> =
-        still_syntax_project_find_symbol_at_position(
+    let prepare_rename_symbol_node: LilySyntaxNode<LilySyntaxSymbol> =
+        lily_syntax_project_find_symbol_at_position(
             &project_state.syntax,
             &project_state.type_aliases,
             &project_state.choice_types,
@@ -1167,31 +1166,31 @@ fn respond_to_prepare_rename(
             prepare_rename_arguments.position,
         )?;
     match prepare_rename_symbol_node.value {
-        StillSyntaxSymbol::Field {
+        LilySyntaxSymbol::Field {
             name,
             value_type: _,
             fields_sorted: _,
         }
-        | StillSyntaxSymbol::ProjectDeclarationName {
+        | LilySyntaxSymbol::ProjectDeclarationName {
             name,
             declaration: _,
             documentation: _,
         }
-        | StillSyntaxSymbol::LocalVariableDeclarationName {
+        | LilySyntaxSymbol::LocalVariableDeclarationName {
             name,
             type_: _,
             scope_expression: _,
         }
-        | StillSyntaxSymbol::TypeVariable {
+        | LilySyntaxSymbol::TypeVariable {
             scope_declaration: _,
             name,
         }
-        | StillSyntaxSymbol::Variable {
+        | LilySyntaxSymbol::Variable {
             name,
             local_bindings: _,
         }
-        | StillSyntaxSymbol::Variant { name, type_: _ }
-        | StillSyntaxSymbol::Type(name) => {
+        | LilySyntaxSymbol::Variant { name, type_: _ }
+        | LilySyntaxSymbol::Type(name) => {
             Some(Ok(lsp_types::PrepareRenameResponse::RangeWithPlaceholder {
                 range: prepare_rename_symbol_node.range,
                 placeholder: name.to_string(),
@@ -1207,8 +1206,8 @@ fn respond_to_rename(
     let to_prepare_for_rename_project_state = state
         .projects
         .get(&rename_arguments.text_document_position.text_document.uri)?;
-    let symbol_to_rename_node: StillSyntaxNode<StillSyntaxSymbol> =
-        still_syntax_project_find_symbol_at_position(
+    let symbol_to_rename_node: LilySyntaxNode<LilySyntaxSymbol> =
+        lily_syntax_project_find_symbol_at_position(
             &to_prepare_for_rename_project_state.syntax,
             &to_prepare_for_rename_project_state.type_aliases,
             &to_prepare_for_rename_project_state.choice_types,
@@ -1216,17 +1215,17 @@ fn respond_to_rename(
             rename_arguments.text_document_position.position,
         )?;
     match symbol_to_rename_node.value {
-        StillSyntaxSymbol::TypeVariable {
+        LilySyntaxSymbol::TypeVariable {
             scope_declaration,
             name: type_variable_to_rename,
         } => {
             let mut all_uses_of_renamed_type_variable: Vec<lsp_types::Range> =
                 Vec::with_capacity(2);
-            still_syntax_declaration_uses_of_symbol_into(
+            lily_syntax_declaration_uses_of_symbol_into(
                 &mut all_uses_of_renamed_type_variable,
                 &to_prepare_for_rename_project_state.type_aliases,
                 scope_declaration,
-                StillSymbolToReference::TypeVariable(type_variable_to_rename),
+                LilySymbolToReference::TypeVariable(type_variable_to_rename),
             );
             Some(vec![lsp_types::TextDocumentEdit {
                 text_document: lsp_types::OptionalVersionedTextDocumentIdentifier {
@@ -1244,22 +1243,22 @@ fn respond_to_rename(
                     .collect::<Vec<_>>(),
             }])
         }
-        StillSyntaxSymbol::Field {
+        LilySyntaxSymbol::Field {
             name: to_rename_field_name,
             value_type: _,
             fields_sorted: to_rename_fields_sorted,
         } => {
-            let still_declared_symbol_to_rename: StillSymbolToReference =
-                StillSymbolToReference::Field {
+            let lily_declared_symbol_to_rename: LilySymbolToReference =
+                LilySymbolToReference::Field {
                     name: to_rename_field_name,
                     fields_sorted: &to_rename_fields_sorted,
                 };
             let mut all_uses_of_project_member: Vec<lsp_types::Range> = Vec::with_capacity(4);
-            still_syntax_project_uses_of_symbol_into(
+            lily_syntax_project_uses_of_symbol_into(
                 &mut all_uses_of_project_member,
                 &to_prepare_for_rename_project_state.type_aliases,
                 &to_prepare_for_rename_project_state.syntax,
-                still_declared_symbol_to_rename,
+                lily_declared_symbol_to_rename,
             );
             Some(vec![lsp_types::TextDocumentEdit {
                 text_document: lsp_types::OptionalVersionedTextDocumentIdentifier {
@@ -1277,50 +1276,50 @@ fn respond_to_rename(
                     .collect::<Vec<_>>(),
             }])
         }
-        StillSyntaxSymbol::ProjectDeclarationName {
+        LilySyntaxSymbol::ProjectDeclarationName {
             name: to_rename_declaration_name,
             documentation: _,
             declaration: declaration_node,
         } => {
-            let still_declared_symbol_to_rename: StillSymbolToReference =
-                match declaration_node.value {
-                    StillSyntaxDeclaration::Variable { .. } => StillSymbolToReference::Variable {
-                        name: to_rename_declaration_name,
-                        including_declaration_name: true,
-                    },
-                    StillSyntaxDeclaration::TypeAlias { .. } => StillSymbolToReference::Type {
-                        name: to_rename_declaration_name,
-                        including_declaration_name: true,
-                    },
-                    StillSyntaxDeclaration::ChoiceType {
-                        name: origin_project_declaration_maybe_name,
-                        ..
-                    } => {
-                        if origin_project_declaration_maybe_name
-                            .as_ref()
-                            .is_some_and(|node| node.value == to_rename_declaration_name)
-                        {
-                            StillSymbolToReference::Type {
-                                name: to_rename_declaration_name,
-                                including_declaration_name: true,
-                            }
-                        } else {
-                            StillSymbolToReference::Variant {
-                                origin_type_name: origin_project_declaration_maybe_name
-                                    .as_ref()
-                                    .map(|node| &node.value),
-                                name: to_rename_declaration_name,
-                                including_declaration_name: true,
-                            }
+            let lily_declared_symbol_to_rename: LilySymbolToReference = match declaration_node.value
+            {
+                LilySyntaxDeclaration::Variable { .. } => LilySymbolToReference::Variable {
+                    name: to_rename_declaration_name,
+                    including_declaration_name: true,
+                },
+                LilySyntaxDeclaration::TypeAlias { .. } => LilySymbolToReference::Type {
+                    name: to_rename_declaration_name,
+                    including_declaration_name: true,
+                },
+                LilySyntaxDeclaration::ChoiceType {
+                    name: origin_project_declaration_maybe_name,
+                    ..
+                } => {
+                    if origin_project_declaration_maybe_name
+                        .as_ref()
+                        .is_some_and(|node| node.value == to_rename_declaration_name)
+                    {
+                        LilySymbolToReference::Type {
+                            name: to_rename_declaration_name,
+                            including_declaration_name: true,
+                        }
+                    } else {
+                        LilySymbolToReference::Variant {
+                            origin_type_name: origin_project_declaration_maybe_name
+                                .as_ref()
+                                .map(|node| &node.value),
+                            name: to_rename_declaration_name,
+                            including_declaration_name: true,
                         }
                     }
-                };
+                }
+            };
             let mut all_uses_of_project_member: Vec<lsp_types::Range> = Vec::with_capacity(4);
-            still_syntax_project_uses_of_symbol_into(
+            lily_syntax_project_uses_of_symbol_into(
                 &mut all_uses_of_project_member,
                 &to_prepare_for_rename_project_state.type_aliases,
                 &to_prepare_for_rename_project_state.syntax,
-                still_declared_symbol_to_rename,
+                lily_declared_symbol_to_rename,
             );
             Some(vec![lsp_types::TextDocumentEdit {
                 text_document: lsp_types::OptionalVersionedTextDocumentIdentifier {
@@ -1338,19 +1337,19 @@ fn respond_to_rename(
                     .collect::<Vec<_>>(),
             }])
         }
-        StillSyntaxSymbol::LocalVariableDeclarationName {
+        LilySyntaxSymbol::LocalVariableDeclarationName {
             name: to_rename_name,
             type_: _,
             scope_expression,
         } => {
             let mut all_uses_of_local_variable_declaration_to_rename: Vec<lsp_types::Range> =
                 Vec::with_capacity(2);
-            still_syntax_expression_uses_of_symbol_into(
+            lily_syntax_expression_uses_of_symbol_into(
                 &mut all_uses_of_local_variable_declaration_to_rename,
                 &to_prepare_for_rename_project_state.type_aliases,
                 &[to_rename_name],
                 scope_expression,
-                StillSymbolToReference::LocalBinding {
+                LilySymbolToReference::LocalBinding {
                     name: to_rename_name,
                     including_local_declaration_name: true,
                 },
@@ -1371,7 +1370,7 @@ fn respond_to_rename(
                     .collect::<Vec<_>>(),
             }])
         }
-        StillSyntaxSymbol::Variable {
+        LilySyntaxSymbol::Variable {
             name: to_rename_name,
             local_bindings,
         } => {
@@ -1388,12 +1387,12 @@ fn respond_to_rename(
                         // already included in scope expression
                     }
                 }
-                still_syntax_expression_uses_of_symbol_into(
+                lily_syntax_expression_uses_of_symbol_into(
                     &mut all_uses_of_local_binding_to_rename,
                     &to_prepare_for_rename_project_state.type_aliases,
                     &[to_rename_name],
                     to_rename_local_binding_info.scope_expression,
-                    StillSymbolToReference::LocalBinding {
+                    LilySymbolToReference::LocalBinding {
                         name: to_rename_name,
                         including_local_declaration_name: true,
                     },
@@ -1414,12 +1413,12 @@ fn respond_to_rename(
                         .collect::<Vec<_>>(),
                 }])
             } else {
-                let symbol_to_find: StillSymbolToReference = StillSymbolToReference::Variable {
+                let symbol_to_find: LilySymbolToReference = LilySymbolToReference::Variable {
                     name: to_rename_name,
                     including_declaration_name: true,
                 };
                 let mut all_uses_of_renamed_variable: Vec<lsp_types::Range> = Vec::with_capacity(4);
-                still_syntax_project_uses_of_symbol_into(
+                lily_syntax_project_uses_of_symbol_into(
                     &mut all_uses_of_renamed_variable,
                     &to_prepare_for_rename_project_state.type_aliases,
                     &to_prepare_for_rename_project_state.syntax,
@@ -1442,24 +1441,24 @@ fn respond_to_rename(
                 }])
             }
         }
-        StillSyntaxSymbol::Variant {
+        LilySyntaxSymbol::Variant {
             name: to_rename_name,
             type_: maybe_type,
         } => {
-            let maybe_origin_choice_type_name: Option<StillName> = maybe_type.and_then(|type_| {
-                still_syntax_type_to_choice_type(
+            let maybe_origin_choice_type_name: Option<LilyName> = maybe_type.and_then(|type_| {
+                lily_syntax_type_to_choice_type(
                     &to_prepare_for_rename_project_state.type_aliases,
-                    still_syntax_node_empty(type_),
+                    lily_syntax_node_empty(type_),
                 )
                 .map(|(name, _)| name)
             });
-            let symbol_to_find: StillSymbolToReference = StillSymbolToReference::Variant {
+            let symbol_to_find: LilySymbolToReference = LilySymbolToReference::Variant {
                 name: to_rename_name,
                 including_declaration_name: true,
                 origin_type_name: maybe_origin_choice_type_name.as_ref(),
             };
             let mut all_uses_of_renamed_variable: Vec<lsp_types::Range> = Vec::with_capacity(4);
-            still_syntax_project_uses_of_symbol_into(
+            lily_syntax_project_uses_of_symbol_into(
                 &mut all_uses_of_renamed_variable,
                 &to_prepare_for_rename_project_state.type_aliases,
                 &to_prepare_for_rename_project_state.syntax,
@@ -1481,19 +1480,19 @@ fn respond_to_rename(
                     .collect::<Vec<_>>(),
             }])
         }
-        StillSyntaxSymbol::Type(type_name_to_rename) => {
-            let still_declared_symbol_to_rename: StillSymbolToReference =
-                StillSymbolToReference::Type {
+        LilySyntaxSymbol::Type(type_name_to_rename) => {
+            let lily_declared_symbol_to_rename: LilySymbolToReference =
+                LilySymbolToReference::Type {
                     name: type_name_to_rename,
                     including_declaration_name: true,
                 };
 
             let mut all_uses_of_renamed_type: Vec<lsp_types::Range> = Vec::with_capacity(4);
-            still_syntax_project_uses_of_symbol_into(
+            lily_syntax_project_uses_of_symbol_into(
                 &mut all_uses_of_renamed_type,
                 &to_prepare_for_rename_project_state.type_aliases,
                 &to_prepare_for_rename_project_state.syntax,
-                still_declared_symbol_to_rename,
+                lily_declared_symbol_to_rename,
             );
             Some(vec![lsp_types::TextDocumentEdit {
                 text_document: lsp_types::OptionalVersionedTextDocumentIdentifier {
@@ -1523,8 +1522,8 @@ fn respond_to_references(
             .text_document
             .uri,
     )?;
-    let symbol_to_find_node: StillSyntaxNode<StillSyntaxSymbol> =
-        still_syntax_project_find_symbol_at_position(
+    let symbol_to_find_node: LilySyntaxNode<LilySyntaxSymbol> =
+        lily_syntax_project_find_symbol_at_position(
             &to_find_project_state.syntax,
             &to_find_project_state.type_aliases,
             &to_find_project_state.choice_types,
@@ -1532,16 +1531,16 @@ fn respond_to_references(
             references_arguments.text_document_position.position,
         )?;
     match symbol_to_find_node.value {
-        StillSyntaxSymbol::TypeVariable {
+        LilySyntaxSymbol::TypeVariable {
             scope_declaration,
             name: type_variable_to_find,
         } => {
             let mut all_uses_of_found_type_variable: Vec<lsp_types::Range> = Vec::with_capacity(2);
-            still_syntax_declaration_uses_of_symbol_into(
+            lily_syntax_declaration_uses_of_symbol_into(
                 &mut all_uses_of_found_type_variable,
                 &to_find_project_state.type_aliases,
                 scope_declaration,
-                StillSymbolToReference::TypeVariable(type_variable_to_find),
+                LilySymbolToReference::TypeVariable(type_variable_to_find),
             );
             Some(
                 all_uses_of_found_type_variable
@@ -1557,22 +1556,22 @@ fn respond_to_references(
                     .collect::<Vec<_>>(),
             )
         }
-        StillSyntaxSymbol::Field {
+        LilySyntaxSymbol::Field {
             name: to_find_field_name,
             value_type: _,
             fields_sorted: to_find_fields_sorted,
         } => {
-            let still_declared_symbol_to_find: StillSymbolToReference =
-                StillSymbolToReference::Field {
+            let lily_declared_symbol_to_find: LilySymbolToReference =
+                LilySymbolToReference::Field {
                     name: to_find_field_name,
                     fields_sorted: &to_find_fields_sorted,
                 };
             let mut all_uses_of_found_project_member: Vec<lsp_types::Range> = Vec::with_capacity(4);
-            still_syntax_project_uses_of_symbol_into(
+            lily_syntax_project_uses_of_symbol_into(
                 &mut all_uses_of_found_project_member,
                 &to_find_project_state.type_aliases,
                 &to_find_project_state.syntax,
-                still_declared_symbol_to_find,
+                lily_declared_symbol_to_find,
             );
             Some(
                 all_uses_of_found_project_member
@@ -1588,30 +1587,30 @@ fn respond_to_references(
                     .collect::<Vec<_>>(),
             )
         }
-        StillSyntaxSymbol::ProjectDeclarationName {
+        LilySyntaxSymbol::ProjectDeclarationName {
             name: to_find_name,
             documentation: _,
             declaration: _,
         } => {
-            let still_declared_symbol_to_find: StillSymbolToReference = if to_find_name
+            let lily_declared_symbol_to_find: LilySymbolToReference = if to_find_name
                 .starts_with(|c: char| c.is_ascii_uppercase())
             {
-                StillSymbolToReference::Type {
+                LilySymbolToReference::Type {
                     name: to_find_name,
                     including_declaration_name: references_arguments.context.include_declaration,
                 }
             } else {
-                StillSymbolToReference::Variable {
+                LilySymbolToReference::Variable {
                     name: to_find_name,
                     including_declaration_name: references_arguments.context.include_declaration,
                 }
             };
             let mut all_uses_of_found_project_member: Vec<lsp_types::Range> = Vec::with_capacity(4);
-            still_syntax_project_uses_of_symbol_into(
+            lily_syntax_project_uses_of_symbol_into(
                 &mut all_uses_of_found_project_member,
                 &to_find_project_state.type_aliases,
                 &to_find_project_state.syntax,
-                still_declared_symbol_to_find,
+                lily_declared_symbol_to_find,
             );
             Some(
                 all_uses_of_found_project_member
@@ -1627,19 +1626,19 @@ fn respond_to_references(
                     .collect::<Vec<_>>(),
             )
         }
-        StillSyntaxSymbol::LocalVariableDeclarationName {
+        LilySyntaxSymbol::LocalVariableDeclarationName {
             name: to_find_name,
             type_: _,
             scope_expression,
         } => {
             let mut all_uses_of_found_local_variable_declaration: Vec<lsp_types::Range> =
                 Vec::with_capacity(2);
-            still_syntax_expression_uses_of_symbol_into(
+            lily_syntax_expression_uses_of_symbol_into(
                 &mut all_uses_of_found_local_variable_declaration,
                 &to_find_project_state.type_aliases,
                 &[to_find_name],
                 scope_expression,
-                StillSymbolToReference::LocalBinding {
+                LilySymbolToReference::LocalBinding {
                     name: to_find_name,
                     including_local_declaration_name: references_arguments
                         .context
@@ -1660,7 +1659,7 @@ fn respond_to_references(
                     .collect::<Vec<_>>(),
             )
         }
-        StillSyntaxSymbol::Variable {
+        LilySyntaxSymbol::Variable {
             name: to_find_name,
             local_bindings,
         } => {
@@ -1679,12 +1678,12 @@ fn respond_to_references(
                         }
                     }
                 }
-                still_syntax_expression_uses_of_symbol_into(
+                lily_syntax_expression_uses_of_symbol_into(
                     &mut all_uses_of_found_local_binding,
                     &to_find_project_state.type_aliases,
                     &[to_find_name],
                     to_find_local_binding_info.scope_expression,
-                    StillSymbolToReference::LocalBinding {
+                    LilySymbolToReference::LocalBinding {
                         name: to_find_name,
                         including_local_declaration_name: references_arguments
                             .context
@@ -1705,12 +1704,12 @@ fn respond_to_references(
                         .collect::<Vec<_>>(),
                 )
             } else {
-                let symbol_to_find: StillSymbolToReference = StillSymbolToReference::Variable {
+                let symbol_to_find: LilySymbolToReference = LilySymbolToReference::Variable {
                     name: to_find_name,
                     including_declaration_name: references_arguments.context.include_declaration,
                 };
                 let mut all_uses_of_found_variable: Vec<lsp_types::Range> = Vec::with_capacity(4);
-                still_syntax_project_uses_of_symbol_into(
+                lily_syntax_project_uses_of_symbol_into(
                     &mut all_uses_of_found_variable,
                     &to_find_project_state.type_aliases,
                     &to_find_project_state.syntax,
@@ -1732,24 +1731,24 @@ fn respond_to_references(
                 )
             }
         }
-        StillSyntaxSymbol::Variant {
+        LilySyntaxSymbol::Variant {
             name: to_find_name,
             type_: maybe_type,
         } => {
-            let maybe_origin_choice_type_name: Option<StillName> = maybe_type.and_then(|type_| {
-                still_syntax_type_to_choice_type(
+            let maybe_origin_choice_type_name: Option<LilyName> = maybe_type.and_then(|type_| {
+                lily_syntax_type_to_choice_type(
                     &to_find_project_state.type_aliases,
-                    still_syntax_node_empty(type_),
+                    lily_syntax_node_empty(type_),
                 )
                 .map(|(name, _)| name)
             });
-            let symbol_to_find: StillSymbolToReference = StillSymbolToReference::Variant {
+            let symbol_to_find: LilySymbolToReference = LilySymbolToReference::Variant {
                 origin_type_name: maybe_origin_choice_type_name.as_ref(),
                 name: to_find_name,
                 including_declaration_name: references_arguments.context.include_declaration,
             };
             let mut all_uses_of_found_variable: Vec<lsp_types::Range> = Vec::with_capacity(4);
-            still_syntax_project_uses_of_symbol_into(
+            lily_syntax_project_uses_of_symbol_into(
                 &mut all_uses_of_found_variable,
                 &to_find_project_state.type_aliases,
                 &to_find_project_state.syntax,
@@ -1769,18 +1768,17 @@ fn respond_to_references(
                     .collect::<Vec<_>>(),
             )
         }
-        StillSyntaxSymbol::Type(type_name_to_find) => {
-            let still_declared_symbol_to_find: StillSymbolToReference =
-                StillSymbolToReference::Type {
-                    name: type_name_to_find,
-                    including_declaration_name: references_arguments.context.include_declaration,
-                };
+        LilySyntaxSymbol::Type(type_name_to_find) => {
+            let lily_declared_symbol_to_find: LilySymbolToReference = LilySymbolToReference::Type {
+                name: type_name_to_find,
+                including_declaration_name: references_arguments.context.include_declaration,
+            };
             let mut all_uses_of_found_type: Vec<lsp_types::Range> = Vec::with_capacity(4);
-            still_syntax_project_uses_of_symbol_into(
+            lily_syntax_project_uses_of_symbol_into(
                 &mut all_uses_of_found_type,
                 &to_find_project_state.type_aliases,
                 &to_find_project_state.syntax,
-                still_declared_symbol_to_find,
+                lily_declared_symbol_to_find,
             );
             Some(
                 all_uses_of_found_type
@@ -1806,9 +1804,9 @@ fn respond_to_semantic_tokens_full(
     let project_state = state
         .projects
         .get(&semantic_tokens_arguments.text_document.uri)?;
-    let mut highlighting: Vec<StillSyntaxNode<StillSyntaxHighlightKind>> =
+    let mut highlighting: Vec<LilySyntaxNode<LilySyntaxHighlightKind>> =
         Vec::with_capacity(project_state.source.len() / 16);
-    still_syntax_highlight_project_into(&mut highlighting, &project_state.syntax);
+    lily_syntax_highlight_project_into(&mut highlighting, &project_state.syntax);
     Some(lsp_types::SemanticTokensResult::Tokens(
         lsp_types::SemanticTokens {
             result_id: None,
@@ -1844,7 +1842,7 @@ fn respond_to_semantic_tokens_full(
                                     length: segment.range.end.character
                                         - segment.range.start.character,
                                     token_type: semantic_token_type_to_id(
-                                        &still_syntax_highlight_kind_to_lsp_semantic_token_type(
+                                        &lily_syntax_highlight_kind_to_lsp_semantic_token_type(
                                             &segment.value,
                                         ),
                                     ),
@@ -1890,15 +1888,15 @@ fn semantic_token_type_to_id(semantic_token: &lsp_types::SemanticTokenType) -> u
 }
 fn present_variable_declaration_info_with_complete_type_markdown(
     maybe_documentation: Option<&str>,
-    maybe_variable_type: Option<&StillType>,
+    maybe_variable_type: Option<&LilyType>,
 ) -> String {
     let description: String = match maybe_variable_type {
         Some(variable_type) => {
             let mut type_string: String = String::new();
-            still_type_info_into(&mut type_string, 1, variable_type);
+            lily_type_info_into(&mut type_string, 1, variable_type);
             format!(
                 "project variable
-```still
+```lily
 :{type_string}{}:
 ```
 ",
@@ -1915,19 +1913,19 @@ fn present_variable_declaration_info_with_complete_type_markdown(
     }
 }
 fn present_type_alias_declaration_info_markdown(
-    maybe_name: Option<&StillName>,
+    maybe_name: Option<&LilyName>,
     maybe_documentation: Option<&str>,
-    parameters: &[StillSyntaxNode<StillName>],
-    maybe_type: Option<StillSyntaxNode<&StillSyntaxType>>,
+    parameters: &[LilySyntaxNode<LilyName>],
+    maybe_type: Option<LilySyntaxNode<&LilySyntaxType>>,
 ) -> String {
     let mut declaration_as_string: String = String::new();
-    still_syntax_type_alias_declaration_into(
+    lily_syntax_type_alias_declaration_into(
         &mut declaration_as_string,
         maybe_name,
         parameters,
         maybe_type,
     );
-    let description = format!("```still\n{}\n```\n", declaration_as_string);
+    let description = format!("```lily\n{}\n```\n", declaration_as_string);
     match maybe_documentation {
         None => description,
         Some(documentation) => {
@@ -1937,19 +1935,19 @@ fn present_type_alias_declaration_info_markdown(
 }
 
 fn present_choice_type_declaration_info_markdown(
-    maybe_name: Option<&StillName>,
+    maybe_name: Option<&LilyName>,
     maybe_documentation: Option<&str>,
-    parameters: &[StillSyntaxNode<StillName>],
-    variants: &[StillSyntaxChoiceTypeVariant],
+    parameters: &[LilySyntaxNode<LilyName>],
+    variants: &[LilySyntaxChoiceTypeVariant],
 ) -> String {
     let mut declaration_string: String = String::new();
-    still_syntax_choice_type_declaration_into(
+    lily_syntax_choice_type_declaration_into(
         &mut declaration_string,
         maybe_name,
         parameters,
         variants,
     );
-    let description: String = format!("```still\n{}\n```\n", declaration_string);
+    let description: String = format!("```lily\n{}\n```\n", declaration_string);
     match maybe_documentation {
         None => description,
         Some(documentation) => {
@@ -1968,8 +1966,8 @@ fn respond_to_completion(
             .text_document
             .uri,
     )?;
-    let symbol_to_complete: StillSyntaxNode<StillSyntaxSymbol> =
-        still_syntax_project_find_symbol_at_position(
+    let symbol_to_complete: LilySyntaxNode<LilySyntaxSymbol> =
+        lily_syntax_project_find_symbol_at_position(
             &completion_project.syntax,
             &completion_project.type_aliases,
             &completion_project.choice_types,
@@ -1979,9 +1977,9 @@ fn respond_to_completion(
     let maybe_completion_items: Option<Vec<lsp_types::CompletionItem>> = match symbol_to_complete
         .value
     {
-        StillSyntaxSymbol::LocalVariableDeclarationName { .. } => None,
-        StillSyntaxSymbol::ProjectDeclarationName { .. } => None,
-        StillSyntaxSymbol::Field {
+        LilySyntaxSymbol::LocalVariableDeclarationName { .. } => None,
+        LilySyntaxSymbol::ProjectDeclarationName { .. } => None,
+        LilySyntaxSymbol::Field {
             name: field_name_to_complete,
             value_type: _,
             fields_sorted,
@@ -2005,7 +2003,7 @@ fn respond_to_completion(
                 })
                 .collect(),
         ),
-        StillSyntaxSymbol::Variable {
+        LilySyntaxSymbol::Variable {
             name: _,
             local_bindings,
         } => {
@@ -2035,7 +2033,7 @@ fn respond_to_completion(
             );
             Some(completion_items)
         }
-        StillSyntaxSymbol::Variant {
+        LilySyntaxSymbol::Variant {
             name: _,
             type_: maybe_type,
         } => {
@@ -2048,7 +2046,7 @@ fn respond_to_completion(
             );
             Some(completion_items)
         }
-        StillSyntaxSymbol::Type(_) => {
+        LilySyntaxSymbol::Type(_) => {
             let mut completion_items: Vec<lsp_types::CompletionItem> = Vec::new();
             type_declaration_completions_into(
                 &completion_project.type_aliases,
@@ -2057,8 +2055,8 @@ fn respond_to_completion(
             );
             Some(completion_items)
         }
-        StillSyntaxSymbol::TypeVariable { .. } => {
-            // is this ever useful to add? still tends to use single-letter names anyway most of the time
+        LilySyntaxSymbol::TypeVariable { .. } => {
+            // is this ever useful to add? lily tends to use single-letter names anyway most of the time
             // (or ones where the first letters don't match in the first place).
             // suggesting completions can get annoying and isn't free computationally so...
             None
@@ -2069,8 +2067,8 @@ fn respond_to_completion(
 
 fn variable_declaration_or_variant_completions_into(
     completion_items: &mut Vec<lsp_types::CompletionItem>,
-    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
-    variable_declarations: &std::collections::HashMap<StillName, CompiledVariableDeclarationInfo>,
+    choice_types: &std::collections::HashMap<LilyName, ChoiceTypeInfo>,
+    variable_declarations: &std::collections::HashMap<LilyName, CompiledVariableDeclarationInfo>,
 ) {
     completion_items.extend(variable_declarations.iter().map(
         |(variable_declaration_name, variable_declaration_info)| lsp_types::CompletionItem {
@@ -2120,13 +2118,13 @@ fn variable_declaration_or_variant_completions_into(
 }
 fn variant_completions_into(
     completion_items: &mut Vec<lsp_types::CompletionItem>,
-    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
-    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
-    maybe_type: Option<&StillSyntaxType>,
+    choice_types: &std::collections::HashMap<LilyName, ChoiceTypeInfo>,
+    type_aliases: &std::collections::HashMap<LilyName, TypeAliasInfo>,
+    maybe_type: Option<&LilySyntaxType>,
 ) {
-    let maybe_origin_choice_type: Option<(StillName, &ChoiceTypeInfo)> =
+    let maybe_origin_choice_type: Option<(LilyName, &ChoiceTypeInfo)> =
         maybe_type.and_then(|type_| {
-            still_syntax_type_to_choice_type(type_aliases, still_syntax_node_empty(type_)).and_then(
+            lily_syntax_type_to_choice_type(type_aliases, lily_syntax_node_empty(type_)).and_then(
                 |(origin_choice_type_name, _)| {
                     choice_types
                         .get(&origin_choice_type_name)
@@ -2198,8 +2196,8 @@ fn variant_completions_into(
     }
 }
 fn type_declaration_completions_into(
-    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
-    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
+    type_aliases: &std::collections::HashMap<LilyName, TypeAliasInfo>,
+    choice_types: &std::collections::HashMap<LilyName, ChoiceTypeInfo>,
     completion_items: &mut Vec<lsp_types::CompletionItem>,
 ) {
     completion_items.extend(choice_types.iter().map(
@@ -2237,7 +2235,7 @@ fn type_declaration_completions_into(
                             type_alias_info
                                 .type_syntax
                                 .as_ref()
-                                .map(still_syntax_node_as_ref),
+                                .map(lily_syntax_node_as_ref),
                         ),
                     },
                 )),
@@ -2254,7 +2252,7 @@ fn respond_to_document_formatting(
     let to_format_project = state
         .projects
         .get(&formatting_arguments.text_document.uri)?;
-    let formatted: String = still_syntax_project_format(to_format_project);
+    let formatted: String = lily_syntax_project_format(to_format_project);
     // diffing does not seem to be needed here. But maybe it's faster?
     Some(vec![lsp_types::TextEdit {
         range: lsp_types::Range {
@@ -2286,7 +2284,7 @@ fn respond_to_document_symbols(
             .filter_map(|declaration_or_err| declaration_or_err.as_ref().ok())
             .filter_map(|documented_declaration| documented_declaration.declaration.as_ref())
             .filter_map(|declaration_node| match &declaration_node.value {
-                StillSyntaxDeclaration::ChoiceType {
+                LilySyntaxDeclaration::ChoiceType {
                     name: maybe_name,
                     parameters: _,
                     variants,
@@ -2335,7 +2333,7 @@ fn respond_to_document_symbols(
                         ),
                     })
                 }
-                StillSyntaxDeclaration::TypeAlias {
+                LilySyntaxDeclaration::TypeAlias {
                     name: maybe_name,
                     type_keyword_range: _,
                     parameters: _,
@@ -2355,7 +2353,7 @@ fn respond_to_document_symbols(
                         children: None,
                     })
                 }
-                StillSyntaxDeclaration::Variable {
+                LilySyntaxDeclaration::Variable {
                     name: name_node,
                     result: _,
                 } => Some(lsp_types::DocumentSymbol {
@@ -2374,7 +2372,7 @@ fn respond_to_document_symbols(
     ))
 }
 
-fn still_error_node_to_diagnostic(problem: &StillErrorNode) -> lsp_types::Diagnostic {
+fn lily_error_node_to_diagnostic(problem: &LilyErrorNode) -> lsp_types::Diagnostic {
     lsp_types::Diagnostic {
         range: problem.range,
         severity: Some(lsp_types::DiagnosticSeverity::WARNING),
@@ -2391,22 +2389,22 @@ fn still_error_node_to_diagnostic(problem: &StillErrorNode) -> lsp_types::Diagno
 fn documentation_comment_to_markdown(documentation: &str) -> String {
     let markdown_source: &str = documentation.trim();
     let mut builder: String = String::new();
-    markdown_convert_code_blocks_to_still_into(&mut builder, markdown_source);
+    markdown_convert_code_blocks_to_lily_into(&mut builder, markdown_source);
     builder
 }
-fn markdown_convert_code_blocks_to_still_into(builder: &mut String, markdown_source: &str) {
+fn markdown_convert_code_blocks_to_lily_into(builder: &mut String, markdown_source: &str) {
     // because I don't want to introduce a full markdown parser for just this tiny
     // improvement, the code below only approximates where code blocks are.
     let mut with_fenced_code_blocks_converted: String = String::new();
-    markdown_convert_unspecific_fenced_code_blocks_to_still_into(
+    markdown_convert_unspecific_fenced_code_blocks_to_lily_into(
         &mut with_fenced_code_blocks_converted,
         markdown_source,
     );
-    markdown_convert_indented_code_blocks_to_still(builder, &with_fenced_code_blocks_converted);
+    markdown_convert_indented_code_blocks_to_lily(builder, &with_fenced_code_blocks_converted);
 }
 
-/// replace fenced no-language-specified code blocks by `still...`
-fn markdown_convert_unspecific_fenced_code_blocks_to_still_into(
+/// replace fenced no-language-specified code blocks by `lily...`
+fn markdown_convert_unspecific_fenced_code_blocks_to_lily_into(
     result_builder: &mut String,
     markdown_source: &str,
 ) {
@@ -2437,7 +2435,7 @@ fn markdown_convert_unspecific_fenced_code_blocks_to_still_into(
                                 result_builder.push_str(
                                     &markdown_source[current_source_index..index_at_opening_fence],
                                 );
-                                result_builder.push_str("```still");
+                                result_builder.push_str("```lily");
                                 result_builder.push_str(
                                     &markdown_source
                                         [index_after_opening_fence..index_at_closing_fence],
@@ -2461,7 +2459,7 @@ fn markdown_convert_unspecific_fenced_code_blocks_to_still_into(
     }
 }
 
-fn markdown_convert_indented_code_blocks_to_still(builder: &mut String, markdown_source: &str) {
+fn markdown_convert_indented_code_blocks_to_lily(builder: &mut String, markdown_source: &str) {
     let mut current_indent: usize = 0;
     let mut is_in_code_block: bool = false;
     let mut previous_line_was_blank: bool = false;
@@ -2494,7 +2492,7 @@ fn markdown_convert_indented_code_blocks_to_still(builder: &mut String, markdown
                 } else if previous_line_was_blank && (current_line_indent >= current_indent + 4) {
                     is_in_code_block = true;
                     current_indent = current_line_indent;
-                    builder.push_str("```still\n");
+                    builder.push_str("```lily\n");
                     builder.push_str(&source_line[current_line_indent..]);
                     builder.push('\n');
                 } else {
@@ -2572,314 +2570,314 @@ fn lsp_position_add_characters(
     }
 }
 
-fn still_syntax_highlight_kind_to_lsp_semantic_token_type(
-    still_syntax_highlight_kind: &StillSyntaxHighlightKind,
+fn lily_syntax_highlight_kind_to_lsp_semantic_token_type(
+    lily_syntax_highlight_kind: &LilySyntaxHighlightKind,
 ) -> lsp_types::SemanticTokenType {
-    match still_syntax_highlight_kind {
-        StillSyntaxHighlightKind::KeySymbol => lsp_types::SemanticTokenType::KEYWORD,
-        StillSyntaxHighlightKind::Field => lsp_types::SemanticTokenType::PROPERTY,
-        StillSyntaxHighlightKind::Type => lsp_types::SemanticTokenType::TYPE,
-        StillSyntaxHighlightKind::Variable => lsp_types::SemanticTokenType::VARIABLE,
-        StillSyntaxHighlightKind::Variant => lsp_types::SemanticTokenType::ENUM_MEMBER,
-        StillSyntaxHighlightKind::DeclaredVariable => lsp_types::SemanticTokenType::FUNCTION,
-        StillSyntaxHighlightKind::Comment => lsp_types::SemanticTokenType::COMMENT,
-        StillSyntaxHighlightKind::Number => lsp_types::SemanticTokenType::NUMBER,
-        StillSyntaxHighlightKind::String => lsp_types::SemanticTokenType::STRING,
-        StillSyntaxHighlightKind::TypeVariable => lsp_types::SemanticTokenType::TYPE_PARAMETER,
+    match lily_syntax_highlight_kind {
+        LilySyntaxHighlightKind::KeySymbol => lsp_types::SemanticTokenType::KEYWORD,
+        LilySyntaxHighlightKind::Field => lsp_types::SemanticTokenType::PROPERTY,
+        LilySyntaxHighlightKind::Type => lsp_types::SemanticTokenType::TYPE,
+        LilySyntaxHighlightKind::Variable => lsp_types::SemanticTokenType::VARIABLE,
+        LilySyntaxHighlightKind::Variant => lsp_types::SemanticTokenType::ENUM_MEMBER,
+        LilySyntaxHighlightKind::DeclaredVariable => lsp_types::SemanticTokenType::FUNCTION,
+        LilySyntaxHighlightKind::Comment => lsp_types::SemanticTokenType::COMMENT,
+        LilySyntaxHighlightKind::Number => lsp_types::SemanticTokenType::NUMBER,
+        LilySyntaxHighlightKind::String => lsp_types::SemanticTokenType::STRING,
+        LilySyntaxHighlightKind::TypeVariable => lsp_types::SemanticTokenType::TYPE_PARAMETER,
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
-enum StillSyntaxType {
-    Variable(StillName),
-    Parenthesized(Option<StillSyntaxNode<Box<StillSyntaxType>>>),
+enum LilySyntaxType {
+    Variable(LilyName),
+    Parenthesized(Option<LilySyntaxNode<Box<LilySyntaxType>>>),
     WithComment {
-        comment: StillSyntaxNode<Box<str>>,
-        type_: Option<StillSyntaxNode<Box<StillSyntaxType>>>,
+        comment: LilySyntaxNode<Box<str>>,
+        type_: Option<LilySyntaxNode<Box<LilySyntaxType>>>,
     },
     Function {
-        inputs: Vec<StillSyntaxNode<StillSyntaxType>>,
+        inputs: Vec<LilySyntaxNode<LilySyntaxType>>,
         arrow_key_symbol_range: Option<lsp_types::Range>,
-        output: Option<StillSyntaxNode<Box<StillSyntaxType>>>,
+        output: Option<LilySyntaxNode<Box<LilySyntaxType>>>,
     },
     Construct {
-        name: StillSyntaxNode<StillName>,
-        arguments: Vec<StillSyntaxNode<StillSyntaxType>>,
+        name: LilySyntaxNode<LilyName>,
+        arguments: Vec<LilySyntaxNode<LilySyntaxType>>,
     },
-    Record(Vec<StillSyntaxTypeField>),
+    Record(Vec<LilySyntaxTypeField>),
 }
 #[derive(Clone, Debug, PartialEq)]
-struct StillSyntaxTypeField {
-    name: StillSyntaxNode<StillName>,
-    value: Option<StillSyntaxNode<StillSyntaxType>>,
+struct LilySyntaxTypeField {
+    name: LilySyntaxNode<LilyName>,
+    value: Option<LilySyntaxNode<LilySyntaxType>>,
 }
 /// Fully validated type
 #[derive(Clone, Debug)]
-enum StillType {
-    Variable(StillName),
+enum LilyType {
+    Variable(LilyName),
     Function {
-        inputs: Vec<StillType>,
-        output: Box<StillType>,
+        inputs: Vec<LilyType>,
+        output: Box<LilyType>,
     },
     ChoiceConstruct {
-        name: StillName,
-        arguments: Vec<StillType>,
+        name: LilyName,
+        arguments: Vec<LilyType>,
     },
-    Record(Vec<StillTypeField>),
+    Record(Vec<LilyTypeField>),
 }
 #[derive(Clone, Debug)]
-struct StillTypeField {
-    name: StillName,
-    value: StillType,
+struct LilyTypeField {
+    name: LilyName,
+    value: LilyType,
 }
 
 #[derive(Clone, Debug)]
-enum StillSyntaxPattern {
+enum LilySyntaxPattern {
     Char(Option<char>),
-    Int(StillSyntaxInt),
+    Int(LilySyntaxInt),
     Unt(Box<str>),
     String {
         content: String,
-        quoting_style: StillSyntaxStringQuotingStyle,
+        quoting_style: LilySyntaxStringQuotingStyle,
     },
     WithComment {
-        comment: StillSyntaxNode<Box<str>>,
-        pattern: Option<StillSyntaxNode<Box<StillSyntaxPattern>>>,
+        comment: LilySyntaxNode<Box<str>>,
+        pattern: Option<LilySyntaxNode<Box<LilySyntaxPattern>>>,
     },
     Typed {
-        type_: Option<StillSyntaxNode<StillSyntaxType>>,
+        type_: Option<LilySyntaxNode<LilySyntaxType>>,
         closing_colon_range: Option<lsp_types::Range>,
-        pattern: Option<StillSyntaxNode<StillSyntaxPatternUntyped>>,
+        pattern: Option<LilySyntaxNode<LilySyntaxPatternUntyped>>,
     },
-    Record(Vec<StillSyntaxPatternField>),
+    Record(Vec<LilySyntaxPatternField>),
 }
 #[derive(Clone, Debug)]
-struct StillSyntaxPatternField {
-    name: StillSyntaxNode<StillName>,
-    value: Option<StillSyntaxNode<StillSyntaxPattern>>,
+struct LilySyntaxPatternField {
+    name: LilySyntaxNode<LilyName>,
+    value: Option<LilySyntaxNode<LilySyntaxPattern>>,
 }
 #[derive(Clone, Debug)]
-enum StillSyntaxPatternUntyped {
+enum LilySyntaxPatternUntyped {
     Variable {
         overwriting: bool,
-        name: StillName,
+        name: LilyName,
     },
     Ignored,
     Variant {
-        name: StillSyntaxNode<StillName>,
-        value: Option<StillSyntaxNode<Box<StillSyntaxPattern>>>,
+        name: LilySyntaxNode<LilyName>,
+        value: Option<LilySyntaxNode<Box<LilySyntaxPattern>>>,
     },
-    Other(Box<StillSyntaxPattern>),
+    Other(Box<LilySyntaxPattern>),
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum StillSyntaxStringQuotingStyle {
+enum LilySyntaxStringQuotingStyle {
     SingleQuoted,
     TickedLines,
 }
 
 #[derive(Clone, Debug)]
-struct StillSyntaxLocalVariableDeclaration {
-    name: StillSyntaxNode<StillName>,
+struct LilySyntaxLocalVariableDeclaration {
+    name: LilySyntaxNode<LilyName>,
     overwriting: Option<lsp_types::Position>,
-    result: Option<StillSyntaxNode<Box<StillSyntaxExpression>>>,
+    result: Option<LilySyntaxNode<Box<LilySyntaxExpression>>>,
 }
 #[derive(Clone, Debug)]
-enum StillSyntaxInt {
+enum LilySyntaxInt {
     Zero,
     Signed(Box<str>),
 }
 #[derive(Clone, Debug)]
-enum StillSyntaxExpression {
+enum LilySyntaxExpression {
     VariableOrCall {
-        variable: StillSyntaxNode<StillName>,
-        arguments: Vec<StillSyntaxNode<StillSyntaxExpression>>,
+        variable: LilySyntaxNode<LilyName>,
+        arguments: Vec<LilySyntaxNode<LilySyntaxExpression>>,
     },
     Match {
-        matched: StillSyntaxNode<Box<StillSyntaxExpression>>,
+        matched: LilySyntaxNode<Box<LilySyntaxExpression>>,
         // consider splitting into case0, case1_up
-        cases: Vec<StillSyntaxExpressionCase>,
+        cases: Vec<LilySyntaxExpressionCase>,
     },
     Char(Option<char>),
     Dec(Box<str>),
-    Int(StillSyntaxInt),
+    Int(LilySyntaxInt),
     Unt(Box<str>),
     Lambda {
-        parameters: Vec<StillSyntaxNode<StillSyntaxPattern>>,
+        parameters: Vec<LilySyntaxNode<LilySyntaxPattern>>,
         arrow_key_symbol_range: Option<lsp_types::Range>,
-        result: Option<StillSyntaxNode<Box<StillSyntaxExpression>>>,
+        result: Option<LilySyntaxNode<Box<LilySyntaxExpression>>>,
     },
     AfterLocalVariable {
-        declaration: Option<StillSyntaxNode<StillSyntaxLocalVariableDeclaration>>,
-        result: Option<StillSyntaxNode<Box<StillSyntaxExpression>>>,
+        declaration: Option<LilySyntaxNode<LilySyntaxLocalVariableDeclaration>>,
+        result: Option<LilySyntaxNode<Box<LilySyntaxExpression>>>,
     },
-    Vec(Vec<StillSyntaxNode<StillSyntaxExpression>>),
-    Parenthesized(Option<StillSyntaxNode<Box<StillSyntaxExpression>>>),
+    Vec(Vec<LilySyntaxNode<LilySyntaxExpression>>),
+    Parenthesized(Option<LilySyntaxNode<Box<LilySyntaxExpression>>>),
     WithComment {
-        comment: StillSyntaxNode<Box<str>>,
-        expression: Option<StillSyntaxNode<Box<StillSyntaxExpression>>>,
+        comment: LilySyntaxNode<Box<str>>,
+        expression: Option<LilySyntaxNode<Box<LilySyntaxExpression>>>,
     },
     Typed {
-        type_: Option<StillSyntaxNode<StillSyntaxType>>,
+        type_: Option<LilySyntaxNode<LilySyntaxType>>,
         closing_colon_range: Option<lsp_types::Range>,
-        expression: Option<StillSyntaxNode<StillSyntaxExpressionUntyped>>,
+        expression: Option<LilySyntaxNode<LilySyntaxExpressionUntyped>>,
     },
-    Record(Vec<StillSyntaxExpressionField>),
+    Record(Vec<LilySyntaxExpressionField>),
     RecordUpdate {
-        record: Option<StillSyntaxNode<Box<StillSyntaxExpression>>>,
+        record: Option<LilySyntaxNode<Box<LilySyntaxExpression>>>,
         spread_key_symbol_range: lsp_types::Range,
-        fields: Vec<StillSyntaxExpressionField>,
+        fields: Vec<LilySyntaxExpressionField>,
     },
     String {
         content: String,
-        quoting_style: StillSyntaxStringQuotingStyle,
+        quoting_style: LilySyntaxStringQuotingStyle,
     },
 }
 #[derive(Clone, Debug)]
-enum StillSyntaxExpressionUntyped {
+enum LilySyntaxExpressionUntyped {
     Variant {
-        name: StillSyntaxNode<StillName>,
-        value: Option<StillSyntaxNode<Box<StillSyntaxExpression>>>,
+        name: LilySyntaxNode<LilyName>,
+        value: Option<LilySyntaxNode<Box<LilySyntaxExpression>>>,
     },
-    Other(Box<StillSyntaxExpression>),
+    Other(Box<LilySyntaxExpression>),
 }
 #[derive(Clone, Debug)]
-struct StillSyntaxExpressionCase {
+struct LilySyntaxExpressionCase {
     or_bar_key_symbol_range: lsp_types::Range,
     arrow_key_symbol_range: Option<lsp_types::Range>,
-    pattern: Option<StillSyntaxNode<StillSyntaxPattern>>,
-    result: Option<StillSyntaxNode<StillSyntaxExpression>>,
+    pattern: Option<LilySyntaxNode<LilySyntaxPattern>>,
+    result: Option<LilySyntaxNode<LilySyntaxExpression>>,
 }
 #[derive(Clone, Debug)]
-struct StillSyntaxExpressionField {
-    name: StillSyntaxNode<StillName>,
-    value: Option<StillSyntaxNode<StillSyntaxExpression>>,
+struct LilySyntaxExpressionField {
+    name: LilySyntaxNode<LilyName>,
+    value: Option<LilySyntaxNode<LilySyntaxExpression>>,
 }
 
 #[derive(Clone, Debug)]
-enum StillSyntaxDeclaration {
+enum LilySyntaxDeclaration {
     ChoiceType {
-        name: Option<StillSyntaxNode<StillName>>,
-        parameters: Vec<StillSyntaxNode<StillName>>,
+        name: Option<LilySyntaxNode<LilyName>>,
+        parameters: Vec<LilySyntaxNode<LilyName>>,
 
-        variants: Vec<StillSyntaxChoiceTypeVariant>,
+        variants: Vec<LilySyntaxChoiceTypeVariant>,
     },
     TypeAlias {
         type_keyword_range: lsp_types::Range,
-        name: Option<StillSyntaxNode<StillName>>,
-        parameters: Vec<StillSyntaxNode<StillName>>,
+        name: Option<LilySyntaxNode<LilyName>>,
+        parameters: Vec<LilySyntaxNode<LilyName>>,
         equals_key_symbol_range: Option<lsp_types::Range>,
-        type_: Option<StillSyntaxNode<StillSyntaxType>>,
+        type_: Option<LilySyntaxNode<LilySyntaxType>>,
     },
     Variable {
-        name: StillSyntaxNode<StillName>,
-        result: Option<StillSyntaxNode<StillSyntaxExpression>>,
+        name: LilySyntaxNode<LilyName>,
+        result: Option<LilySyntaxNode<LilySyntaxExpression>>,
     },
 }
 
 #[derive(Clone, Debug, PartialEq)]
-struct StillSyntaxChoiceTypeVariant {
+struct LilySyntaxChoiceTypeVariant {
     or_key_symbol_range: lsp_types::Range,
-    name: Option<StillSyntaxNode<StillName>>,
-    value: Option<StillSyntaxNode<StillSyntaxType>>,
+    name: Option<LilySyntaxNode<LilyName>>,
+    value: Option<LilySyntaxNode<LilySyntaxType>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct StillSyntaxNode<Value> {
+struct LilySyntaxNode<Value> {
     range: lsp_types::Range,
     value: Value,
 }
 
-fn still_syntax_node_as_ref<Value>(
-    still_syntax_node: &StillSyntaxNode<Value>,
-) -> StillSyntaxNode<&Value> {
-    StillSyntaxNode {
-        range: still_syntax_node.range,
-        value: &still_syntax_node.value,
+fn lily_syntax_node_as_ref<Value>(
+    lily_syntax_node: &LilySyntaxNode<Value>,
+) -> LilySyntaxNode<&Value> {
+    LilySyntaxNode {
+        range: lily_syntax_node.range,
+        value: &lily_syntax_node.value,
     }
 }
-fn still_syntax_node_as_ref_map<'a, A, B>(
-    still_syntax_node: &'a StillSyntaxNode<A>,
+fn lily_syntax_node_as_ref_map<'a, A, B>(
+    lily_syntax_node: &'a LilySyntaxNode<A>,
     value_change: impl Fn(&'a A) -> B,
-) -> StillSyntaxNode<B> {
-    StillSyntaxNode {
-        range: still_syntax_node.range,
-        value: value_change(&still_syntax_node.value),
+) -> LilySyntaxNode<B> {
+    LilySyntaxNode {
+        range: lily_syntax_node.range,
+        value: value_change(&lily_syntax_node.value),
     }
 }
-fn still_syntax_node_map<A, B>(
-    still_syntax_node: StillSyntaxNode<A>,
+fn lily_syntax_node_map<A, B>(
+    lily_syntax_node: LilySyntaxNode<A>,
     value_change: impl Fn(A) -> B,
-) -> StillSyntaxNode<B> {
-    StillSyntaxNode {
-        range: still_syntax_node.range,
-        value: value_change(still_syntax_node.value),
+) -> LilySyntaxNode<B> {
+    LilySyntaxNode {
+        range: lily_syntax_node.range,
+        value: value_change(lily_syntax_node.value),
     }
 }
-fn still_syntax_node_unbox<Value: ?Sized>(
-    still_syntax_node_box: &StillSyntaxNode<Box<Value>>,
-) -> StillSyntaxNode<&Value> {
-    StillSyntaxNode {
-        range: still_syntax_node_box.range,
-        value: &still_syntax_node_box.value,
+fn lily_syntax_node_unbox<Value: ?Sized>(
+    lily_syntax_node_box: &LilySyntaxNode<Box<Value>>,
+) -> LilySyntaxNode<&Value> {
+    LilySyntaxNode {
+        range: lily_syntax_node_box.range,
+        value: &lily_syntax_node_box.value,
     }
 }
-fn still_syntax_node_box<Value>(
-    still_syntax_node_box: StillSyntaxNode<Value>,
-) -> StillSyntaxNode<Box<Value>> {
-    StillSyntaxNode {
-        range: still_syntax_node_box.range,
-        value: Box::new(still_syntax_node_box.value),
+fn lily_syntax_node_box<Value>(
+    lily_syntax_node_box: LilySyntaxNode<Value>,
+) -> LilySyntaxNode<Box<Value>> {
+    LilySyntaxNode {
+        range: lily_syntax_node_box.range,
+        value: Box::new(lily_syntax_node_box.value),
     }
 }
 
 #[derive(Clone, Debug)]
-struct StillSyntaxProject {
-    declarations: Vec<Result<StillSyntaxDocumentedDeclaration, StillSyntaxNode<Box<str>>>>,
+struct LilySyntaxProject {
+    declarations: Vec<Result<LilySyntaxDocumentedDeclaration, LilySyntaxNode<Box<str>>>>,
 }
 
 #[derive(Clone, Debug)]
-struct StillSyntaxDocumentedDeclaration {
-    documentation: Option<StillSyntaxNode<Box<str>>>,
-    declaration: Option<StillSyntaxNode<StillSyntaxDeclaration>>,
+struct LilySyntaxDocumentedDeclaration {
+    documentation: Option<LilySyntaxNode<Box<str>>>,
+    declaration: Option<LilySyntaxNode<LilySyntaxDeclaration>>,
 }
 
-struct StillErrorNode {
+struct LilyErrorNode {
     range: lsp_types::Range,
     message: Box<str>,
 }
 
-fn still_syntax_pattern_type(
-    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
-    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
-    pattern_node: StillSyntaxNode<&StillSyntaxPattern>,
-) -> Option<StillType> {
+fn lily_syntax_pattern_type(
+    type_aliases: &std::collections::HashMap<LilyName, TypeAliasInfo>,
+    choice_types: &std::collections::HashMap<LilyName, ChoiceTypeInfo>,
+    pattern_node: LilySyntaxNode<&LilySyntaxPattern>,
+) -> Option<LilyType> {
     match pattern_node.value {
-        StillSyntaxPattern::Char(_) => Some(still_type_char),
-        StillSyntaxPattern::Int { .. } => Some(still_type_int),
-        StillSyntaxPattern::Unt { .. } => Some(still_type_unt),
-        StillSyntaxPattern::String { .. } => Some(still_type_str),
-        StillSyntaxPattern::WithComment {
+        LilySyntaxPattern::Char(_) => Some(lily_type_char),
+        LilySyntaxPattern::Int { .. } => Some(lily_type_int),
+        LilySyntaxPattern::Unt { .. } => Some(lily_type_unt),
+        LilySyntaxPattern::String { .. } => Some(lily_type_str),
+        LilySyntaxPattern::WithComment {
             comment: _,
             pattern: maybe_pattern_after_comment,
         } => match maybe_pattern_after_comment {
             None => None,
-            Some(pattern_node_after_comment) => still_syntax_pattern_type(
+            Some(pattern_node_after_comment) => lily_syntax_pattern_type(
                 type_aliases,
                 choice_types,
-                still_syntax_node_unbox(pattern_node_after_comment),
+                lily_syntax_node_unbox(pattern_node_after_comment),
             ),
         },
-        StillSyntaxPattern::Typed {
+        LilySyntaxPattern::Typed {
             type_: maybe_type,
             closing_colon_range: _,
             pattern: _maybe_in_typed,
         } => {
             match maybe_type {
-                Some(type_node) => still_syntax_type_to_type(
+                Some(type_node) => lily_syntax_type_to_type(
                     &mut Vec::new(),
                     type_aliases,
                     choice_types,
-                    still_syntax_node_as_ref(type_node),
+                    lily_syntax_node_as_ref(type_node),
                 ),
                 None => {
                     // consider trying regardless for variant
@@ -2887,29 +2885,29 @@ fn still_syntax_pattern_type(
                 }
             }
         }
-        StillSyntaxPattern::Record(fields) => {
-            let mut field_types: Vec<StillTypeField> = Vec::with_capacity(fields.len());
+        LilySyntaxPattern::Record(fields) => {
+            let mut field_types: Vec<LilyTypeField> = Vec::with_capacity(fields.len());
             for field in fields {
-                field_types.push(StillTypeField {
+                field_types.push(LilyTypeField {
                     name: field.name.value.clone(),
-                    value: still_syntax_pattern_type(
+                    value: lily_syntax_pattern_type(
                         type_aliases,
                         choice_types,
-                        still_syntax_node_as_ref(field.value.as_ref()?),
+                        lily_syntax_node_as_ref(field.value.as_ref()?),
                     )?,
                 });
             }
-            Some(StillType::Record(field_types))
+            Some(LilyType::Record(field_types))
         }
     }
 }
-fn still_syntax_expression_type(
-    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
-    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
-    variable_declarations: &std::collections::HashMap<StillName, CompiledVariableDeclarationInfo>,
-    expression_node: StillSyntaxNode<&StillSyntaxExpression>,
-) -> Option<StillType> {
-    still_syntax_expression_type_with(
+fn lily_syntax_expression_type(
+    type_aliases: &std::collections::HashMap<LilyName, TypeAliasInfo>,
+    choice_types: &std::collections::HashMap<LilyName, ChoiceTypeInfo>,
+    variable_declarations: &std::collections::HashMap<LilyName, CompiledVariableDeclarationInfo>,
+    expression_node: LilySyntaxNode<&LilySyntaxExpression>,
+) -> Option<LilyType> {
+    lily_syntax_expression_type_with(
         type_aliases,
         choice_types,
         variable_declarations,
@@ -2917,15 +2915,15 @@ fn still_syntax_expression_type(
         expression_node,
     )
 }
-fn still_syntax_expression_type_with<'a>(
-    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
-    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
-    variable_declarations: &std::collections::HashMap<StillName, CompiledVariableDeclarationInfo>,
-    local_bindings: std::rc::Rc<std::collections::HashMap<&'a str, Option<StillType>>>,
-    expression_node: StillSyntaxNode<&'a StillSyntaxExpression>,
-) -> Option<StillType> {
+fn lily_syntax_expression_type_with<'a>(
+    type_aliases: &std::collections::HashMap<LilyName, TypeAliasInfo>,
+    choice_types: &std::collections::HashMap<LilyName, ChoiceTypeInfo>,
+    variable_declarations: &std::collections::HashMap<LilyName, CompiledVariableDeclarationInfo>,
+    local_bindings: std::rc::Rc<std::collections::HashMap<&'a str, Option<LilyType>>>,
+    expression_node: LilySyntaxNode<&'a LilySyntaxExpression>,
+) -> Option<LilyType> {
     match expression_node.value {
-        StillSyntaxExpression::Typed {
+        LilySyntaxExpression::Typed {
             type_: maybe_type,
             closing_colon_range: _,
             expression: maybe_in_typed,
@@ -2933,17 +2931,17 @@ fn still_syntax_expression_type_with<'a>(
             None => match maybe_in_typed {
                 None => None,
                 Some(untyped_node) => match &untyped_node.value {
-                    StillSyntaxExpressionUntyped::Variant { .. } => {
+                    LilySyntaxExpressionUntyped::Variant { .. } => {
                         // consider trying regardless
                         None
                     }
-                    StillSyntaxExpressionUntyped::Other(other_expression) => {
-                        still_syntax_expression_type_with(
+                    LilySyntaxExpressionUntyped::Other(other_expression) => {
+                        lily_syntax_expression_type_with(
                             type_aliases,
                             choice_types,
                             variable_declarations,
                             local_bindings,
-                            StillSyntaxNode {
+                            LilySyntaxNode {
                                 range: untyped_node.range,
                                 value: other_expression,
                             },
@@ -2951,14 +2949,14 @@ fn still_syntax_expression_type_with<'a>(
                     }
                 },
             },
-            Some(type_node) => still_syntax_type_to_type(
+            Some(type_node) => lily_syntax_type_to_type(
                 &mut Vec::new(),
                 type_aliases,
                 choice_types,
-                still_syntax_node_as_ref(type_node),
+                lily_syntax_node_as_ref(type_node),
             ),
         },
-        StillSyntaxExpression::VariableOrCall {
+        LilySyntaxExpression::VariableOrCall {
             variable: variable_node,
             arguments,
         } => match local_bindings.get(variable_node.value.as_str()) {
@@ -2969,7 +2967,7 @@ fn still_syntax_expression_type_with<'a>(
                 if arguments.is_empty() {
                     Some(variable_type.clone())
                 } else {
-                    let StillType::Function {
+                    let LilyType::Function {
                         inputs: _,
                         output: variable_type_output,
                     } = variable_type
@@ -2991,7 +2989,7 @@ fn still_syntax_expression_type_with<'a>(
                 if arguments.is_empty() {
                     Some(project_variable_type.clone())
                 } else {
-                    let StillType::Function {
+                    let LilyType::Function {
                         inputs: variable_type_inputs,
                         output: variable_type_output,
                     } = project_variable_type
@@ -3002,16 +3000,16 @@ fn still_syntax_expression_type_with<'a>(
                     // just return it
                     let mut type_parameter_replacements: std::collections::HashMap<
                         &str,
-                        &StillType,
+                        &LilyType,
                     > = std::collections::HashMap::new();
-                    let argument_types: Vec<Option<StillType>> = arguments
+                    let argument_types: Vec<Option<LilyType>> = arguments
                         .iter()
                         .map(|argument_node| {
-                            still_syntax_expression_type(
+                            lily_syntax_expression_type(
                                 type_aliases,
                                 choice_types,
                                 variable_declarations,
-                                still_syntax_node_as_ref(argument_node),
+                                lily_syntax_node_as_ref(argument_node),
                             )
                         })
                         .collect::<Vec<_>>();
@@ -3019,15 +3017,15 @@ fn still_syntax_expression_type_with<'a>(
                         variable_type_inputs.iter().zip(argument_types.iter())
                     {
                         if let Some(argument_type_node) = maybe_argument_type_node {
-                            still_type_collect_variables_that_are_concrete_into(
+                            lily_type_collect_variables_that_are_concrete_into(
                                 &mut type_parameter_replacements,
                                 parameter_type,
                                 argument_type_node,
                             );
                         }
                     }
-                    let mut concrete_output_type: StillType = variable_type_output.as_ref().clone();
-                    still_type_replace_variables(
+                    let mut concrete_output_type: LilyType = variable_type_output.as_ref().clone();
+                    lily_type_replace_variables(
                         &type_parameter_replacements,
                         &mut concrete_output_type,
                     );
@@ -3035,7 +3033,7 @@ fn still_syntax_expression_type_with<'a>(
                 }
             }
         },
-        StillSyntaxExpression::Match { matched: _, cases } => match cases.iter().find_map(|case| {
+        LilySyntaxExpression::Match { matched: _, cases } => match cases.iter().find_map(|case| {
             case.result
                 .as_ref()
                 .map(|result_node| (&case.pattern, result_node))
@@ -3044,60 +3042,60 @@ fn still_syntax_expression_type_with<'a>(
             Some((maybe_case_pattern, case_result)) => {
                 let mut local_bindings = std::rc::Rc::unwrap_or_clone(local_bindings);
                 if let Some(case_pattern_node) = maybe_case_pattern {
-                    still_syntax_pattern_binding_types_into(
+                    lily_syntax_pattern_binding_types_into(
                         &mut local_bindings,
                         type_aliases,
                         choice_types,
-                        still_syntax_node_as_ref(case_pattern_node),
+                        lily_syntax_node_as_ref(case_pattern_node),
                     );
                 }
-                still_syntax_expression_type_with(
+                lily_syntax_expression_type_with(
                     type_aliases,
                     choice_types,
                     variable_declarations,
                     std::rc::Rc::new(local_bindings),
-                    still_syntax_node_as_ref(case_result),
+                    lily_syntax_node_as_ref(case_result),
                 )
             }
         },
-        StillSyntaxExpression::Unt(_) => Some(still_type_unt),
-        StillSyntaxExpression::Int(_) => Some(still_type_int),
-        StillSyntaxExpression::Dec(_) => Some(still_type_dec),
-        StillSyntaxExpression::Char(_) => Some(still_type_char),
-        StillSyntaxExpression::String { .. } => Some(still_type_str),
-        StillSyntaxExpression::Lambda {
+        LilySyntaxExpression::Unt(_) => Some(lily_type_unt),
+        LilySyntaxExpression::Int(_) => Some(lily_type_int),
+        LilySyntaxExpression::Dec(_) => Some(lily_type_dec),
+        LilySyntaxExpression::Char(_) => Some(lily_type_char),
+        LilySyntaxExpression::String { .. } => Some(lily_type_str),
+        LilySyntaxExpression::Lambda {
             parameters,
             arrow_key_symbol_range: _,
             result: maybe_result,
         } => {
-            let mut input_types: Vec<StillType> = Vec::with_capacity(parameters.len());
-            let mut local_bindings: std::collections::HashMap<&str, Option<StillType>> =
+            let mut input_types: Vec<LilyType> = Vec::with_capacity(parameters.len());
+            let mut local_bindings: std::collections::HashMap<&str, Option<LilyType>> =
                 std::rc::Rc::unwrap_or_clone(local_bindings);
             for parameter_node in parameters {
-                input_types.push(still_syntax_pattern_type(
+                input_types.push(lily_syntax_pattern_type(
                     type_aliases,
                     choice_types,
-                    still_syntax_node_as_ref(parameter_node),
+                    lily_syntax_node_as_ref(parameter_node),
                 )?);
-                still_syntax_pattern_binding_types_into(
+                lily_syntax_pattern_binding_types_into(
                     &mut local_bindings,
                     type_aliases,
                     choice_types,
-                    still_syntax_node_as_ref(parameter_node),
+                    lily_syntax_node_as_ref(parameter_node),
                 );
             }
-            Some(StillType::Function {
+            Some(LilyType::Function {
                 inputs: input_types,
-                output: Box::new(still_syntax_expression_type_with(
+                output: Box::new(lily_syntax_expression_type_with(
                     type_aliases,
                     choice_types,
                     variable_declarations,
                     std::rc::Rc::new(local_bindings),
-                    still_syntax_node_unbox(maybe_result.as_ref()?),
+                    lily_syntax_node_unbox(maybe_result.as_ref()?),
                 )?),
             })
         }
-        StillSyntaxExpression::AfterLocalVariable {
+        LilySyntaxExpression::AfterLocalVariable {
             declaration: maybe_declaration,
             result: maybe_result,
         } => {
@@ -3108,22 +3106,22 @@ fn still_syntax_expression_type_with<'a>(
                 None => local_bindings,
                 Some(declaration_node) => {
                     let local_bindings_without_let: std::rc::Rc<
-                        std::collections::HashMap<&str, Option<StillType>>,
+                        std::collections::HashMap<&str, Option<LilyType>>,
                     > = local_bindings.clone();
                     let mut local_bindings_with_let: std::collections::HashMap<
                         &str,
-                        Option<StillType>,
+                        Option<LilyType>,
                     > = (*local_bindings).clone();
                     local_bindings_with_let.insert(
                         &declaration_node.value.name.value,
                         declaration_node.value.result.as_ref().and_then(
                             |declaration_result_node| {
-                                still_syntax_expression_type_with(
+                                lily_syntax_expression_type_with(
                                     type_aliases,
                                     choice_types,
                                     variable_declarations,
                                     local_bindings_without_let,
-                                    still_syntax_node_unbox(declaration_result_node),
+                                    lily_syntax_node_unbox(declaration_result_node),
                                 )
                             },
                         ),
@@ -3131,130 +3129,130 @@ fn still_syntax_expression_type_with<'a>(
                     std::rc::Rc::new(local_bindings_with_let)
                 }
             };
-            still_syntax_expression_type_with(
+            lily_syntax_expression_type_with(
                 type_aliases,
                 choice_types,
                 variable_declarations,
                 local_bindings_with_let,
-                still_syntax_node_unbox(result_node),
+                lily_syntax_node_unbox(result_node),
             )
         }
-        StillSyntaxExpression::Vec(elements) => match elements.as_slice() {
-            [] => Some(still_type_vec(StillType::Record(vec![]))),
-            [element0_node, ..] => Some(still_type_vec(still_syntax_expression_type_with(
+        LilySyntaxExpression::Vec(elements) => match elements.as_slice() {
+            [] => Some(lily_type_vec(LilyType::Record(vec![]))),
+            [element0_node, ..] => Some(lily_type_vec(lily_syntax_expression_type_with(
                 type_aliases,
                 choice_types,
                 variable_declarations,
                 local_bindings,
-                still_syntax_node_as_ref(element0_node),
+                lily_syntax_node_as_ref(element0_node),
             )?)),
         },
-        StillSyntaxExpression::Parenthesized(None) => None,
-        StillSyntaxExpression::Parenthesized(Some(in_parens)) => still_syntax_expression_type_with(
+        LilySyntaxExpression::Parenthesized(None) => None,
+        LilySyntaxExpression::Parenthesized(Some(in_parens)) => lily_syntax_expression_type_with(
             type_aliases,
             choice_types,
             variable_declarations,
             local_bindings,
-            still_syntax_node_unbox(in_parens),
+            lily_syntax_node_unbox(in_parens),
         ),
-        StillSyntaxExpression::WithComment {
+        LilySyntaxExpression::WithComment {
             comment: _,
             expression: maybe_expression_after_comment,
         } => match maybe_expression_after_comment {
             None => None,
-            Some(expression_node_after_comment) => still_syntax_expression_type_with(
+            Some(expression_node_after_comment) => lily_syntax_expression_type_with(
                 type_aliases,
                 choice_types,
                 variable_declarations,
                 local_bindings,
-                still_syntax_node_unbox(expression_node_after_comment),
+                lily_syntax_node_unbox(expression_node_after_comment),
             ),
         },
-        StillSyntaxExpression::Record(fields) => {
-            let mut field_types: Vec<StillTypeField> = Vec::with_capacity(fields.len());
+        LilySyntaxExpression::Record(fields) => {
+            let mut field_types: Vec<LilyTypeField> = Vec::with_capacity(fields.len());
             for field in fields {
-                field_types.push(StillTypeField {
+                field_types.push(LilyTypeField {
                     name: field.name.value.clone(),
-                    value: still_syntax_expression_type_with(
+                    value: lily_syntax_expression_type_with(
                         type_aliases,
                         choice_types,
                         variable_declarations,
                         local_bindings.clone(),
-                        still_syntax_node_as_ref(field.value.as_ref()?),
+                        lily_syntax_node_as_ref(field.value.as_ref()?),
                     )?,
                 });
             }
-            Some(StillType::Record(field_types))
+            Some(LilyType::Record(field_types))
         }
-        StillSyntaxExpression::RecordUpdate {
+        LilySyntaxExpression::RecordUpdate {
             record: maybe_record,
             spread_key_symbol_range: _,
             fields: _,
         } => match maybe_record {
             None => None,
-            Some(record_node) => still_syntax_expression_type_with(
+            Some(record_node) => lily_syntax_expression_type_with(
                 type_aliases,
                 choice_types,
                 variable_declarations,
                 local_bindings,
-                still_syntax_node_unbox(record_node),
+                lily_syntax_node_unbox(record_node),
             ),
         },
     }
 }
-const still_type_char_name: &str = "char";
-const still_type_char: StillType = StillType::ChoiceConstruct {
-    name: StillName::const_new(still_type_char_name),
+const lily_type_char_name: &str = "char";
+const lily_type_char: LilyType = LilyType::ChoiceConstruct {
+    name: LilyName::const_new(lily_type_char_name),
     arguments: vec![],
 };
-const still_type_dec_name: &str = "dec";
-const still_type_dec: StillType = StillType::ChoiceConstruct {
-    name: StillName::const_new(still_type_dec_name),
+const lily_type_dec_name: &str = "dec";
+const lily_type_dec: LilyType = LilyType::ChoiceConstruct {
+    name: LilyName::const_new(lily_type_dec_name),
     arguments: vec![],
 };
-const still_type_unt_name: &str = "unt";
-const still_type_unt: StillType = StillType::ChoiceConstruct {
-    name: StillName::const_new(still_type_unt_name),
+const lily_type_unt_name: &str = "unt";
+const lily_type_unt: LilyType = LilyType::ChoiceConstruct {
+    name: LilyName::const_new(lily_type_unt_name),
     arguments: vec![],
 };
-const still_type_int_name: &str = "int";
-const still_type_int: StillType = StillType::ChoiceConstruct {
-    name: StillName::const_new(still_type_int_name),
+const lily_type_int_name: &str = "int";
+const lily_type_int: LilyType = LilyType::ChoiceConstruct {
+    name: LilyName::const_new(lily_type_int_name),
     arguments: vec![],
 };
-const still_type_str_name: &str = "str";
-const still_type_str: StillType = StillType::ChoiceConstruct {
-    name: StillName::const_new(still_type_str_name),
+const lily_type_str_name: &str = "str";
+const lily_type_str: LilyType = LilyType::ChoiceConstruct {
+    name: LilyName::const_new(lily_type_str_name),
     arguments: vec![],
 };
-const still_type_order_name: &str = "order";
-const still_type_order: StillType = StillType::ChoiceConstruct {
-    name: StillName::const_new(still_type_order_name),
+const lily_type_order_name: &str = "order";
+const lily_type_order: LilyType = LilyType::ChoiceConstruct {
+    name: LilyName::const_new(lily_type_order_name),
     arguments: vec![],
 };
-const still_type_vec_name: &str = "vec";
-fn still_type_vec(element_type: StillType) -> StillType {
-    StillType::ChoiceConstruct {
-        name: StillName::new(still_type_vec_name),
+const lily_type_vec_name: &str = "vec";
+fn lily_type_vec(element_type: LilyType) -> LilyType {
+    LilyType::ChoiceConstruct {
+        name: LilyName::new(lily_type_vec_name),
         arguments: vec![element_type],
     }
 }
-const still_type_opt_name: &str = "opt";
-fn still_type_opt(value_type: StillType) -> StillType {
-    StillType::ChoiceConstruct {
-        name: StillName::new(still_type_opt_name),
+const lily_type_opt_name: &str = "opt";
+fn lily_type_opt(value_type: LilyType) -> LilyType {
+    LilyType::ChoiceConstruct {
+        name: LilyName::new(lily_type_opt_name),
         arguments: vec![value_type],
     }
 }
-const still_type_continue_or_exit_name: &str = "continue-or-exit";
-fn still_type_continue_or_exit(continue_type: StillType, exit_type: StillType) -> StillType {
-    StillType::ChoiceConstruct {
-        name: StillName::new(still_type_continue_or_exit_name),
+const lily_type_continue_or_exit_name: &str = "continue-or-exit";
+fn lily_type_continue_or_exit(continue_type: LilyType, exit_type: LilyType) -> LilyType {
+    LilyType::ChoiceConstruct {
+        name: LilyName::new(lily_type_continue_or_exit_name),
         arguments: vec![continue_type, exit_type],
     }
 }
-const fn still_syntax_node_empty<A>(value: A) -> StillSyntaxNode<A> {
-    StillSyntaxNode {
+const fn lily_syntax_node_empty<A>(value: A) -> LilySyntaxNode<A> {
+    LilySyntaxNode {
         range: lsp_types::Range {
             start: lsp_types::Position {
                 line: 0,
@@ -3289,14 +3287,14 @@ fn space_or_linebreak_indented_into(so_far: &mut String, line_span: LineSpan, in
     }
 }
 
-fn still_syntax_type_to_unparenthesized(
-    still_syntax_type: StillSyntaxNode<&StillSyntaxType>,
-) -> StillSyntaxNode<&StillSyntaxType> {
-    match still_syntax_type.value {
-        StillSyntaxType::Parenthesized(Some(in_parens)) => {
-            still_syntax_type_to_unparenthesized(still_syntax_node_unbox(in_parens))
+fn lily_syntax_type_to_unparenthesized(
+    lily_syntax_type: LilySyntaxNode<&LilySyntaxType>,
+) -> LilySyntaxNode<&LilySyntaxType> {
+    match lily_syntax_type.value {
+        LilySyntaxType::Parenthesized(Some(in_parens)) => {
+            lily_syntax_type_to_unparenthesized(lily_syntax_node_unbox(in_parens))
         }
-        _ => still_syntax_type,
+        _ => lily_syntax_type,
     }
 }
 
@@ -3304,112 +3302,112 @@ fn next_indent(current_indent: usize) -> usize {
     (current_indent + 1).next_multiple_of(4)
 }
 
-fn still_syntax_type_not_parenthesized_into(
+fn lily_syntax_type_not_parenthesized_into(
     so_far: &mut String,
     indent: usize,
-    type_node: StillSyntaxNode<&StillSyntaxType>,
+    type_node: LilySyntaxNode<&LilySyntaxType>,
 ) {
     match type_node.value {
-        StillSyntaxType::Construct {
+        LilySyntaxType::Construct {
             name: variable,
             arguments,
         } => {
-            let line_span: LineSpan = still_syntax_range_line_span(type_node.range);
+            let line_span: LineSpan = lily_syntax_range_line_span(type_node.range);
             so_far.push_str(&variable.value);
             for argument_node in arguments {
                 space_or_linebreak_indented_into(so_far, line_span, next_indent(indent));
-                still_syntax_type_parenthesized_if_space_separated_into(
+                lily_syntax_type_parenthesized_if_space_separated_into(
                     so_far,
                     next_indent(indent),
-                    still_syntax_type_to_unparenthesized(still_syntax_node_as_ref(argument_node)),
+                    lily_syntax_type_to_unparenthesized(lily_syntax_node_as_ref(argument_node)),
                 );
             }
         }
-        StillSyntaxType::Function {
+        LilySyntaxType::Function {
             inputs,
             arrow_key_symbol_range: _,
             output: maybe_output,
-        } => still_syntax_type_function_into(
+        } => lily_syntax_type_function_into(
             so_far,
-            still_syntax_range_line_span(type_node.range),
+            lily_syntax_range_line_span(type_node.range),
             indent,
             inputs,
-            maybe_output.as_ref().map(still_syntax_node_unbox),
+            maybe_output.as_ref().map(lily_syntax_node_unbox),
         ),
-        StillSyntaxType::Parenthesized(None) => {
+        LilySyntaxType::Parenthesized(None) => {
             so_far.push_str("()");
         }
-        StillSyntaxType::Parenthesized(Some(in_parens)) => {
-            still_syntax_type_not_parenthesized_into(
+        LilySyntaxType::Parenthesized(Some(in_parens)) => {
+            lily_syntax_type_not_parenthesized_into(
                 so_far,
                 indent,
-                still_syntax_node_unbox(in_parens),
+                lily_syntax_node_unbox(in_parens),
             );
         }
-        StillSyntaxType::WithComment {
+        LilySyntaxType::WithComment {
             comment: comment_node,
             type_: maybe_type_after_comment,
         } => {
-            still_syntax_comment_lines_then_linebreak_into(so_far, indent, &comment_node.value);
+            lily_syntax_comment_lines_then_linebreak_into(so_far, indent, &comment_node.value);
             if let Some(type_node_after_comment) = maybe_type_after_comment {
-                still_syntax_type_not_parenthesized_into(
+                lily_syntax_type_not_parenthesized_into(
                     so_far,
                     indent,
-                    still_syntax_node_unbox(type_node_after_comment),
+                    lily_syntax_node_unbox(type_node_after_comment),
                 );
             }
         }
-        StillSyntaxType::Record(fields) => match fields.split_first() {
+        LilySyntaxType::Record(fields) => match fields.split_first() {
             None => {
                 so_far.push_str("{}");
             }
             Some((field0, field1_up)) => {
-                let line_span: LineSpan = still_syntax_range_line_span(type_node.range);
+                let line_span: LineSpan = lily_syntax_range_line_span(type_node.range);
                 so_far.push_str("{ ");
-                still_syntax_type_fields_into_string(so_far, indent, line_span, field0, field1_up);
+                lily_syntax_type_fields_into_string(so_far, indent, line_span, field0, field1_up);
                 space_or_linebreak_indented_into(so_far, line_span, indent);
                 so_far.push('}');
             }
         },
-        StillSyntaxType::Variable(name) => {
+        LilySyntaxType::Variable(name) => {
             so_far.push_str(name);
         }
     }
 }
 
-fn still_syntax_type_function_into(
+fn lily_syntax_type_function_into(
     so_far: &mut String,
     line_span: LineSpan,
     indent_for_input: usize,
-    inputs: &[StillSyntaxNode<StillSyntaxType>],
-    maybe_output: Option<StillSyntaxNode<&StillSyntaxType>>,
+    inputs: &[LilySyntaxNode<LilySyntaxType>],
+    maybe_output: Option<LilySyntaxNode<&LilySyntaxType>>,
 ) {
     so_far.push('\\');
     if line_span == LineSpan::Multiple {
         so_far.push(' ');
     }
     if let Some((input0_node, input1_up)) = inputs.split_first() {
-        still_syntax_type_not_parenthesized_into(
+        lily_syntax_type_not_parenthesized_into(
             so_far,
             indent_for_input + 2,
-            still_syntax_node_as_ref(input0_node),
+            lily_syntax_node_as_ref(input0_node),
         );
         for input_node in input1_up {
             if line_span == LineSpan::Multiple {
                 linebreak_indented_into(so_far, indent_for_input);
             }
             so_far.push_str(", ");
-            still_syntax_type_not_parenthesized_into(
+            lily_syntax_type_not_parenthesized_into(
                 so_far,
                 indent_for_input + 2,
-                still_syntax_node_as_ref(input_node),
+                lily_syntax_node_as_ref(input_node),
             );
         }
     }
     space_or_linebreak_indented_into(so_far, line_span, indent_for_input);
     so_far.push_str("> ");
     if let Some(output_node) = maybe_output {
-        still_syntax_type_not_parenthesized_into(
+        lily_syntax_type_not_parenthesized_into(
             so_far,
             next_indent(indent_for_input + 3),
             output_node,
@@ -3417,44 +3415,44 @@ fn still_syntax_type_function_into(
     }
 }
 
-fn still_syntax_type_parenthesized_into(
+fn lily_syntax_type_parenthesized_into(
     so_far: &mut String,
     indent: usize,
-    innermost_node: StillSyntaxNode<&StillSyntaxType>,
+    innermost_node: LilySyntaxNode<&LilySyntaxType>,
 ) {
     so_far.push('(');
-    still_syntax_type_not_parenthesized_into(so_far, indent + 1, innermost_node);
-    if still_syntax_range_line_span(innermost_node.range) == LineSpan::Multiple {
+    lily_syntax_type_not_parenthesized_into(so_far, indent + 1, innermost_node);
+    if lily_syntax_range_line_span(innermost_node.range) == LineSpan::Multiple {
         linebreak_indented_into(so_far, indent);
     }
     so_far.push(')');
 }
-fn still_syntax_type_parenthesized_if_space_separated_into(
+fn lily_syntax_type_parenthesized_if_space_separated_into(
     so_far: &mut String,
     indent: usize,
-    unparenthesized_node: StillSyntaxNode<&StillSyntaxType>,
+    unparenthesized_node: LilySyntaxNode<&LilySyntaxType>,
 ) {
     let is_space_separated: bool = match unparenthesized_node.value {
-        StillSyntaxType::Variable(_)
-        | StillSyntaxType::Parenthesized(_)
-        | StillSyntaxType::Record(_) => false,
-        StillSyntaxType::Function { .. } => true,
-        StillSyntaxType::WithComment { .. } => true,
-        StillSyntaxType::Construct { name: _, arguments } => !arguments.is_empty(),
+        LilySyntaxType::Variable(_)
+        | LilySyntaxType::Parenthesized(_)
+        | LilySyntaxType::Record(_) => false,
+        LilySyntaxType::Function { .. } => true,
+        LilySyntaxType::WithComment { .. } => true,
+        LilySyntaxType::Construct { name: _, arguments } => !arguments.is_empty(),
     };
     if is_space_separated {
-        still_syntax_type_parenthesized_into(so_far, indent, unparenthesized_node);
+        lily_syntax_type_parenthesized_into(so_far, indent, unparenthesized_node);
     } else {
-        still_syntax_type_not_parenthesized_into(so_far, indent, unparenthesized_node);
+        lily_syntax_type_not_parenthesized_into(so_far, indent, unparenthesized_node);
     }
 }
 /// returns the last syntax end position
-fn still_syntax_type_fields_into_string<'a>(
+fn lily_syntax_type_fields_into_string<'a>(
     so_far: &mut String,
     indent: usize,
     line_span: LineSpan,
-    field0: &'a StillSyntaxTypeField,
-    field1_up: &'a [StillSyntaxTypeField],
+    field0: &'a LilySyntaxTypeField,
+    field1_up: &'a [LilySyntaxTypeField],
 ) {
     so_far.push_str(&field0.name.value);
     match &field0.value {
@@ -3464,16 +3462,16 @@ fn still_syntax_type_fields_into_string<'a>(
         Some(field0_value_node) => {
             space_or_linebreak_indented_into(
                 so_far,
-                still_syntax_range_line_span(lsp_types::Range {
+                lily_syntax_range_line_span(lsp_types::Range {
                     start: field0.name.range.start,
                     end: field0_value_node.range.end,
                 }),
                 next_indent(indent + 2),
             );
-            still_syntax_type_not_parenthesized_into(
+            lily_syntax_type_not_parenthesized_into(
                 so_far,
                 next_indent(indent + 2),
-                still_syntax_node_as_ref(field0_value_node),
+                lily_syntax_node_as_ref(field0_value_node),
             );
         }
     }
@@ -3487,16 +3485,16 @@ fn still_syntax_type_fields_into_string<'a>(
             Some(field_value_node) => {
                 space_or_linebreak_indented_into(
                     so_far,
-                    still_syntax_range_line_span(lsp_types::Range {
+                    lily_syntax_range_line_span(lsp_types::Range {
                         start: field.name.range.end,
                         end: field_value_node.range.end,
                     }),
                     next_indent(indent + 2),
                 );
-                still_syntax_type_not_parenthesized_into(
+                lily_syntax_type_not_parenthesized_into(
                     so_far,
                     next_indent(indent + 2),
-                    still_syntax_node_as_ref(field_value_node),
+                    lily_syntax_node_as_ref(field_value_node),
                 );
             }
             None => {
@@ -3505,68 +3503,68 @@ fn still_syntax_type_fields_into_string<'a>(
         }
     }
 }
-fn still_syntax_pattern_into(
+fn lily_syntax_pattern_into(
     so_far: &mut String,
     indent: usize,
-    pattern_node: StillSyntaxNode<&StillSyntaxPattern>,
+    pattern_node: LilySyntaxNode<&LilySyntaxPattern>,
 ) {
     match pattern_node.value {
-        StillSyntaxPattern::Char(maybe_char) => still_char_into(so_far, *maybe_char),
-        StillSyntaxPattern::Int(representation) => {
-            still_int_into(so_far, representation);
+        LilySyntaxPattern::Char(maybe_char) => lily_char_into(so_far, *maybe_char),
+        LilySyntaxPattern::Int(representation) => {
+            lily_int_into(so_far, representation);
         }
-        StillSyntaxPattern::Unt(representation) => {
-            still_unt_into(so_far, representation);
+        LilySyntaxPattern::Unt(representation) => {
+            lily_unt_into(so_far, representation);
         }
-        StillSyntaxPattern::String {
+        LilySyntaxPattern::String {
             content,
             quoting_style,
-        } => still_string_into(so_far, indent, *quoting_style, content),
-        StillSyntaxPattern::WithComment {
+        } => lily_string_into(so_far, indent, *quoting_style, content),
+        LilySyntaxPattern::WithComment {
             comment: comment_node,
             pattern: maybe_pattern_after_comment,
         } => {
-            still_syntax_comment_lines_then_linebreak_into(so_far, indent, &comment_node.value);
+            lily_syntax_comment_lines_then_linebreak_into(so_far, indent, &comment_node.value);
             if let Some(pattern_node_after_comment) = maybe_pattern_after_comment {
-                still_syntax_pattern_into(
+                lily_syntax_pattern_into(
                     so_far,
                     indent,
-                    still_syntax_node_unbox(pattern_node_after_comment),
+                    lily_syntax_node_unbox(pattern_node_after_comment),
                 );
             }
         }
-        StillSyntaxPattern::Typed {
+        LilySyntaxPattern::Typed {
             type_: maybe_type_node,
             closing_colon_range: _,
             pattern: maybe_pattern_node_in_typed,
         } => {
             so_far.push(':');
             if let Some(type_node) = maybe_type_node {
-                still_syntax_type_not_parenthesized_into(
+                lily_syntax_type_not_parenthesized_into(
                     so_far,
                     1,
-                    still_syntax_node_as_ref(type_node),
+                    lily_syntax_node_as_ref(type_node),
                 );
-                if still_syntax_range_line_span(type_node.range) == LineSpan::Multiple {
+                if lily_syntax_range_line_span(type_node.range) == LineSpan::Multiple {
                     linebreak_indented_into(so_far, indent);
                 }
             }
             so_far.push(':');
-            if still_syntax_range_line_span(pattern_node.range) == LineSpan::Multiple {
+            if lily_syntax_range_line_span(pattern_node.range) == LineSpan::Multiple {
                 linebreak_indented_into(so_far, indent);
             }
             if let Some(pattern_node_in_typed) = maybe_pattern_node_in_typed {
                 match &pattern_node_in_typed.value {
-                    StillSyntaxPatternUntyped::Ignored => {
+                    LilySyntaxPatternUntyped::Ignored => {
                         so_far.push('_');
                     }
-                    StillSyntaxPatternUntyped::Variable { overwriting, name } => {
+                    LilySyntaxPatternUntyped::Variable { overwriting, name } => {
                         so_far.push_str(name);
                         if *overwriting {
                             so_far.push('^');
                         }
                     }
-                    StillSyntaxPatternUntyped::Variant {
+                    LilySyntaxPatternUntyped::Variant {
                         name: variable,
                         value: maybe_value,
                     } => {
@@ -3574,21 +3572,21 @@ fn still_syntax_pattern_into(
                         if let Some(value_node) = maybe_value {
                             space_or_linebreak_indented_into(
                                 so_far,
-                                still_syntax_range_line_span(pattern_node_in_typed.range),
+                                lily_syntax_range_line_span(pattern_node_in_typed.range),
                                 next_indent(indent),
                             );
-                            still_syntax_pattern_into(
+                            lily_syntax_pattern_into(
                                 so_far,
                                 next_indent(indent),
-                                still_syntax_node_unbox(value_node),
+                                lily_syntax_node_unbox(value_node),
                             );
                         }
                     }
-                    StillSyntaxPatternUntyped::Other(other_in_typed) => {
-                        still_syntax_pattern_into(
+                    LilySyntaxPatternUntyped::Other(other_in_typed) => {
+                        lily_syntax_pattern_into(
                             so_far,
                             indent,
-                            StillSyntaxNode {
+                            LilySyntaxNode {
                                 range: pattern_node_in_typed.range,
                                 value: other_in_typed,
                             },
@@ -3597,29 +3595,29 @@ fn still_syntax_pattern_into(
                 }
             }
         }
-        StillSyntaxPattern::Record(field_names) => {
+        LilySyntaxPattern::Record(field_names) => {
             let mut field_names_iterator = field_names.iter();
             match field_names_iterator.next() {
                 None => {
                     so_far.push_str("{}");
                 }
                 Some(field0) => {
-                    let line_span = still_syntax_range_line_span(pattern_node.range);
+                    let line_span = lily_syntax_range_line_span(pattern_node.range);
                     so_far.push_str("{ ");
                     so_far.push_str(&field0.name.value);
                     if let Some(field0_value) = &field0.value {
                         space_or_linebreak_indented_into(
                             so_far,
-                            still_syntax_range_line_span(lsp_types::Range {
+                            lily_syntax_range_line_span(lsp_types::Range {
                                 start: field0.name.range.start,
                                 end: field0_value.range.end,
                             }),
                             next_indent(indent),
                         );
-                        still_syntax_pattern_into(
+                        lily_syntax_pattern_into(
                             so_far,
                             next_indent(indent),
-                            still_syntax_node_as_ref(field0_value),
+                            lily_syntax_node_as_ref(field0_value),
                         );
                     }
                     for field in field_names_iterator {
@@ -3631,16 +3629,16 @@ fn still_syntax_pattern_into(
                         if let Some(field_value) = &field.value {
                             space_or_linebreak_indented_into(
                                 so_far,
-                                still_syntax_range_line_span(lsp_types::Range {
+                                lily_syntax_range_line_span(lsp_types::Range {
                                     start: field.name.range.start,
                                     end: field_value.range.end,
                                 }),
                                 next_indent(indent),
                             );
-                            still_syntax_pattern_into(
+                            lily_syntax_pattern_into(
                                 so_far,
                                 next_indent(indent),
-                                still_syntax_node_as_ref(field_value),
+                                lily_syntax_node_as_ref(field_value),
                             );
                         }
                     }
@@ -3651,7 +3649,7 @@ fn still_syntax_pattern_into(
         }
     }
 }
-fn still_char_into(so_far: &mut String, maybe_char: Option<char>) {
+fn lily_char_into(so_far: &mut String, maybe_char: Option<char>) {
     match maybe_char {
         None => {
             so_far.push_str("''");
@@ -3665,8 +3663,8 @@ fn still_char_into(so_far: &mut String, maybe_char: Option<char>) {
                 '\n' => so_far.push_str("\\n"),
                 '\r' => so_far.push_str("\\r"),
                 other_character => {
-                    if still_char_needs_unicode_escaping(other_character) {
-                        still_unicode_char_escape_into(so_far, other_character);
+                    if lily_char_needs_unicode_escaping(other_character) {
+                        lily_unicode_char_escape_into(so_far, other_character);
                     } else {
                         so_far.push(other_character);
                     }
@@ -3676,15 +3674,15 @@ fn still_char_into(so_far: &mut String, maybe_char: Option<char>) {
         }
     }
 }
-fn still_char_needs_unicode_escaping(char: char) -> bool {
+fn lily_char_needs_unicode_escaping(char: char) -> bool {
     char.is_control()
 }
-fn still_unicode_char_escape_into(so_far: &mut String, char: char) {
+fn lily_unicode_char_escape_into(so_far: &mut String, char: char) {
     let code: u32 = char.into();
     use std::fmt::Write as _;
     let _ = write!(so_far, "\\u{{{:X}}}", code);
 }
-fn still_unt_into(so_far: &mut String, representation: &str) {
+fn lily_unt_into(so_far: &mut String, representation: &str) {
     match representation.parse::<usize>() {
         Err(_) => {
             so_far.push_str(representation);
@@ -3695,12 +3693,12 @@ fn still_unt_into(so_far: &mut String, representation: &str) {
         }
     }
 }
-fn still_int_into(so_far: &mut String, representation: &StillSyntaxInt) {
+fn lily_int_into(so_far: &mut String, representation: &LilySyntaxInt) {
     match representation {
-        StillSyntaxInt::Zero => {
+        LilySyntaxInt::Zero => {
             so_far.push_str("00");
         }
-        StillSyntaxInt::Signed(signed_representation) => {
+        LilySyntaxInt::Signed(signed_representation) => {
             match signed_representation.parse::<isize>() {
                 Err(_) => {
                     so_far.push_str(signed_representation);
@@ -3717,14 +3715,14 @@ fn still_int_into(so_far: &mut String, representation: &StillSyntaxInt) {
         }
     }
 }
-fn still_string_into(
+fn lily_string_into(
     so_far: &mut String,
     indent: usize,
-    quoting_style: StillSyntaxStringQuotingStyle,
+    quoting_style: LilySyntaxStringQuotingStyle,
     content: &str,
 ) {
     match quoting_style {
-        StillSyntaxStringQuotingStyle::SingleQuoted => {
+        LilySyntaxStringQuotingStyle::SingleQuoted => {
             so_far.push('"');
             for char in content.chars() {
                 match char {
@@ -3734,8 +3732,8 @@ fn still_string_into(
                     '\n' => so_far.push_str("\\n"),
                     '\u{000D}' => so_far.push_str("\\u{000D}"),
                     other_character => {
-                        if still_char_needs_unicode_escaping(other_character) {
-                            still_unicode_char_escape_into(so_far, other_character);
+                        if lily_char_needs_unicode_escaping(other_character) {
+                            lily_unicode_char_escape_into(so_far, other_character);
                         } else {
                             so_far.push(other_character);
                         }
@@ -3744,7 +3742,7 @@ fn still_string_into(
             }
             so_far.push('"');
         }
-        StillSyntaxStringQuotingStyle::TickedLines => {
+        LilySyntaxStringQuotingStyle::TickedLines => {
             let mut lines_iterator: std::str::Split<char> = content.split('\n');
             if let Some(line0) = lines_iterator.next() {
                 so_far.push('`');
@@ -3758,13 +3756,13 @@ fn still_string_into(
         }
     }
 }
-fn still_syntax_expression_not_parenthesized_into(
+fn lily_syntax_expression_not_parenthesized_into(
     so_far: &mut String,
     indent: usize,
-    expression_node: StillSyntaxNode<&StillSyntaxExpression>,
+    expression_node: LilySyntaxNode<&LilySyntaxExpression>,
 ) {
     match expression_node.value {
-        StillSyntaxExpression::VariableOrCall {
+        LilySyntaxExpression::VariableOrCall {
             variable: variable_node,
             arguments,
         } => {
@@ -3772,7 +3770,7 @@ fn still_syntax_expression_not_parenthesized_into(
             if let Some((argument0_node, argument1_up)) = arguments.split_first() {
                 let line_span_before_argument0: LineSpan = if variable_node.range.start.line
                     == argument0_node.range.end.line
-                    && still_syntax_range_line_span(argument0_node.range) == LineSpan::Single
+                    && lily_syntax_range_line_span(argument0_node.range) == LineSpan::Single
                 {
                     LineSpan::Single
                 } else {
@@ -3780,21 +3778,21 @@ fn still_syntax_expression_not_parenthesized_into(
                 };
                 let full_line_span: LineSpan = match line_span_before_argument0 {
                     LineSpan::Multiple => LineSpan::Multiple,
-                    LineSpan::Single => still_syntax_range_line_span(expression_node.range),
+                    LineSpan::Single => lily_syntax_range_line_span(expression_node.range),
                 };
                 space_or_linebreak_indented_into(
                     so_far,
                     line_span_before_argument0,
                     next_indent(indent),
                 );
-                still_syntax_expression_parenthesized_if_space_separated_into(
+                lily_syntax_expression_parenthesized_if_space_separated_into(
                     so_far,
                     next_indent(indent),
-                    still_syntax_node_as_ref(argument0_node),
+                    lily_syntax_node_as_ref(argument0_node),
                 );
-                for argument_node in argument1_up.iter().map(still_syntax_node_as_ref) {
+                for argument_node in argument1_up.iter().map(lily_syntax_node_as_ref) {
                     space_or_linebreak_indented_into(so_far, full_line_span, next_indent(indent));
-                    still_syntax_expression_parenthesized_if_space_separated_into(
+                    lily_syntax_expression_parenthesized_if_space_separated_into(
                         so_far,
                         next_indent(indent),
                         argument_node,
@@ -3802,24 +3800,24 @@ fn still_syntax_expression_not_parenthesized_into(
                 }
             }
         }
-        StillSyntaxExpression::Match {
+        LilySyntaxExpression::Match {
             matched: matched_node,
             cases,
         } => {
-            still_syntax_expression_not_parenthesized_into(
+            lily_syntax_expression_not_parenthesized_into(
                 so_far,
                 indent,
-                still_syntax_node_unbox(matched_node),
+                lily_syntax_node_unbox(matched_node),
             );
             for case in cases {
                 linebreak_indented_into(so_far, indent);
-                still_syntax_case_into(so_far, indent, cases.len() == 1, case);
+                lily_syntax_case_into(so_far, indent, cases.len() == 1, case);
             }
         }
-        StillSyntaxExpression::Char(maybe_char) => {
-            still_char_into(so_far, *maybe_char);
+        LilySyntaxExpression::Char(maybe_char) => {
+            lily_char_into(so_far, *maybe_char);
         }
-        StillSyntaxExpression::Dec(representation) => match representation.parse::<f64>() {
+        LilySyntaxExpression::Dec(representation) => match representation.parse::<f64>() {
             Err(_) => {
                 so_far.push_str(representation);
             }
@@ -3828,13 +3826,13 @@ fn still_syntax_expression_not_parenthesized_into(
                 let _ = write!(so_far, "{:?}", value);
             }
         },
-        StillSyntaxExpression::Unt(representation) => {
-            still_unt_into(so_far, representation);
+        LilySyntaxExpression::Unt(representation) => {
+            lily_unt_into(so_far, representation);
         }
-        StillSyntaxExpression::Int(representation) => {
-            still_int_into(so_far, representation);
+        LilySyntaxExpression::Int(representation) => {
+            lily_int_into(so_far, representation);
         }
-        StillSyntaxExpression::Lambda {
+        LilySyntaxExpression::Lambda {
             parameters,
             arrow_key_symbol_range: _,
             result: maybe_result,
@@ -3842,7 +3840,7 @@ fn still_syntax_expression_not_parenthesized_into(
             so_far.push('\\');
             if let Some((last_parameter_node, parameters_before_last)) = parameters.split_last() {
                 let parameters_line_span: LineSpan =
-                    still_syntax_range_line_span(lsp_types::Range {
+                    lily_syntax_range_line_span(lsp_types::Range {
                         start: parameters_before_last
                             .first()
                             .unwrap_or(last_parameter_node)
@@ -3854,158 +3852,158 @@ fn still_syntax_expression_not_parenthesized_into(
                     so_far.push(' ');
                 }
                 for parameter_node in parameters_before_last {
-                    still_syntax_pattern_into(
+                    lily_syntax_pattern_into(
                         so_far,
                         indent + 2,
-                        still_syntax_node_as_ref(parameter_node),
+                        lily_syntax_node_as_ref(parameter_node),
                     );
                     if parameters_line_span == LineSpan::Multiple {
                         linebreak_indented_into(so_far, indent);
                     }
                     so_far.push_str(", ");
                 }
-                still_syntax_pattern_into(
+                lily_syntax_pattern_into(
                     so_far,
                     indent + 2,
-                    still_syntax_node_as_ref(last_parameter_node),
+                    lily_syntax_node_as_ref(last_parameter_node),
                 );
                 space_or_linebreak_indented_into(so_far, parameters_line_span, indent);
             }
             so_far.push('>');
             space_or_linebreak_indented_into(
                 so_far,
-                still_syntax_range_line_span(expression_node.range),
+                lily_syntax_range_line_span(expression_node.range),
                 next_indent(indent),
             );
             if let Some(result_node) = maybe_result {
-                still_syntax_expression_not_parenthesized_into(
+                lily_syntax_expression_not_parenthesized_into(
                     so_far,
                     next_indent(indent),
-                    still_syntax_node_unbox(result_node),
+                    lily_syntax_node_unbox(result_node),
                 );
             }
         }
-        StillSyntaxExpression::AfterLocalVariable {
+        LilySyntaxExpression::AfterLocalVariable {
             declaration: maybe_declaration,
             result: maybe_result,
         } => {
             so_far.push_str("= ");
             if let Some(declaration_node) = maybe_declaration {
-                still_syntax_local_variable_declaration_into(
+                lily_syntax_local_variable_declaration_into(
                     so_far,
                     indent,
-                    still_syntax_node_as_ref(declaration_node),
+                    lily_syntax_node_as_ref(declaration_node),
                 );
             }
             linebreak_indented_into(so_far, indent);
             if let Some(result_node) = maybe_result {
-                still_syntax_expression_not_parenthesized_into(
+                lily_syntax_expression_not_parenthesized_into(
                     so_far,
                     indent,
-                    still_syntax_node_unbox(result_node),
+                    lily_syntax_node_unbox(result_node),
                 );
             }
         }
-        StillSyntaxExpression::Vec(elements) => match elements.split_last() {
+        LilySyntaxExpression::Vec(elements) => match elements.split_last() {
             None => {
                 so_far.push_str("[]");
             }
             Some((last_element_node, elements_before_last)) => {
                 so_far.push_str("[ ");
-                let line_span: LineSpan = still_syntax_range_line_span(expression_node.range);
+                let line_span: LineSpan = lily_syntax_range_line_span(expression_node.range);
                 for element_node in elements_before_last {
-                    still_syntax_expression_not_parenthesized_into(
+                    lily_syntax_expression_not_parenthesized_into(
                         so_far,
                         indent + 2,
-                        still_syntax_node_as_ref(element_node),
+                        lily_syntax_node_as_ref(element_node),
                     );
                     if line_span == LineSpan::Multiple {
                         linebreak_indented_into(so_far, indent);
                     }
                     so_far.push_str(", ");
                 }
-                still_syntax_expression_not_parenthesized_into(
+                lily_syntax_expression_not_parenthesized_into(
                     so_far,
                     indent + 2,
-                    still_syntax_node_as_ref(last_element_node),
+                    lily_syntax_node_as_ref(last_element_node),
                 );
                 space_or_linebreak_indented_into(so_far, line_span, indent);
                 so_far.push(']');
             }
         },
-        StillSyntaxExpression::Parenthesized(None) => {
+        LilySyntaxExpression::Parenthesized(None) => {
             so_far.push_str("()");
         }
-        StillSyntaxExpression::Parenthesized(Some(in_parens)) => {
-            let innermost: StillSyntaxNode<&StillSyntaxExpression> =
-                still_syntax_expression_to_unparenthesized(still_syntax_node_unbox(in_parens));
-            still_syntax_expression_not_parenthesized_into(so_far, indent, innermost);
+        LilySyntaxExpression::Parenthesized(Some(in_parens)) => {
+            let innermost: LilySyntaxNode<&LilySyntaxExpression> =
+                lily_syntax_expression_to_unparenthesized(lily_syntax_node_unbox(in_parens));
+            lily_syntax_expression_not_parenthesized_into(so_far, indent, innermost);
         }
-        StillSyntaxExpression::WithComment {
+        LilySyntaxExpression::WithComment {
             comment: comment_node,
             expression: maybe_expression_after_expression,
         } => {
-            still_syntax_comment_lines_then_linebreak_into(so_far, indent, &comment_node.value);
+            lily_syntax_comment_lines_then_linebreak_into(so_far, indent, &comment_node.value);
             if let Some(expression_node_after_expression) = maybe_expression_after_expression {
-                still_syntax_expression_not_parenthesized_into(
+                lily_syntax_expression_not_parenthesized_into(
                     so_far,
                     indent,
-                    still_syntax_node_unbox(expression_node_after_expression),
+                    lily_syntax_node_unbox(expression_node_after_expression),
                 );
             }
         }
-        StillSyntaxExpression::Typed {
+        LilySyntaxExpression::Typed {
             type_: maybe_type,
             closing_colon_range: _,
             expression: maybe_expression,
         } => {
             so_far.push(':');
             if let Some(type_node) = maybe_type {
-                still_syntax_type_not_parenthesized_into(
+                lily_syntax_type_not_parenthesized_into(
                     so_far,
                     1,
-                    still_syntax_node_as_ref(type_node),
+                    lily_syntax_node_as_ref(type_node),
                 );
-                if still_syntax_range_line_span(type_node.range) == LineSpan::Multiple {
+                if lily_syntax_range_line_span(type_node.range) == LineSpan::Multiple {
                     linebreak_indented_into(so_far, indent);
                 }
             }
             so_far.push(':');
             if let Some(expression_node_in_typed) = maybe_expression {
                 if match &expression_node_in_typed.value {
-                    StillSyntaxExpressionUntyped::Variant { .. } => false,
-                    StillSyntaxExpressionUntyped::Other(_) => {
-                        still_syntax_range_line_span(expression_node.range) == LineSpan::Multiple
+                    LilySyntaxExpressionUntyped::Variant { .. } => false,
+                    LilySyntaxExpressionUntyped::Other(_) => {
+                        lily_syntax_range_line_span(expression_node.range) == LineSpan::Multiple
                     }
                 } {
                     linebreak_indented_into(so_far, indent);
                 }
                 match &expression_node_in_typed.value {
-                    StillSyntaxExpressionUntyped::Variant {
+                    LilySyntaxExpressionUntyped::Variant {
                         name: name_node,
                         value: maybe_value,
                     } => {
                         so_far.push_str(&name_node.value);
                         if let Some(value_node) = maybe_value {
                             let line_span: LineSpan =
-                                still_syntax_range_line_span(expression_node_in_typed.range);
+                                lily_syntax_range_line_span(expression_node_in_typed.range);
                             space_or_linebreak_indented_into(
                                 so_far,
                                 line_span,
                                 next_indent(indent),
                             );
-                            still_syntax_expression_not_parenthesized_into(
+                            lily_syntax_expression_not_parenthesized_into(
                                 so_far,
                                 next_indent(indent),
-                                still_syntax_node_unbox(value_node),
+                                lily_syntax_node_unbox(value_node),
                             );
                         }
                     }
-                    StillSyntaxExpressionUntyped::Other(expression_node_other_in_typed) => {
-                        still_syntax_expression_not_parenthesized_into(
+                    LilySyntaxExpressionUntyped::Other(expression_node_other_in_typed) => {
+                        lily_syntax_expression_not_parenthesized_into(
                             so_far,
                             indent,
-                            StillSyntaxNode {
+                            LilySyntaxNode {
                                 range: expression_node_in_typed.range,
                                 value: expression_node_other_in_typed,
                             },
@@ -4014,32 +4012,32 @@ fn still_syntax_expression_not_parenthesized_into(
                 }
             }
         }
-        StillSyntaxExpression::Record(fields) => match fields.split_first() {
+        LilySyntaxExpression::Record(fields) => match fields.split_first() {
             None => {
                 so_far.push_str("{}");
             }
             Some((field0, field1_up)) => {
-                let line_span: LineSpan = still_syntax_range_line_span(expression_node.range);
+                let line_span: LineSpan = lily_syntax_range_line_span(expression_node.range);
                 so_far.push_str("{ ");
-                still_syntax_expression_fields_into_string(
+                lily_syntax_expression_fields_into_string(
                     so_far, indent, line_span, field0, field1_up,
                 );
                 space_or_linebreak_indented_into(so_far, line_span, indent);
                 so_far.push('}');
             }
         },
-        StillSyntaxExpression::RecordUpdate {
+        LilySyntaxExpression::RecordUpdate {
             record: maybe_record,
             spread_key_symbol_range: _,
             fields,
         } => {
-            let line_span: LineSpan = still_syntax_range_line_span(expression_node.range);
+            let line_span: LineSpan = lily_syntax_range_line_span(expression_node.range);
             so_far.push_str("{ ..");
             if let Some(record_node) = maybe_record {
-                still_syntax_expression_not_parenthesized_into(
+                lily_syntax_expression_not_parenthesized_into(
                     so_far,
                     indent + 4,
-                    still_syntax_node_unbox(record_node),
+                    lily_syntax_node_unbox(record_node),
                 );
             }
             if let Some((field0, field1_up)) = fields.split_first() {
@@ -4047,38 +4045,38 @@ fn still_syntax_expression_not_parenthesized_into(
                     linebreak_indented_into(so_far, indent);
                 }
                 so_far.push_str(", ");
-                still_syntax_expression_fields_into_string(
+                lily_syntax_expression_fields_into_string(
                     so_far, indent, line_span, field0, field1_up,
                 );
             }
             space_or_linebreak_indented_into(so_far, line_span, indent);
             so_far.push('}');
         }
-        StillSyntaxExpression::String {
+        LilySyntaxExpression::String {
             content,
             quoting_style,
         } => {
-            still_string_into(so_far, indent, *quoting_style, content);
+            lily_string_into(so_far, indent, *quoting_style, content);
         }
     }
 }
 /// returns the last syntax end position
-fn still_syntax_case_into(
+fn lily_syntax_case_into(
     so_far: &mut String,
     indent: usize,
     is_only_case: bool,
-    case: &StillSyntaxExpressionCase,
+    case: &LilySyntaxExpressionCase,
 ) {
     so_far.push_str("| ");
     if let Some(case_pattern_node) = &case.pattern {
-        still_syntax_pattern_into(
+        lily_syntax_pattern_into(
             so_far,
             indent + 2,
-            still_syntax_node_as_ref(case_pattern_node),
+            lily_syntax_node_as_ref(case_pattern_node),
         );
         space_or_linebreak_indented_into(
             so_far,
-            still_syntax_range_line_span(case_pattern_node.range),
+            lily_syntax_range_line_span(case_pattern_node.range),
             indent,
         );
     }
@@ -4089,9 +4087,7 @@ fn still_syntax_case_into(
                 so_far,
                 match &case.pattern {
                     None => LineSpan::Single,
-                    Some(case_pattern_node) => {
-                        still_syntax_range_line_span(case_pattern_node.range)
-                    }
+                    Some(case_pattern_node) => lily_syntax_range_line_span(case_pattern_node.range),
                 },
                 next_indent(indent),
             );
@@ -4106,40 +4102,40 @@ fn still_syntax_case_into(
             };
             space_or_linebreak_indented_into(
                 so_far,
-                still_syntax_range_line_span(lsp_types::Range {
+                lily_syntax_range_line_span(lsp_types::Range {
                     start: case.or_bar_key_symbol_range.start,
                     end: result_node.range.end,
                 }),
                 result_indent,
             );
-            still_syntax_expression_not_parenthesized_into(
+            lily_syntax_expression_not_parenthesized_into(
                 so_far,
                 result_indent,
-                still_syntax_node_as_ref(result_node),
+                lily_syntax_node_as_ref(result_node),
             );
         }
     }
 }
 /// returns the last syntax end position
-fn still_syntax_expression_fields_into_string<'a>(
+fn lily_syntax_expression_fields_into_string<'a>(
     so_far: &mut String,
     indent: usize,
     line_span: LineSpan,
-    field0: &'a StillSyntaxExpressionField,
-    field1_up: &'a [StillSyntaxExpressionField],
+    field0: &'a LilySyntaxExpressionField,
+    field1_up: &'a [LilySyntaxExpressionField],
 ) {
     so_far.push_str(&field0.name.value);
     if let Some(field0_value_node) = &field0.value {
         space_or_linebreak_indented_into(
             so_far,
-            still_syntax_range_line_span(field0_value_node.range),
+            lily_syntax_range_line_span(field0_value_node.range),
             next_indent(indent + 2),
         );
 
-        still_syntax_expression_not_parenthesized_into(
+        lily_syntax_expression_not_parenthesized_into(
             so_far,
             next_indent(indent + 2),
-            still_syntax_node_as_ref(field0_value_node),
+            lily_syntax_node_as_ref(field0_value_node),
         );
     }
     for field in field1_up {
@@ -4151,24 +4147,24 @@ fn still_syntax_expression_fields_into_string<'a>(
         if let Some(field_value_node) = &field.value {
             space_or_linebreak_indented_into(
                 so_far,
-                still_syntax_range_line_span(lsp_types::Range {
+                lily_syntax_range_line_span(lsp_types::Range {
                     start: field.name.range.end,
                     end: field_value_node.range.end,
                 }),
                 next_indent(indent + 2),
             );
-            still_syntax_expression_not_parenthesized_into(
+            lily_syntax_expression_not_parenthesized_into(
                 so_far,
                 next_indent(indent + 2),
-                still_syntax_node_as_ref(field_value_node),
+                lily_syntax_node_as_ref(field_value_node),
             );
         }
     }
 }
-fn still_syntax_local_variable_declaration_into(
+fn lily_syntax_local_variable_declaration_into(
     so_far: &mut String,
     indent: usize,
-    local_declaration_node: StillSyntaxNode<&StillSyntaxLocalVariableDeclaration>,
+    local_declaration_node: LilySyntaxNode<&LilySyntaxLocalVariableDeclaration>,
 ) {
     so_far.push_str(&local_declaration_node.value.name.value);
     if local_declaration_node.value.overwriting.is_some() {
@@ -4179,12 +4175,12 @@ fn still_syntax_local_variable_declaration_into(
             so_far.push(' ');
         }
         Some(result_node) => {
-            let result_node: StillSyntaxNode<&StillSyntaxExpression> =
-                still_syntax_expression_to_unparenthesized(still_syntax_node_unbox(result_node));
+            let result_node: LilySyntaxNode<&LilySyntaxExpression> =
+                lily_syntax_expression_to_unparenthesized(lily_syntax_node_unbox(result_node));
             let result_start_on_same_line_then_indent: Option<usize> = match &result_node.value {
-                StillSyntaxExpression::Lambda { parameters, .. } => match parameters.first() {
+                LilySyntaxExpression::Lambda { parameters, .. } => match parameters.first() {
                     Some(first_parameter_node) => {
-                        match still_syntax_range_line_span(lsp_types::Range {
+                        match lily_syntax_range_line_span(lsp_types::Range {
                             start: first_parameter_node.range.start,
                             end: parameters.last().unwrap_or(first_parameter_node).range.end,
                         }) {
@@ -4194,13 +4190,13 @@ fn still_syntax_local_variable_declaration_into(
                     }
                     None => Some(indent),
                 },
-                StillSyntaxExpression::Typed { .. } => Some(next_indent(indent)),
+                LilySyntaxExpression::Typed { .. } => Some(next_indent(indent)),
                 _ => None,
             };
             match result_start_on_same_line_then_indent {
                 Some(result_indent) => {
                     so_far.push(' ');
-                    still_syntax_expression_not_parenthesized_into(
+                    lily_syntax_expression_not_parenthesized_into(
                         so_far,
                         result_indent,
                         result_node,
@@ -4209,10 +4205,10 @@ fn still_syntax_local_variable_declaration_into(
                 None => {
                     space_or_linebreak_indented_into(
                         so_far,
-                        still_syntax_range_line_span(local_declaration_node.range),
+                        lily_syntax_range_line_span(local_declaration_node.range),
                         next_indent(indent),
                     );
-                    still_syntax_expression_not_parenthesized_into(
+                    lily_syntax_expression_not_parenthesized_into(
                         so_far,
                         next_indent(indent),
                         result_node,
@@ -4222,11 +4218,11 @@ fn still_syntax_local_variable_declaration_into(
         }
     }
 }
-fn still_syntax_variable_declaration_into(
+fn lily_syntax_variable_declaration_into(
     so_far: &mut String,
     indent: usize,
-    name_node: StillSyntaxNode<&str>,
-    maybe_result: Option<StillSyntaxNode<&StillSyntaxExpression>>,
+    name_node: LilySyntaxNode<&str>,
+    maybe_result: Option<LilySyntaxNode<&LilySyntaxExpression>>,
 ) {
     so_far.push_str(name_node.value);
     match maybe_result {
@@ -4234,12 +4230,12 @@ fn still_syntax_variable_declaration_into(
             so_far.push(' ');
         }
         Some(result_node) => {
-            let result_node: StillSyntaxNode<&StillSyntaxExpression> =
-                still_syntax_expression_to_unparenthesized(result_node);
+            let result_node: LilySyntaxNode<&LilySyntaxExpression> =
+                lily_syntax_expression_to_unparenthesized(result_node);
             let result_start_on_same_line_then_indent: Option<usize> = match &result_node.value {
-                StillSyntaxExpression::Lambda { parameters, .. } => match parameters.first() {
+                LilySyntaxExpression::Lambda { parameters, .. } => match parameters.first() {
                     Some(first_parameter_node) => {
-                        match still_syntax_range_line_span(lsp_types::Range {
+                        match lily_syntax_range_line_span(lsp_types::Range {
                             start: first_parameter_node.range.start,
                             end: parameters.last().unwrap_or(first_parameter_node).range.end,
                         }) {
@@ -4249,13 +4245,13 @@ fn still_syntax_variable_declaration_into(
                     }
                     None => Some(indent),
                 },
-                StillSyntaxExpression::Typed { .. } => Some(next_indent(indent)),
+                LilySyntaxExpression::Typed { .. } => Some(next_indent(indent)),
                 _ => None,
             };
             match result_start_on_same_line_then_indent {
                 Some(result_indent) => {
                     so_far.push(' ');
-                    still_syntax_expression_not_parenthesized_into(
+                    lily_syntax_expression_not_parenthesized_into(
                         so_far,
                         result_indent,
                         result_node,
@@ -4263,7 +4259,7 @@ fn still_syntax_variable_declaration_into(
                 }
                 None => {
                     linebreak_indented_into(so_far, next_indent(indent));
-                    still_syntax_expression_not_parenthesized_into(
+                    lily_syntax_expression_not_parenthesized_into(
                         so_far,
                         next_indent(indent),
                         result_node,
@@ -4273,17 +4269,17 @@ fn still_syntax_variable_declaration_into(
         }
     }
 }
-fn still_syntax_expression_to_unparenthesized(
-    expression_node: StillSyntaxNode<&StillSyntaxExpression>,
-) -> StillSyntaxNode<&StillSyntaxExpression> {
+fn lily_syntax_expression_to_unparenthesized(
+    expression_node: LilySyntaxNode<&LilySyntaxExpression>,
+) -> LilySyntaxNode<&LilySyntaxExpression> {
     match expression_node.value {
-        StillSyntaxExpression::Parenthesized(Some(in_parens)) => {
-            still_syntax_expression_to_unparenthesized(still_syntax_node_unbox(in_parens))
+        LilySyntaxExpression::Parenthesized(Some(in_parens)) => {
+            lily_syntax_expression_to_unparenthesized(lily_syntax_node_unbox(in_parens))
         }
         _ => expression_node,
     }
 }
-fn still_syntax_range_line_span(range: lsp_types::Range) -> LineSpan {
+fn lily_syntax_range_line_span(range: lsp_types::Range) -> LineSpan {
     if range.start.line == range.end.line {
         LineSpan::Single
     } else {
@@ -4291,59 +4287,59 @@ fn still_syntax_range_line_span(range: lsp_types::Range) -> LineSpan {
     }
 }
 
-fn still_syntax_expression_parenthesized_into(
+fn lily_syntax_expression_parenthesized_into(
     so_far: &mut String,
     indent: usize,
-    innermost: StillSyntaxNode<&StillSyntaxExpression>,
+    innermost: LilySyntaxNode<&LilySyntaxExpression>,
 ) {
     so_far.push('(');
-    still_syntax_expression_not_parenthesized_into(so_far, indent + 1, innermost);
-    if still_syntax_range_line_span(innermost.range) == LineSpan::Multiple {
+    lily_syntax_expression_not_parenthesized_into(so_far, indent + 1, innermost);
+    if lily_syntax_range_line_span(innermost.range) == LineSpan::Multiple {
         linebreak_indented_into(so_far, indent);
     }
     so_far.push(')');
 }
-fn still_syntax_expression_parenthesized_if_space_separated_into(
+fn lily_syntax_expression_parenthesized_if_space_separated_into(
     so_far: &mut String,
     indent: usize,
-    expression_node: StillSyntaxNode<&StillSyntaxExpression>,
+    expression_node: LilySyntaxNode<&LilySyntaxExpression>,
 ) {
-    let unparenthesized: StillSyntaxNode<&StillSyntaxExpression> =
-        still_syntax_expression_to_unparenthesized(expression_node);
+    let unparenthesized: LilySyntaxNode<&LilySyntaxExpression> =
+        lily_syntax_expression_to_unparenthesized(expression_node);
     let is_space_separated: bool = match unparenthesized.value {
-        StillSyntaxExpression::Lambda { .. } => true,
-        StillSyntaxExpression::AfterLocalVariable { .. } => true,
-        StillSyntaxExpression::VariableOrCall {
+        LilySyntaxExpression::Lambda { .. } => true,
+        LilySyntaxExpression::AfterLocalVariable { .. } => true,
+        LilySyntaxExpression::VariableOrCall {
             variable: _,
             arguments,
         } => !arguments.is_empty(),
-        StillSyntaxExpression::Match { .. } => true,
-        StillSyntaxExpression::Typed { .. } => true,
-        StillSyntaxExpression::WithComment { .. } => true,
-        StillSyntaxExpression::Char(_) => false,
-        StillSyntaxExpression::Dec(_) => false,
-        StillSyntaxExpression::Unt { .. } => false,
-        StillSyntaxExpression::Int { .. } => false,
-        StillSyntaxExpression::Vec(_) => false,
-        StillSyntaxExpression::Parenthesized(_) => false,
-        StillSyntaxExpression::Record(_) => false,
-        StillSyntaxExpression::RecordUpdate { .. } => false,
-        StillSyntaxExpression::String { .. } => false,
+        LilySyntaxExpression::Match { .. } => true,
+        LilySyntaxExpression::Typed { .. } => true,
+        LilySyntaxExpression::WithComment { .. } => true,
+        LilySyntaxExpression::Char(_) => false,
+        LilySyntaxExpression::Dec(_) => false,
+        LilySyntaxExpression::Unt { .. } => false,
+        LilySyntaxExpression::Int { .. } => false,
+        LilySyntaxExpression::Vec(_) => false,
+        LilySyntaxExpression::Parenthesized(_) => false,
+        LilySyntaxExpression::Record(_) => false,
+        LilySyntaxExpression::RecordUpdate { .. } => false,
+        LilySyntaxExpression::String { .. } => false,
     };
     if is_space_separated {
-        still_syntax_expression_parenthesized_into(so_far, indent, unparenthesized);
+        lily_syntax_expression_parenthesized_into(so_far, indent, unparenthesized);
     } else {
-        still_syntax_expression_not_parenthesized_into(so_far, indent, expression_node);
+        lily_syntax_expression_not_parenthesized_into(so_far, indent, expression_node);
     }
 }
 
-fn still_syntax_project_format(project_state: &ProjectState) -> String {
-    let still_syntax_project: &StillSyntaxProject = &project_state.syntax;
+fn lily_syntax_project_format(project_state: &ProjectState) -> String {
+    let lily_syntax_project: &LilySyntaxProject = &project_state.syntax;
     let mut builder: String = String::with_capacity(project_state.source.len());
-    if let Some(Ok(StillSyntaxDocumentedDeclaration {
+    if let Some(Ok(LilySyntaxDocumentedDeclaration {
         declaration: None,
         documentation: Some(_),
-    })) = still_syntax_project.declarations.first()
+    })) = lily_syntax_project.declarations.first()
     {
         // do not put extra lines before an initial comment
         // (for example because #! is only valid in the first line)
@@ -4352,8 +4348,8 @@ fn still_syntax_project_format(project_state: &ProjectState) -> String {
         builder.push_str("\n\n");
     }
     for (documented_declaration_or_err, maybe_next_declaration_or_err) in
-        still_syntax_project.declarations.iter().zip(
-            still_syntax_project
+        lily_syntax_project.declarations.iter().zip(
+            lily_syntax_project
                 .declarations
                 .iter()
                 .skip(1)
@@ -4367,7 +4363,7 @@ fn still_syntax_project_format(project_state: &ProjectState) -> String {
             }
             Ok(documented_declaration) => {
                 if let Some(project_documentation_node) = &documented_declaration.documentation {
-                    still_syntax_comment_lines_then_linebreak_into(
+                    lily_syntax_comment_lines_then_linebreak_into(
                         &mut builder,
                         0,
                         &project_documentation_node.value,
@@ -4383,9 +4379,9 @@ fn still_syntax_project_format(project_state: &ProjectState) -> String {
                         {
                             builder.push_str(unchanged_declaration_source);
                         } else {
-                            still_syntax_declaration_into(
+                            lily_syntax_declaration_into(
                                 &mut builder,
-                                still_syntax_node_as_ref(declaration_node),
+                                lily_syntax_node_as_ref(declaration_node),
                             );
                             builder.push_str("\n\n");
                         }
@@ -4400,7 +4396,7 @@ fn still_syntax_project_format(project_state: &ProjectState) -> String {
     builder
 }
 
-fn still_syntax_comment_lines_then_linebreak_into(
+fn lily_syntax_comment_lines_then_linebreak_into(
     so_far: &mut String,
     indent: usize,
     content: &str,
@@ -4416,56 +4412,56 @@ fn still_syntax_comment_lines_then_linebreak_into(
     }
 }
 
-fn still_syntax_declaration_into(
+fn lily_syntax_declaration_into(
     so_far: &mut String,
-    declaration_node: StillSyntaxNode<&StillSyntaxDeclaration>,
+    declaration_node: LilySyntaxNode<&LilySyntaxDeclaration>,
 ) {
     match declaration_node.value {
-        StillSyntaxDeclaration::ChoiceType {
+        LilySyntaxDeclaration::ChoiceType {
             name: maybe_name,
             parameters,
             variants,
         } => {
-            still_syntax_choice_type_declaration_into(
+            lily_syntax_choice_type_declaration_into(
                 so_far,
                 maybe_name.as_ref().map(|n| &n.value),
                 parameters,
                 variants,
             );
         }
-        StillSyntaxDeclaration::TypeAlias {
+        LilySyntaxDeclaration::TypeAlias {
             type_keyword_range: _,
             name: maybe_name,
             parameters,
             equals_key_symbol_range: _,
             type_: maybe_type,
         } => {
-            still_syntax_type_alias_declaration_into(
+            lily_syntax_type_alias_declaration_into(
                 so_far,
                 maybe_name.as_ref().map(|n| &n.value),
                 parameters,
-                maybe_type.as_ref().map(still_syntax_node_as_ref),
+                maybe_type.as_ref().map(lily_syntax_node_as_ref),
             );
         }
-        StillSyntaxDeclaration::Variable {
+        LilySyntaxDeclaration::Variable {
             name: name_node,
             result: maybe_result,
         } => {
-            still_syntax_variable_declaration_into(
+            lily_syntax_variable_declaration_into(
                 so_far,
                 0,
-                still_syntax_node_as_ref_map(name_node, StillName::as_str),
-                maybe_result.as_ref().map(still_syntax_node_as_ref),
+                lily_syntax_node_as_ref_map(name_node, LilyName::as_str),
+                maybe_result.as_ref().map(lily_syntax_node_as_ref),
             );
         }
     }
 }
 
-fn still_syntax_type_alias_declaration_into(
+fn lily_syntax_type_alias_declaration_into(
     so_far: &mut String,
-    maybe_name: Option<&StillName>,
-    parameters: &[StillSyntaxNode<StillName>],
-    maybe_type: Option<StillSyntaxNode<&StillSyntaxType>>,
+    maybe_name: Option<&LilyName>,
+    parameters: &[LilySyntaxNode<LilyName>],
+    maybe_type: Option<LilySyntaxNode<&LilySyntaxType>>,
 ) {
     so_far.push_str("type ");
     if let Some(name_node) = maybe_name {
@@ -4478,14 +4474,14 @@ fn still_syntax_type_alias_declaration_into(
     so_far.push_str(" =");
     linebreak_indented_into(so_far, 4);
     if let Some(type_node) = maybe_type {
-        still_syntax_type_not_parenthesized_into(so_far, 4, type_node);
+        lily_syntax_type_not_parenthesized_into(so_far, 4, type_node);
     }
 }
-fn still_syntax_choice_type_declaration_into(
+fn lily_syntax_choice_type_declaration_into(
     so_far: &mut String,
-    maybe_name: Option<&StillName>,
-    parameters: &[StillSyntaxNode<StillName>],
-    variants: &[StillSyntaxChoiceTypeVariant],
+    maybe_name: Option<&LilyName>,
+    parameters: &[LilySyntaxNode<LilyName>],
+    variants: &[LilySyntaxChoiceTypeVariant],
 ) {
     so_far.push_str("choice ");
     if let Some(name) = maybe_name {
@@ -4502,21 +4498,21 @@ fn still_syntax_choice_type_declaration_into(
         for variant in variants {
             linebreak_indented_into(so_far, 4);
             so_far.push_str("| ");
-            still_syntax_choice_type_declaration_variant_into(
+            lily_syntax_choice_type_declaration_variant_into(
                 so_far,
                 variant
                     .name
                     .as_ref()
-                    .map(|n| still_syntax_node_as_ref_map(n, StillName::as_str)),
-                variant.value.as_ref().map(still_syntax_node_as_ref),
+                    .map(|n| lily_syntax_node_as_ref_map(n, LilyName::as_str)),
+                variant.value.as_ref().map(lily_syntax_node_as_ref),
             );
         }
     }
 }
-fn still_syntax_choice_type_declaration_variant_into(
+fn lily_syntax_choice_type_declaration_variant_into(
     so_far: &mut String,
-    maybe_variant_name: Option<StillSyntaxNode<&str>>,
-    variant_maybe_value: Option<StillSyntaxNode<&StillSyntaxType>>,
+    maybe_variant_name: Option<LilySyntaxNode<&str>>,
+    variant_maybe_value: Option<LilySyntaxNode<&LilySyntaxType>>,
 ) {
     if let Some(variant_name_node) = maybe_variant_name {
         so_far.push_str(variant_name_node.value);
@@ -4524,7 +4520,7 @@ fn still_syntax_choice_type_declaration_variant_into(
     let Some(variant_last_value_node) = variant_maybe_value else {
         return;
     };
-    let line_span: LineSpan = still_syntax_range_line_span(lsp_types::Range {
+    let line_span: LineSpan = lily_syntax_range_line_span(lsp_types::Range {
         start: maybe_variant_name
             .map(|n| n.range.start)
             .unwrap_or(variant_last_value_node.range.start),
@@ -4532,64 +4528,64 @@ fn still_syntax_choice_type_declaration_variant_into(
     });
     if let Some(value_node) = variant_maybe_value {
         space_or_linebreak_indented_into(so_far, line_span, 8);
-        still_syntax_type_not_parenthesized_into(so_far, 8, value_node);
+        lily_syntax_type_not_parenthesized_into(so_far, 8, value_node);
     }
 }
 
 // //
 #[derive(Clone, Debug)]
-enum StillSyntaxSymbol<'a> {
+enum LilySyntaxSymbol<'a> {
     // includes variant
     ProjectDeclarationName {
-        name: &'a StillName,
+        name: &'a LilyName,
         documentation: Option<&'a str>,
-        declaration: StillSyntaxNode<&'a StillSyntaxDeclaration>,
+        declaration: LilySyntaxNode<&'a LilySyntaxDeclaration>,
     },
     LocalVariableDeclarationName {
-        name: &'a StillName,
-        type_: Option<StillType>,
-        scope_expression: StillSyntaxNode<&'a StillSyntaxExpression>,
+        name: &'a LilyName,
+        type_: Option<LilyType>,
+        scope_expression: LilySyntaxNode<&'a LilySyntaxExpression>,
     },
     Variable {
-        name: &'a StillName,
+        name: &'a LilyName,
         // consider wrapping in Option
-        local_bindings: StillLocalBindings<'a>,
+        local_bindings: LilyLocalBindings<'a>,
     },
     Variant {
-        name: &'a StillName,
-        type_: Option<&'a StillSyntaxType>,
+        name: &'a LilyName,
+        type_: Option<&'a LilySyntaxType>,
     },
-    Type(&'a StillName),
+    Type(&'a LilyName),
     TypeVariable {
-        scope_declaration: &'a StillSyntaxDeclaration,
-        name: &'a StillName,
+        scope_declaration: &'a LilySyntaxDeclaration,
+        name: &'a LilyName,
     },
     Field {
-        name: &'a StillName,
-        value_type: Option<StillType>,
-        fields_sorted: Vec<StillName>,
+        name: &'a LilyName,
+        value_type: Option<LilyType>,
+        fields_sorted: Vec<LilyName>,
     },
 }
-type StillLocalBindings<'a> = Vec<(
-    StillSyntaxNode<&'a StillSyntaxExpression>,
-    Vec<StillLocalBinding<'a>>,
+type LilyLocalBindings<'a> = Vec<(
+    LilySyntaxNode<&'a LilySyntaxExpression>,
+    Vec<LilyLocalBinding<'a>>,
 )>;
 #[derive(Clone, Copy)]
-struct StillLocalBindingInfo<'a> {
-    type_: Option<&'a StillType>,
+struct LilyLocalBindingInfo<'a> {
+    type_: Option<&'a LilyType>,
     origin: LocalBindingOrigin,
-    scope_expression: StillSyntaxNode<&'a StillSyntaxExpression>,
+    scope_expression: LilySyntaxNode<&'a LilySyntaxExpression>,
 }
 fn find_local_binding_info<'a>(
-    local_bindings: &'a StillLocalBindings<'a>,
+    local_bindings: &'a LilyLocalBindings<'a>,
     to_find: &str,
-) -> Option<StillLocalBindingInfo<'a>> {
+) -> Option<LilyLocalBindingInfo<'a>> {
     local_bindings
         .iter()
         .find_map(|(scope_expression, local_bindings)| {
             local_bindings.iter().find_map(|local_binding| {
                 if local_binding.name == to_find {
-                    Some(StillLocalBindingInfo {
+                    Some(LilyLocalBindingInfo {
                         origin: local_binding.origin,
                         type_: local_binding.type_.as_ref(),
                         scope_expression: *scope_expression,
@@ -4601,24 +4597,24 @@ fn find_local_binding_info<'a>(
         })
 }
 
-fn still_syntax_project_find_symbol_at_position<'a>(
-    still_syntax_project: &'a StillSyntaxProject,
-    type_aliases: &'a std::collections::HashMap<StillName, TypeAliasInfo>,
-    choice_types: &'a std::collections::HashMap<StillName, ChoiceTypeInfo>,
-    variable_declarations: &std::collections::HashMap<StillName, CompiledVariableDeclarationInfo>,
+fn lily_syntax_project_find_symbol_at_position<'a>(
+    lily_syntax_project: &'a LilySyntaxProject,
+    type_aliases: &'a std::collections::HashMap<LilyName, TypeAliasInfo>,
+    choice_types: &'a std::collections::HashMap<LilyName, ChoiceTypeInfo>,
+    variable_declarations: &std::collections::HashMap<LilyName, CompiledVariableDeclarationInfo>,
     position: lsp_types::Position,
-) -> Option<StillSyntaxNode<StillSyntaxSymbol<'a>>> {
-    still_syntax_project
+) -> Option<LilySyntaxNode<LilySyntaxSymbol<'a>>> {
+    lily_syntax_project
         .declarations
         .iter()
         .filter_map(|declaration_or_err| declaration_or_err.as_ref().ok())
         .find_map(|documented_declaration| {
             let declaration_node = documented_declaration.declaration.as_ref()?;
-            still_syntax_declaration_find_symbol_at_position(
+            lily_syntax_declaration_find_symbol_at_position(
                 type_aliases,
                 choice_types,
                 variable_declarations,
-                still_syntax_node_as_ref(declaration_node),
+                lily_syntax_node_as_ref(declaration_node),
                 documented_declaration
                     .documentation
                     .as_ref()
@@ -4628,19 +4624,19 @@ fn still_syntax_project_find_symbol_at_position<'a>(
         })
 }
 
-fn still_syntax_declaration_find_symbol_at_position<'a>(
-    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
-    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
-    variable_declarations: &std::collections::HashMap<StillName, CompiledVariableDeclarationInfo>,
-    still_syntax_declaration_node: StillSyntaxNode<&'a StillSyntaxDeclaration>,
+fn lily_syntax_declaration_find_symbol_at_position<'a>(
+    type_aliases: &std::collections::HashMap<LilyName, TypeAliasInfo>,
+    choice_types: &std::collections::HashMap<LilyName, ChoiceTypeInfo>,
+    variable_declarations: &std::collections::HashMap<LilyName, CompiledVariableDeclarationInfo>,
+    lily_syntax_declaration_node: LilySyntaxNode<&'a LilySyntaxDeclaration>,
     maybe_documentation: Option<&'a str>,
     position: lsp_types::Position,
-) -> Option<StillSyntaxNode<StillSyntaxSymbol<'a>>> {
-    if !lsp_range_includes_position(still_syntax_declaration_node.range, position) {
+) -> Option<LilySyntaxNode<LilySyntaxSymbol<'a>>> {
+    if !lsp_range_includes_position(lily_syntax_declaration_node.range, position) {
         None
     } else {
-        match still_syntax_declaration_node.value {
-            StillSyntaxDeclaration::ChoiceType {
+        match lily_syntax_declaration_node.value {
+            LilySyntaxDeclaration::ChoiceType {
                 name: maybe_name,
                 parameters,
                 variants,
@@ -4648,16 +4644,16 @@ fn still_syntax_declaration_find_symbol_at_position<'a>(
                 if let Some(name_node) = maybe_name
                     && lsp_range_includes_position(
                         lsp_types::Range {
-                            start: still_syntax_declaration_node.range.start,
+                            start: lily_syntax_declaration_node.range.start,
                             end: name_node.range.end,
                         },
                         position,
                     )
                 {
-                    return Some(StillSyntaxNode {
-                        value: StillSyntaxSymbol::ProjectDeclarationName {
+                    return Some(LilySyntaxNode {
+                        value: LilySyntaxSymbol::ProjectDeclarationName {
                             name: &name_node.value,
-                            declaration: still_syntax_declaration_node,
+                            declaration: lily_syntax_declaration_node,
                             documentation: maybe_documentation,
                         },
                         range: name_node.range,
@@ -4667,9 +4663,9 @@ fn still_syntax_declaration_find_symbol_at_position<'a>(
                     .iter()
                     .find_map(|parameter_node| {
                         if lsp_range_includes_position(parameter_node.range, position) {
-                            Some(StillSyntaxNode {
-                                value: StillSyntaxSymbol::TypeVariable {
-                                    scope_declaration: still_syntax_declaration_node.value,
+                            Some(LilySyntaxNode {
+                                value: LilySyntaxSymbol::TypeVariable {
+                                    scope_declaration: lily_syntax_declaration_node.value,
                                     name: &parameter_node.value,
                                 },
                                 range: parameter_node.range,
@@ -4683,21 +4679,21 @@ fn still_syntax_declaration_find_symbol_at_position<'a>(
                             if let Some(variant_name_node) = &variant.name
                                 && lsp_range_includes_position(variant_name_node.range, position)
                             {
-                                Some(StillSyntaxNode {
-                                    value: StillSyntaxSymbol::ProjectDeclarationName {
+                                Some(LilySyntaxNode {
+                                    value: LilySyntaxSymbol::ProjectDeclarationName {
                                         name: &variant_name_node.value,
-                                        declaration: still_syntax_declaration_node,
+                                        declaration: lily_syntax_declaration_node,
                                         documentation: maybe_documentation,
                                     },
                                     range: variant_name_node.range,
                                 })
                             } else {
                                 variant.value.iter().find_map(|variant_value| {
-                                    still_syntax_type_find_symbol_at_position(
+                                    lily_syntax_type_find_symbol_at_position(
                                         type_aliases,
                                         choice_types,
-                                        still_syntax_declaration_node.value,
-                                        still_syntax_node_as_ref(variant_value),
+                                        lily_syntax_declaration_node.value,
+                                        lily_syntax_node_as_ref(variant_value),
                                         position,
                                     )
                                 })
@@ -4705,7 +4701,7 @@ fn still_syntax_declaration_find_symbol_at_position<'a>(
                         })
                     })
             }
-            StillSyntaxDeclaration::TypeAlias {
+            LilySyntaxDeclaration::TypeAlias {
                 type_keyword_range,
                 name: maybe_name,
                 parameters,
@@ -4716,10 +4712,10 @@ fn still_syntax_declaration_find_symbol_at_position<'a>(
                     && (lsp_range_includes_position(name_node.range, position)
                         || lsp_range_includes_position(*type_keyword_range, position))
                 {
-                    return Some(StillSyntaxNode {
-                        value: StillSyntaxSymbol::ProjectDeclarationName {
+                    return Some(LilySyntaxNode {
+                        value: LilySyntaxSymbol::ProjectDeclarationName {
                             name: &name_node.value,
-                            declaration: still_syntax_declaration_node,
+                            declaration: lily_syntax_declaration_node,
                             documentation: maybe_documentation,
                         },
                         range: name_node.range,
@@ -4729,9 +4725,9 @@ fn still_syntax_declaration_find_symbol_at_position<'a>(
                     .iter()
                     .find_map(|parameter_node| {
                         if lsp_range_includes_position(parameter_node.range, position) {
-                            Some(StillSyntaxNode {
-                                value: StillSyntaxSymbol::TypeVariable {
-                                    scope_declaration: still_syntax_declaration_node.value,
+                            Some(LilySyntaxNode {
+                                value: LilySyntaxSymbol::TypeVariable {
+                                    scope_declaration: lily_syntax_declaration_node.value,
                                     name: &parameter_node.value,
                                 },
                                 range: parameter_node.range,
@@ -4742,38 +4738,38 @@ fn still_syntax_declaration_find_symbol_at_position<'a>(
                     })
                     .or_else(|| {
                         maybe_type.as_ref().and_then(|type_node| {
-                            still_syntax_type_find_symbol_at_position(
+                            lily_syntax_type_find_symbol_at_position(
                                 type_aliases,
                                 choice_types,
-                                still_syntax_declaration_node.value,
-                                still_syntax_node_as_ref(type_node),
+                                lily_syntax_declaration_node.value,
+                                lily_syntax_node_as_ref(type_node),
                                 position,
                             )
                         })
                     })
             }
-            StillSyntaxDeclaration::Variable {
+            LilySyntaxDeclaration::Variable {
                 name: name_node,
                 result: maybe_result,
             } => {
                 if lsp_range_includes_position(name_node.range, position) {
-                    return Some(StillSyntaxNode {
-                        value: StillSyntaxSymbol::ProjectDeclarationName {
+                    return Some(LilySyntaxNode {
+                        value: LilySyntaxSymbol::ProjectDeclarationName {
                             name: &name_node.value,
-                            declaration: still_syntax_declaration_node,
+                            declaration: lily_syntax_declaration_node,
                             documentation: maybe_documentation,
                         },
                         range: name_node.range,
                     });
                 }
                 maybe_result.as_ref().and_then(|result_node| {
-                    still_syntax_expression_find_symbol_at_position(
+                    lily_syntax_expression_find_symbol_at_position(
                         type_aliases,
                         choice_types,
                         variable_declarations,
-                        still_syntax_declaration_node.value,
+                        lily_syntax_declaration_node.value,
                         vec![],
-                        still_syntax_node_as_ref(result_node),
+                        lily_syntax_node_as_ref(result_node),
                         position,
                     )
                     .break_value()
@@ -4783,64 +4779,64 @@ fn still_syntax_declaration_find_symbol_at_position<'a>(
     }
 }
 
-fn still_syntax_pattern_find_symbol_at_position<'a>(
-    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
-    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
-    scope_declaration: &'a StillSyntaxDeclaration,
-    scope_expression: Option<StillSyntaxNode<&'a StillSyntaxExpression>>,
-    still_syntax_pattern_node: StillSyntaxNode<&'a StillSyntaxPattern>,
+fn lily_syntax_pattern_find_symbol_at_position<'a>(
+    type_aliases: &std::collections::HashMap<LilyName, TypeAliasInfo>,
+    choice_types: &std::collections::HashMap<LilyName, ChoiceTypeInfo>,
+    scope_declaration: &'a LilySyntaxDeclaration,
+    scope_expression: Option<LilySyntaxNode<&'a LilySyntaxExpression>>,
+    lily_syntax_pattern_node: LilySyntaxNode<&'a LilySyntaxPattern>,
     position: lsp_types::Position,
-) -> Option<StillSyntaxNode<StillSyntaxSymbol<'a>>> {
-    if !lsp_range_includes_position(still_syntax_pattern_node.range, position) {
+) -> Option<LilySyntaxNode<LilySyntaxSymbol<'a>>> {
+    if !lsp_range_includes_position(lily_syntax_pattern_node.range, position) {
         return None;
     }
-    match still_syntax_pattern_node.value {
-        StillSyntaxPattern::Unt { .. } => None,
-        StillSyntaxPattern::Int { .. } => None,
-        StillSyntaxPattern::Char(_) => None,
-        StillSyntaxPattern::String { .. } => None,
-        StillSyntaxPattern::Typed {
+    match lily_syntax_pattern_node.value {
+        LilySyntaxPattern::Unt { .. } => None,
+        LilySyntaxPattern::Int { .. } => None,
+        LilySyntaxPattern::Char(_) => None,
+        LilySyntaxPattern::String { .. } => None,
+        LilySyntaxPattern::Typed {
             type_: maybe_type_node,
             closing_colon_range: _,
             pattern: maybe_pattern_node_in_typed,
         } => maybe_type_node
             .as_ref()
             .and_then(|type_node| {
-                still_syntax_type_find_symbol_at_position(
+                lily_syntax_type_find_symbol_at_position(
                     type_aliases,
                     choice_types,
                     scope_declaration,
-                    still_syntax_node_as_ref(type_node),
+                    lily_syntax_node_as_ref(type_node),
                     position,
                 )
             })
             .or_else(|| {
                 let pattern_node_in_typed = maybe_pattern_node_in_typed.as_ref()?;
                 match &pattern_node_in_typed.value {
-                    StillSyntaxPatternUntyped::Ignored => None,
-                    StillSyntaxPatternUntyped::Variable {
+                    LilySyntaxPatternUntyped::Ignored => None,
+                    LilySyntaxPatternUntyped::Variable {
                         overwriting: _,
                         name,
                     } => {
-                        Some(StillSyntaxNode {
+                        Some(LilySyntaxNode {
                             range: pattern_node_in_typed.range,
-                            value: StillSyntaxSymbol::Variable {
+                            value: LilySyntaxSymbol::Variable {
                                 name: name,
                                 local_bindings: vec![(
                                     // this is a bit silly but works for now
                                     scope_expression.unwrap_or_else(|| {
-                                        still_syntax_node_empty(
-                                            &StillSyntaxExpression::Parenthesized(None),
+                                        lily_syntax_node_empty(
+                                            &LilySyntaxExpression::Parenthesized(None),
                                         )
                                     }),
-                                    vec![StillLocalBinding {
+                                    vec![LilyLocalBinding {
                                         name: name,
                                         type_: maybe_type_node.as_ref().and_then(|type_node| {
-                                            still_syntax_type_to_type(
+                                            lily_syntax_type_to_type(
                                                 &mut Vec::new(),
                                                 type_aliases,
                                                 choice_types,
-                                                still_syntax_node_as_ref(type_node),
+                                                lily_syntax_node_as_ref(type_node),
                                             )
                                         }),
                                         origin: LocalBindingOrigin::PatternVariable(
@@ -4851,13 +4847,13 @@ fn still_syntax_pattern_find_symbol_at_position<'a>(
                             },
                         })
                     }
-                    StillSyntaxPatternUntyped::Variant {
+                    LilySyntaxPatternUntyped::Variant {
                         name: variable,
                         value: maybe_value,
                     } => {
                         if lsp_range_includes_position(variable.range, position) {
-                            Some(StillSyntaxNode {
-                                value: StillSyntaxSymbol::Variant {
+                            Some(LilySyntaxNode {
+                                value: LilySyntaxSymbol::Variant {
                                     name: &variable.value,
                                     type_: maybe_type_node.as_ref().map(|n| &n.value),
                                 },
@@ -4865,24 +4861,24 @@ fn still_syntax_pattern_find_symbol_at_position<'a>(
                             })
                         } else {
                             maybe_value.as_ref().and_then(|value| {
-                                still_syntax_pattern_find_symbol_at_position(
+                                lily_syntax_pattern_find_symbol_at_position(
                                     type_aliases,
                                     choice_types,
                                     scope_declaration,
                                     scope_expression,
-                                    still_syntax_node_unbox(value),
+                                    lily_syntax_node_unbox(value),
                                     position,
                                 )
                             })
                         }
                     }
-                    StillSyntaxPatternUntyped::Other(other_in_typed) => {
-                        still_syntax_pattern_find_symbol_at_position(
+                    LilySyntaxPatternUntyped::Other(other_in_typed) => {
+                        lily_syntax_pattern_find_symbol_at_position(
                             type_aliases,
                             choice_types,
                             scope_declaration,
                             scope_expression,
-                            StillSyntaxNode {
+                            LilySyntaxNode {
                                 range: pattern_node_in_typed.range,
                                 value: other_in_typed,
                             },
@@ -4891,31 +4887,31 @@ fn still_syntax_pattern_find_symbol_at_position<'a>(
                     }
                 }
             }),
-        StillSyntaxPattern::WithComment {
+        LilySyntaxPattern::WithComment {
             comment: _,
             pattern: maybe_pattern_after_expression,
         } => maybe_pattern_after_expression
             .as_ref()
             .and_then(|pattern_node_after_expression| {
-                still_syntax_pattern_find_symbol_at_position(
+                lily_syntax_pattern_find_symbol_at_position(
                     type_aliases,
                     choice_types,
                     scope_declaration,
                     scope_expression,
-                    still_syntax_node_unbox(pattern_node_after_expression),
+                    lily_syntax_node_unbox(pattern_node_after_expression),
                     position,
                 )
             }),
-        StillSyntaxPattern::Record(fields) => fields.iter().find_map(|field| {
+        LilySyntaxPattern::Record(fields) => fields.iter().find_map(|field| {
             if lsp_range_includes_position(field.name.range, position) {
-                return Some(StillSyntaxNode {
-                    value: StillSyntaxSymbol::Field {
+                return Some(LilySyntaxNode {
+                    value: LilySyntaxSymbol::Field {
                         name: &field.name.value,
                         value_type: field.value.as_ref().and_then(|field_value_node| {
-                            still_syntax_pattern_type(
+                            lily_syntax_pattern_type(
                                 type_aliases,
                                 choice_types,
-                                still_syntax_node_as_ref(field_value_node),
+                                lily_syntax_node_as_ref(field_value_node),
                             )
                         }),
                         fields_sorted: sorted_field_names(
@@ -4926,12 +4922,12 @@ fn still_syntax_pattern_find_symbol_at_position<'a>(
                 });
             }
             field.value.as_ref().and_then(|field_value_node| {
-                still_syntax_pattern_find_symbol_at_position(
+                lily_syntax_pattern_find_symbol_at_position(
                     type_aliases,
                     choice_types,
                     scope_declaration,
                     scope_expression,
-                    still_syntax_node_as_ref(field_value_node),
+                    lily_syntax_node_as_ref(field_value_node),
                     position,
                 )
             })
@@ -4939,98 +4935,96 @@ fn still_syntax_pattern_find_symbol_at_position<'a>(
     }
 }
 
-fn still_syntax_type_find_symbol_at_position<'a>(
-    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
-    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
-    scope_declaration: &'a StillSyntaxDeclaration,
-    still_syntax_type_node: StillSyntaxNode<&'a StillSyntaxType>,
+fn lily_syntax_type_find_symbol_at_position<'a>(
+    type_aliases: &std::collections::HashMap<LilyName, TypeAliasInfo>,
+    choice_types: &std::collections::HashMap<LilyName, ChoiceTypeInfo>,
+    scope_declaration: &'a LilySyntaxDeclaration,
+    lily_syntax_type_node: LilySyntaxNode<&'a LilySyntaxType>,
     position: lsp_types::Position,
-) -> Option<StillSyntaxNode<StillSyntaxSymbol<'a>>> {
-    if !lsp_range_includes_position(still_syntax_type_node.range, position) {
+) -> Option<LilySyntaxNode<LilySyntaxSymbol<'a>>> {
+    if !lsp_range_includes_position(lily_syntax_type_node.range, position) {
         return None;
     }
-    match still_syntax_type_node.value {
-        StillSyntaxType::Construct {
+    match lily_syntax_type_node.value {
+        LilySyntaxType::Construct {
             name: variable,
             arguments,
         } => {
             if lsp_range_includes_position(variable.range, position) {
-                return Some(StillSyntaxNode {
-                    value: StillSyntaxSymbol::Type(&variable.value),
+                return Some(LilySyntaxNode {
+                    value: LilySyntaxSymbol::Type(&variable.value),
                     range: variable.range,
                 });
             }
             arguments.iter().find_map(|argument| {
-                still_syntax_type_find_symbol_at_position(
+                lily_syntax_type_find_symbol_at_position(
                     type_aliases,
                     choice_types,
                     scope_declaration,
-                    still_syntax_node_as_ref(argument),
+                    lily_syntax_node_as_ref(argument),
                     position,
                 )
             })
         }
-        StillSyntaxType::Function {
+        LilySyntaxType::Function {
             inputs,
             arrow_key_symbol_range: _,
             output: maybe_output,
         } => inputs
             .iter()
             .find_map(|input_node| {
-                still_syntax_type_find_symbol_at_position(
+                lily_syntax_type_find_symbol_at_position(
                     type_aliases,
                     choice_types,
                     scope_declaration,
-                    still_syntax_node_as_ref(input_node),
+                    lily_syntax_node_as_ref(input_node),
                     position,
                 )
             })
             .or_else(|| {
                 maybe_output.as_ref().and_then(|output_node| {
-                    still_syntax_type_find_symbol_at_position(
+                    lily_syntax_type_find_symbol_at_position(
                         type_aliases,
                         choice_types,
                         scope_declaration,
-                        still_syntax_node_unbox(output_node),
+                        lily_syntax_node_unbox(output_node),
                         position,
                     )
                 })
             }),
-        StillSyntaxType::Parenthesized(None) => None,
-        StillSyntaxType::Parenthesized(Some(in_parens)) => {
-            still_syntax_type_find_symbol_at_position(
-                type_aliases,
-                choice_types,
-                scope_declaration,
-                still_syntax_node_unbox(in_parens),
-                position,
-            )
-        }
-        StillSyntaxType::WithComment {
+        LilySyntaxType::Parenthesized(None) => None,
+        LilySyntaxType::Parenthesized(Some(in_parens)) => lily_syntax_type_find_symbol_at_position(
+            type_aliases,
+            choice_types,
+            scope_declaration,
+            lily_syntax_node_unbox(in_parens),
+            position,
+        ),
+        LilySyntaxType::WithComment {
             comment: _,
             type_: maybe_type_after_comment,
         } => maybe_type_after_comment
             .as_ref()
             .and_then(|type_node_after_comment| {
-                still_syntax_type_find_symbol_at_position(
+                lily_syntax_type_find_symbol_at_position(
                     type_aliases,
                     choice_types,
                     scope_declaration,
-                    still_syntax_node_unbox(type_node_after_comment),
+                    lily_syntax_node_unbox(type_node_after_comment),
                     position,
                 )
             }),
-        StillSyntaxType::Record(fields) => fields.iter().find_map(|field| {
+        LilySyntaxType::Record(fields) => fields.iter().find_map(|field| {
             if lsp_range_includes_position(field.name.range, position) {
-                return Some(StillSyntaxNode {
-                    value: StillSyntaxSymbol::Field {
+                return Some(LilySyntaxNode {
+                    value: LilySyntaxSymbol::Field {
                         name: &field.name.value,
                         value_type: field.value.as_ref().and_then(|field_value_node| {
-                            still_syntax_type_to_type(
+                            lily_syntax_type_to_type(
                                 &mut Vec::new(),
                                 type_aliases,
                                 choice_types,
-                                still_syntax_node_as_ref(field_value_node),
+                                lily_syntax_node_as_ref(field_value_node),
                             )
                         }),
                         fields_sorted: sorted_field_names(
@@ -5041,18 +5035,18 @@ fn still_syntax_type_find_symbol_at_position<'a>(
                 });
             }
             field.value.as_ref().and_then(|field_value_node| {
-                still_syntax_type_find_symbol_at_position(
+                lily_syntax_type_find_symbol_at_position(
                     type_aliases,
                     choice_types,
                     scope_declaration,
-                    still_syntax_node_as_ref(field_value_node),
+                    lily_syntax_node_as_ref(field_value_node),
                     position,
                 )
             })
         }),
-        StillSyntaxType::Variable(type_variable_value) => Some(StillSyntaxNode {
-            range: still_syntax_type_node.range,
-            value: StillSyntaxSymbol::TypeVariable {
+        LilySyntaxType::Variable(type_variable_value) => Some(LilySyntaxNode {
+            range: lily_syntax_type_node.range,
+            value: LilySyntaxSymbol::TypeVariable {
                 scope_declaration: scope_declaration,
                 name: type_variable_value,
             },
@@ -5066,37 +5060,37 @@ enum LocalBindingOrigin {
     LocalDeclaredVariable { name_range: lsp_types::Range },
 }
 #[derive(Clone, Debug)]
-struct StillLocalBinding<'a> {
+struct LilyLocalBinding<'a> {
     name: &'a str,
-    type_: Option<StillType>,
+    type_: Option<LilyType>,
     origin: LocalBindingOrigin,
 }
 
-fn still_syntax_expression_find_symbol_at_position<'a>(
-    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
-    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
-    variable_declarations: &std::collections::HashMap<StillName, CompiledVariableDeclarationInfo>,
-    scope_declaration: &'a StillSyntaxDeclaration,
-    mut local_bindings: StillLocalBindings<'a>,
-    expression_node: StillSyntaxNode<&'a StillSyntaxExpression>,
+fn lily_syntax_expression_find_symbol_at_position<'a>(
+    type_aliases: &std::collections::HashMap<LilyName, TypeAliasInfo>,
+    choice_types: &std::collections::HashMap<LilyName, ChoiceTypeInfo>,
+    variable_declarations: &std::collections::HashMap<LilyName, CompiledVariableDeclarationInfo>,
+    scope_declaration: &'a LilySyntaxDeclaration,
+    mut local_bindings: LilyLocalBindings<'a>,
+    expression_node: LilySyntaxNode<&'a LilySyntaxExpression>,
     position: lsp_types::Position,
-) -> std::ops::ControlFlow<StillSyntaxNode<StillSyntaxSymbol<'a>>, StillLocalBindings<'a>> {
+) -> std::ops::ControlFlow<LilySyntaxNode<LilySyntaxSymbol<'a>>, LilyLocalBindings<'a>> {
     if !lsp_range_includes_position(expression_node.range, position) {
         return std::ops::ControlFlow::Continue(local_bindings);
     }
     match expression_node.value {
-        StillSyntaxExpression::Char(_) => std::ops::ControlFlow::Continue(local_bindings),
-        StillSyntaxExpression::Dec(_) => std::ops::ControlFlow::Continue(local_bindings),
-        StillSyntaxExpression::Unt(_) => std::ops::ControlFlow::Continue(local_bindings),
-        StillSyntaxExpression::Int(_) => std::ops::ControlFlow::Continue(local_bindings),
-        StillSyntaxExpression::String { .. } => std::ops::ControlFlow::Continue(local_bindings),
-        StillSyntaxExpression::VariableOrCall {
+        LilySyntaxExpression::Char(_) => std::ops::ControlFlow::Continue(local_bindings),
+        LilySyntaxExpression::Dec(_) => std::ops::ControlFlow::Continue(local_bindings),
+        LilySyntaxExpression::Unt(_) => std::ops::ControlFlow::Continue(local_bindings),
+        LilySyntaxExpression::Int(_) => std::ops::ControlFlow::Continue(local_bindings),
+        LilySyntaxExpression::String { .. } => std::ops::ControlFlow::Continue(local_bindings),
+        LilySyntaxExpression::VariableOrCall {
             variable: variable_node,
             arguments,
         } => {
             if lsp_range_includes_position(variable_node.range, position) {
-                return std::ops::ControlFlow::Break(StillSyntaxNode {
-                    value: StillSyntaxSymbol::Variable {
+                return std::ops::ControlFlow::Break(LilySyntaxNode {
+                    value: LilySyntaxSymbol::Variable {
                         name: &variable_node.value,
                         local_bindings: local_bindings,
                     },
@@ -5106,40 +5100,40 @@ fn still_syntax_expression_find_symbol_at_position<'a>(
             arguments
                 .iter()
                 .try_fold(local_bindings, |local_bindings, argument| {
-                    still_syntax_expression_find_symbol_at_position(
+                    lily_syntax_expression_find_symbol_at_position(
                         type_aliases,
                         choice_types,
                         variable_declarations,
                         scope_declaration,
                         local_bindings,
-                        still_syntax_node_as_ref(argument),
+                        lily_syntax_node_as_ref(argument),
                         position,
                     )
                 })
         }
-        StillSyntaxExpression::Match {
+        LilySyntaxExpression::Match {
             matched: matched_node,
             cases,
         } => {
-            local_bindings = still_syntax_expression_find_symbol_at_position(
+            local_bindings = lily_syntax_expression_find_symbol_at_position(
                 type_aliases,
                 choice_types,
                 variable_declarations,
                 scope_declaration,
                 local_bindings,
-                still_syntax_node_unbox(matched_node),
+                lily_syntax_node_unbox(matched_node),
                 position,
             )?;
             cases
                 .iter()
                 .try_fold(local_bindings, |mut local_bindings, case| {
                     if let Some(case_pattern_node) = &case.pattern
-                        && let Some(found_symbol) = still_syntax_pattern_find_symbol_at_position(
+                        && let Some(found_symbol) = lily_syntax_pattern_find_symbol_at_position(
                             type_aliases,
                             choice_types,
                             scope_declaration,
-                            case.result.as_ref().map(still_syntax_node_as_ref),
-                            still_syntax_node_as_ref(case_pattern_node),
+                            case.result.as_ref().map(lily_syntax_node_as_ref),
+                            lily_syntax_node_as_ref(case_pattern_node),
                             position,
                         )
                     {
@@ -5150,26 +5144,26 @@ fn still_syntax_expression_find_symbol_at_position<'a>(
                     lsp_range_includes_position(case_result_node.range, position)
                     {
                         if let Some(case_pattern_node) = &case.pattern {
-                            let mut introduced_bindings: Vec<StillLocalBinding> =
+                            let mut introduced_bindings: Vec<LilyLocalBinding> =
                                 Vec::with_capacity(1);
-                            still_syntax_pattern_bindings_into(
+                            lily_syntax_pattern_bindings_into(
                                 &mut introduced_bindings,
                                 type_aliases,
                                 choice_types,
-                                still_syntax_node_as_ref(case_pattern_node),
+                                lily_syntax_node_as_ref(case_pattern_node),
                             );
                             local_bindings.push((
-                                still_syntax_node_as_ref(case_result_node),
+                                lily_syntax_node_as_ref(case_result_node),
                                 introduced_bindings,
                             ));
                         }
-                        still_syntax_expression_find_symbol_at_position(
+                        lily_syntax_expression_find_symbol_at_position(
                             type_aliases,
                             choice_types,
                             variable_declarations,
                             scope_declaration,
                             local_bindings,
-                            still_syntax_node_as_ref(case_result_node),
+                            lily_syntax_node_as_ref(case_result_node),
                             position,
                         )
                     } else {
@@ -5177,18 +5171,18 @@ fn still_syntax_expression_find_symbol_at_position<'a>(
                     }
                 })
         }
-        StillSyntaxExpression::Lambda {
+        LilySyntaxExpression::Lambda {
             parameters,
             arrow_key_symbol_range: _,
             result: maybe_result,
         } => {
             if let Some(found_symbol) = parameters.iter().find_map(|parameter| {
-                still_syntax_pattern_find_symbol_at_position(
+                lily_syntax_pattern_find_symbol_at_position(
                     type_aliases,
                     choice_types,
                     scope_declaration,
-                    maybe_result.as_ref().map(still_syntax_node_unbox),
-                    still_syntax_node_as_ref(parameter),
+                    maybe_result.as_ref().map(lily_syntax_node_unbox),
+                    lily_syntax_node_as_ref(parameter),
                     position,
                 )
             }) {
@@ -5196,37 +5190,36 @@ fn still_syntax_expression_find_symbol_at_position<'a>(
             }
             match maybe_result {
                 Some(result_node) => {
-                    let mut introduced_bindings: Vec<StillLocalBinding> = Vec::with_capacity(1);
+                    let mut introduced_bindings: Vec<LilyLocalBinding> = Vec::with_capacity(1);
                     for parameter_node in parameters {
-                        still_syntax_pattern_bindings_into(
+                        lily_syntax_pattern_bindings_into(
                             &mut introduced_bindings,
                             type_aliases,
                             choice_types,
-                            still_syntax_node_as_ref(parameter_node),
+                            lily_syntax_node_as_ref(parameter_node),
                         );
                     }
-                    local_bindings
-                        .push((still_syntax_node_unbox(result_node), introduced_bindings));
-                    still_syntax_expression_find_symbol_at_position(
+                    local_bindings.push((lily_syntax_node_unbox(result_node), introduced_bindings));
+                    lily_syntax_expression_find_symbol_at_position(
                         type_aliases,
                         choice_types,
                         variable_declarations,
                         scope_declaration,
                         local_bindings,
-                        still_syntax_node_unbox(result_node),
+                        lily_syntax_node_unbox(result_node),
                         position,
                     )
                 }
                 None => std::ops::ControlFlow::Continue(local_bindings),
             }
         }
-        StillSyntaxExpression::AfterLocalVariable {
+        LilySyntaxExpression::AfterLocalVariable {
             declaration: declarations,
             result: maybe_result,
         } => {
-            let mut introduced_bindings: Vec<StillLocalBinding> = Vec::with_capacity(1);
+            let mut introduced_bindings: Vec<LilyLocalBinding> = Vec::with_capacity(1);
             if let Some(local_declaration_node) = declarations {
-                introduced_bindings.push(still_syntax_local_declaration_introduced_bindings_into(
+                introduced_bindings.push(lily_syntax_local_declaration_introduced_bindings_into(
                     &introduced_bindings,
                     type_aliases,
                     choice_types,
@@ -5239,85 +5232,85 @@ fn still_syntax_expression_find_symbol_at_position<'a>(
                 declarations
                     .iter()
                     .try_fold(local_bindings, |local_bindings, declaration| {
-                        still_syntax_local_declaration_find_symbol_at_position(
+                        lily_syntax_local_declaration_find_symbol_at_position(
                             type_aliases,
                             choice_types,
                             variable_declarations,
                             local_bindings,
                             scope_declaration,
                             expression_node,
-                            still_syntax_node_as_ref(declaration),
+                            lily_syntax_node_as_ref(declaration),
                             position,
                         )
                     })?;
             match maybe_result {
-                Some(result_node) => still_syntax_expression_find_symbol_at_position(
+                Some(result_node) => lily_syntax_expression_find_symbol_at_position(
                     type_aliases,
                     choice_types,
                     variable_declarations,
                     scope_declaration,
                     local_bindings,
-                    still_syntax_node_unbox(result_node),
+                    lily_syntax_node_unbox(result_node),
                     position,
                 ),
                 None => std::ops::ControlFlow::Continue(local_bindings),
             }
         }
-        StillSyntaxExpression::Vec(elements) => {
+        LilySyntaxExpression::Vec(elements) => {
             elements
                 .iter()
                 .try_fold(local_bindings, |local_bindings, element| {
-                    still_syntax_expression_find_symbol_at_position(
+                    lily_syntax_expression_find_symbol_at_position(
                         type_aliases,
                         choice_types,
                         variable_declarations,
                         scope_declaration,
                         local_bindings,
-                        still_syntax_node_as_ref(element),
+                        lily_syntax_node_as_ref(element),
                         position,
                     )
                 })
         }
-        StillSyntaxExpression::Parenthesized(None) => {
+        LilySyntaxExpression::Parenthesized(None) => {
             std::ops::ControlFlow::Continue(local_bindings)
         }
-        StillSyntaxExpression::Parenthesized(Some(in_parens)) => {
-            still_syntax_expression_find_symbol_at_position(
+        LilySyntaxExpression::Parenthesized(Some(in_parens)) => {
+            lily_syntax_expression_find_symbol_at_position(
                 type_aliases,
                 choice_types,
                 variable_declarations,
                 scope_declaration,
                 local_bindings,
-                still_syntax_node_unbox(in_parens),
+                lily_syntax_node_unbox(in_parens),
                 position,
             )
         }
-        StillSyntaxExpression::WithComment {
+        LilySyntaxExpression::WithComment {
             comment: _,
             expression: maybe_expression_after_comment,
         } => match maybe_expression_after_comment {
             None => std::ops::ControlFlow::Continue(local_bindings),
-            Some(expression_node_after_comment) => still_syntax_expression_find_symbol_at_position(
+            Some(expression_node_after_comment) => lily_syntax_expression_find_symbol_at_position(
                 type_aliases,
                 choice_types,
                 variable_declarations,
                 scope_declaration,
                 local_bindings,
-                still_syntax_node_unbox(expression_node_after_comment),
+                lily_syntax_node_unbox(expression_node_after_comment),
                 position,
             ),
         },
-        StillSyntaxExpression::Typed {
+        LilySyntaxExpression::Typed {
             type_: maybe_type,
             closing_colon_range: _,
             expression: maybe_expression_in_typed,
         } => {
             if let Some(found) = maybe_type.as_ref().and_then(|type_node| {
-                still_syntax_type_find_symbol_at_position(
+                lily_syntax_type_find_symbol_at_position(
                     type_aliases,
                     choice_types,
                     scope_declaration,
-                    still_syntax_node_as_ref(type_node),
+                    lily_syntax_node_as_ref(type_node),
                     position,
                 )
             }) {
@@ -5326,13 +5319,13 @@ fn still_syntax_expression_find_symbol_at_position<'a>(
             match maybe_expression_in_typed {
                 None => std::ops::ControlFlow::Continue(local_bindings),
                 Some(expression_node_in_typed) => match &expression_node_in_typed.value {
-                    StillSyntaxExpressionUntyped::Variant {
+                    LilySyntaxExpressionUntyped::Variant {
                         name: name_node,
                         value: maybe_value,
                     } => {
                         if lsp_range_includes_position(name_node.range, position) {
-                            return std::ops::ControlFlow::Break(StillSyntaxNode {
-                                value: StillSyntaxSymbol::Variant {
+                            return std::ops::ControlFlow::Break(LilySyntaxNode {
+                                value: LilySyntaxSymbol::Variant {
                                     name: &name_node.value,
                                     type_: maybe_type.as_ref().map(|n| &n.value),
                                 },
@@ -5340,26 +5333,26 @@ fn still_syntax_expression_find_symbol_at_position<'a>(
                             });
                         }
                         match maybe_value {
-                            Some(value_node) => still_syntax_expression_find_symbol_at_position(
+                            Some(value_node) => lily_syntax_expression_find_symbol_at_position(
                                 type_aliases,
                                 choice_types,
                                 variable_declarations,
                                 scope_declaration,
                                 local_bindings,
-                                still_syntax_node_unbox(value_node),
+                                lily_syntax_node_unbox(value_node),
                                 position,
                             ),
                             None => std::ops::ControlFlow::Continue(local_bindings),
                         }
                     }
-                    StillSyntaxExpressionUntyped::Other(other_expression_in_typed) => {
-                        still_syntax_expression_find_symbol_at_position(
+                    LilySyntaxExpressionUntyped::Other(other_expression_in_typed) => {
+                        lily_syntax_expression_find_symbol_at_position(
                             type_aliases,
                             choice_types,
                             variable_declarations,
                             scope_declaration,
                             local_bindings,
-                            StillSyntaxNode {
+                            LilySyntaxNode {
                                 range: expression_node_in_typed.range,
                                 value: other_expression_in_typed,
                             },
@@ -5369,11 +5362,11 @@ fn still_syntax_expression_find_symbol_at_position<'a>(
                 },
             }
         }
-        StillSyntaxExpression::Record(fields) => {
+        LilySyntaxExpression::Record(fields) => {
             fields
                 .iter()
                 .try_fold(local_bindings, |local_bindings, field| {
-                    still_syntax_expression_field_find_symbol_at_position(
+                    lily_syntax_expression_field_find_symbol_at_position(
                         type_aliases,
                         choice_types,
                         variable_declarations,
@@ -5385,7 +5378,7 @@ fn still_syntax_expression_find_symbol_at_position<'a>(
                     )
                 })
         }
-        StillSyntaxExpression::RecordUpdate {
+        LilySyntaxExpression::RecordUpdate {
             record: maybe_record,
             spread_key_symbol_range: _,
             fields,
@@ -5393,20 +5386,20 @@ fn still_syntax_expression_find_symbol_at_position<'a>(
             if let Some(record_node) = maybe_record
                 && lsp_range_includes_position(record_node.range, position)
             {
-                return still_syntax_expression_find_symbol_at_position(
+                return lily_syntax_expression_find_symbol_at_position(
                     type_aliases,
                     choice_types,
                     variable_declarations,
                     scope_declaration,
                     local_bindings,
-                    still_syntax_node_unbox(record_node),
+                    lily_syntax_node_unbox(record_node),
                     position,
                 );
             }
             fields
                 .iter()
                 .try_fold(local_bindings, |local_bindings, field| {
-                    still_syntax_expression_field_find_symbol_at_position(
+                    lily_syntax_expression_field_find_symbol_at_position(
                         type_aliases,
                         choice_types,
                         variable_declarations,
@@ -5420,22 +5413,22 @@ fn still_syntax_expression_find_symbol_at_position<'a>(
         }
     }
 }
-fn still_syntax_expression_field_find_symbol_at_position<'a>(
-    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
-    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
-    variable_declarations: &std::collections::HashMap<StillName, CompiledVariableDeclarationInfo>,
-    scope_declaration: &'a StillSyntaxDeclaration,
-    local_bindings: StillLocalBindings<'a>,
-    fields: &[StillSyntaxExpressionField],
-    field: &'a StillSyntaxExpressionField,
+fn lily_syntax_expression_field_find_symbol_at_position<'a>(
+    type_aliases: &std::collections::HashMap<LilyName, TypeAliasInfo>,
+    choice_types: &std::collections::HashMap<LilyName, ChoiceTypeInfo>,
+    variable_declarations: &std::collections::HashMap<LilyName, CompiledVariableDeclarationInfo>,
+    scope_declaration: &'a LilySyntaxDeclaration,
+    local_bindings: LilyLocalBindings<'a>,
+    fields: &[LilySyntaxExpressionField],
+    field: &'a LilySyntaxExpressionField,
     position: lsp_types::Position,
-) -> std::ops::ControlFlow<StillSyntaxNode<StillSyntaxSymbol<'a>>, StillLocalBindings<'a>> {
+) -> std::ops::ControlFlow<LilySyntaxNode<LilySyntaxSymbol<'a>>, LilyLocalBindings<'a>> {
     if lsp_range_includes_position(field.name.range, position) {
-        return std::ops::ControlFlow::Break(StillSyntaxNode {
-            value: StillSyntaxSymbol::Field {
+        return std::ops::ControlFlow::Break(LilySyntaxNode {
+            value: LilySyntaxSymbol::Field {
                 name: &field.name.value,
                 value_type: field.value.as_ref().and_then(|field_value_node| {
-                    still_syntax_expression_type_with(
+                    lily_syntax_expression_type_with(
                         type_aliases,
                         choice_types,
                         variable_declarations,
@@ -5446,7 +5439,7 @@ fn still_syntax_expression_field_find_symbol_at_position<'a>(
                                 .map(|binding| (binding.name, binding.type_.clone()))
                                 .collect::<std::collections::HashMap<_, _>>(),
                         ),
-                        still_syntax_node_as_ref(field_value_node),
+                        lily_syntax_node_as_ref(field_value_node),
                     )
                 }),
                 fields_sorted: sorted_field_names(
@@ -5457,45 +5450,45 @@ fn still_syntax_expression_field_find_symbol_at_position<'a>(
         });
     }
     match &field.value {
-        Some(field_value_node) => still_syntax_expression_find_symbol_at_position(
+        Some(field_value_node) => lily_syntax_expression_find_symbol_at_position(
             type_aliases,
             choice_types,
             variable_declarations,
             scope_declaration,
             local_bindings,
-            still_syntax_node_as_ref(field_value_node),
+            lily_syntax_node_as_ref(field_value_node),
             position,
         ),
         None => std::ops::ControlFlow::Continue(local_bindings),
     }
 }
 
-fn still_syntax_local_declaration_find_symbol_at_position<'a>(
-    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
-    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
-    variable_declarations: &std::collections::HashMap<StillName, CompiledVariableDeclarationInfo>,
-    local_bindings: StillLocalBindings<'a>,
-    scope_declaration: &'a StillSyntaxDeclaration,
-    scope_expression: StillSyntaxNode<&'a StillSyntaxExpression>,
-    still_syntax_local_declaration_node: StillSyntaxNode<&'a StillSyntaxLocalVariableDeclaration>,
+fn lily_syntax_local_declaration_find_symbol_at_position<'a>(
+    type_aliases: &std::collections::HashMap<LilyName, TypeAliasInfo>,
+    choice_types: &std::collections::HashMap<LilyName, ChoiceTypeInfo>,
+    variable_declarations: &std::collections::HashMap<LilyName, CompiledVariableDeclarationInfo>,
+    local_bindings: LilyLocalBindings<'a>,
+    scope_declaration: &'a LilySyntaxDeclaration,
+    scope_expression: LilySyntaxNode<&'a LilySyntaxExpression>,
+    lily_syntax_local_declaration_node: LilySyntaxNode<&'a LilySyntaxLocalVariableDeclaration>,
     position: lsp_types::Position,
-) -> std::ops::ControlFlow<StillSyntaxNode<StillSyntaxSymbol<'a>>, StillLocalBindings<'a>> {
-    if !lsp_range_includes_position(still_syntax_local_declaration_node.range, position) {
+) -> std::ops::ControlFlow<LilySyntaxNode<LilySyntaxSymbol<'a>>, LilyLocalBindings<'a>> {
+    if !lsp_range_includes_position(lily_syntax_local_declaration_node.range, position) {
         return std::ops::ControlFlow::Continue(local_bindings);
     }
     if lsp_range_includes_position(
-        still_syntax_local_declaration_node.value.name.range,
+        lily_syntax_local_declaration_node.value.name.range,
         position,
     ) {
-        return std::ops::ControlFlow::Break(StillSyntaxNode {
-            value: StillSyntaxSymbol::LocalVariableDeclarationName {
-                name: &still_syntax_local_declaration_node.value.name.value,
-                type_: still_syntax_local_declaration_node
+        return std::ops::ControlFlow::Break(LilySyntaxNode {
+            value: LilySyntaxSymbol::LocalVariableDeclarationName {
+                name: &lily_syntax_local_declaration_node.value.name.value,
+                type_: lily_syntax_local_declaration_node
                     .value
                     .result
                     .as_ref()
                     .and_then(|result_node| {
-                        still_syntax_expression_type_with(
+                        lily_syntax_expression_type_with(
                             type_aliases,
                             choice_types,
                             variable_declarations,
@@ -5506,22 +5499,22 @@ fn still_syntax_local_declaration_find_symbol_at_position<'a>(
                                     .map(|binding| (binding.name, binding.type_.clone()))
                                     .collect::<std::collections::HashMap<_, _>>(),
                             ),
-                            still_syntax_node_unbox(result_node),
+                            lily_syntax_node_unbox(result_node),
                         )
                     }),
                 scope_expression: scope_expression,
             },
-            range: still_syntax_local_declaration_node.value.name.range,
+            range: lily_syntax_local_declaration_node.value.name.range,
         });
     }
-    match &still_syntax_local_declaration_node.value.result {
-        Some(result_node) => still_syntax_expression_find_symbol_at_position(
+    match &lily_syntax_local_declaration_node.value.result {
+        Some(result_node) => lily_syntax_expression_find_symbol_at_position(
             type_aliases,
             choice_types,
             variable_declarations,
             scope_declaration,
             local_bindings,
-            still_syntax_node_unbox(result_node),
+            lily_syntax_node_unbox(result_node),
             position,
         ),
         None => std::ops::ControlFlow::Continue(local_bindings),
@@ -5530,46 +5523,46 @@ fn still_syntax_local_declaration_find_symbol_at_position<'a>(
 
 // //
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum StillSymbolToReference<'a> {
-    TypeVariable(&'a StillName),
+enum LilySymbolToReference<'a> {
+    TypeVariable(&'a LilyName),
     // type is tracked separately from VariableOrVariant because e.g. variants and
     // type names are allowed to overlap
     Type {
-        name: &'a StillName,
+        name: &'a LilyName,
         including_declaration_name: bool,
     },
     Variable {
-        name: &'a StillName,
+        name: &'a LilyName,
         including_declaration_name: bool,
     },
     Variant {
-        origin_type_name: Option<&'a StillName>,
-        name: &'a StillName,
+        origin_type_name: Option<&'a LilyName>,
+        name: &'a LilyName,
         including_declaration_name: bool,
     },
     LocalBinding {
-        name: &'a StillName,
+        name: &'a LilyName,
         including_local_declaration_name: bool,
     },
     Field {
-        name: &'a StillName,
-        fields_sorted: &'a [StillName],
+        name: &'a LilyName,
+        fields_sorted: &'a [LilyName],
     },
 }
 
-fn still_syntax_project_uses_of_symbol_into(
+fn lily_syntax_project_uses_of_symbol_into(
     uses_so_far: &mut Vec<lsp_types::Range>,
-    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
-    still_syntax_project: &StillSyntaxProject,
-    symbol_to_collect_uses_of: StillSymbolToReference,
+    type_aliases: &std::collections::HashMap<LilyName, TypeAliasInfo>,
+    lily_syntax_project: &LilySyntaxProject,
+    symbol_to_collect_uses_of: LilySymbolToReference,
 ) {
-    for documented_declaration in still_syntax_project
+    for documented_declaration in lily_syntax_project
         .declarations
         .iter()
         .filter_map(|declaration_or_err| declaration_or_err.as_ref().ok())
     {
         if let Some(declaration_node) = &documented_declaration.declaration {
-            still_syntax_declaration_uses_of_symbol_into(
+            lily_syntax_declaration_uses_of_symbol_into(
                 uses_so_far,
                 type_aliases,
                 &declaration_node.value,
@@ -5579,21 +5572,21 @@ fn still_syntax_project_uses_of_symbol_into(
     }
 }
 
-fn still_syntax_declaration_uses_of_symbol_into(
+fn lily_syntax_declaration_uses_of_symbol_into(
     uses_so_far: &mut Vec<lsp_types::Range>,
-    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
-    still_syntax_declaration: &StillSyntaxDeclaration,
-    symbol_to_collect_uses_of: StillSymbolToReference,
+    type_aliases: &std::collections::HashMap<LilyName, TypeAliasInfo>,
+    lily_syntax_declaration: &LilySyntaxDeclaration,
+    symbol_to_collect_uses_of: LilySymbolToReference,
 ) {
-    match still_syntax_declaration {
-        StillSyntaxDeclaration::ChoiceType {
+    match lily_syntax_declaration {
+        LilySyntaxDeclaration::ChoiceType {
             name: maybe_choice_type_name,
             parameters,
             variants,
         } => {
             if let Some(name_node) = maybe_choice_type_name
                 && symbol_to_collect_uses_of
-                    == (StillSymbolToReference::Type {
+                    == (LilySymbolToReference::Type {
                         name: &name_node.value,
                         including_declaration_name: true,
                     })
@@ -5602,14 +5595,14 @@ fn still_syntax_declaration_uses_of_symbol_into(
             }
             'parameter_traversal: for parameter_node in parameters {
                 if symbol_to_collect_uses_of
-                    == StillSymbolToReference::TypeVariable(&parameter_node.value)
+                    == LilySymbolToReference::TypeVariable(&parameter_node.value)
                 {
                     uses_so_far.push(parameter_node.range);
                     break 'parameter_traversal;
                 }
             }
             for variant in variants {
-                if let StillSymbolToReference::Variant {
+                if let LilySymbolToReference::Variant {
                     name: variant_to_collect_uses_of_name,
                     including_declaration_name: true,
                     origin_type_name: variant_to_collect_uses_of_maybe_origin_type,
@@ -5631,15 +5624,15 @@ fn still_syntax_declaration_uses_of_symbol_into(
                     return;
                 }
                 for variant0_value in variant.value.iter() {
-                    still_syntax_type_uses_of_symbol_into(
+                    lily_syntax_type_uses_of_symbol_into(
                         uses_so_far,
-                        still_syntax_node_as_ref(variant0_value),
+                        lily_syntax_node_as_ref(variant0_value),
                         symbol_to_collect_uses_of,
                     );
                 }
             }
         }
-        StillSyntaxDeclaration::TypeAlias {
+        LilySyntaxDeclaration::TypeAlias {
             type_keyword_range: _,
             name: maybe_name,
             parameters,
@@ -5648,7 +5641,7 @@ fn still_syntax_declaration_uses_of_symbol_into(
         } => {
             if let Some(name_node) = maybe_name
                 && (symbol_to_collect_uses_of
-                    == (StillSymbolToReference::Type {
+                    == (LilySymbolToReference::Type {
                         name: &name_node.value,
 
                         including_declaration_name: true,
@@ -5658,26 +5651,26 @@ fn still_syntax_declaration_uses_of_symbol_into(
             }
             'parameter_traversal: for parameter_node in parameters {
                 if symbol_to_collect_uses_of
-                    == StillSymbolToReference::TypeVariable(&parameter_node.value)
+                    == LilySymbolToReference::TypeVariable(&parameter_node.value)
                 {
                     uses_so_far.push(parameter_node.range);
                     break 'parameter_traversal;
                 }
             }
             if let Some(type_node) = maybe_type {
-                still_syntax_type_uses_of_symbol_into(
+                lily_syntax_type_uses_of_symbol_into(
                     uses_so_far,
-                    still_syntax_node_as_ref(type_node),
+                    lily_syntax_node_as_ref(type_node),
                     symbol_to_collect_uses_of,
                 );
             }
         }
-        StillSyntaxDeclaration::Variable {
+        LilySyntaxDeclaration::Variable {
             name: name_node,
             result: maybe_result,
         } => {
             if symbol_to_collect_uses_of
-                == (StillSymbolToReference::Variable {
+                == (LilySymbolToReference::Variable {
                     name: &name_node.value,
                     including_declaration_name: true,
                 })
@@ -5685,11 +5678,11 @@ fn still_syntax_declaration_uses_of_symbol_into(
                 uses_so_far.push(name_node.range);
             }
             if let Some(result_node) = maybe_result {
-                still_syntax_expression_uses_of_symbol_into(
+                lily_syntax_expression_uses_of_symbol_into(
                     uses_so_far,
                     type_aliases,
                     &[],
-                    still_syntax_node_as_ref(result_node),
+                    lily_syntax_node_as_ref(result_node),
                     symbol_to_collect_uses_of,
                 );
             }
@@ -5697,17 +5690,17 @@ fn still_syntax_declaration_uses_of_symbol_into(
     }
 }
 
-fn still_syntax_type_uses_of_symbol_into(
+fn lily_syntax_type_uses_of_symbol_into(
     uses_so_far: &mut Vec<lsp_types::Range>,
-    still_syntax_type_node: StillSyntaxNode<&StillSyntaxType>,
-    symbol_to_collect_uses_of: StillSymbolToReference,
+    lily_syntax_type_node: LilySyntaxNode<&LilySyntaxType>,
+    symbol_to_collect_uses_of: LilySymbolToReference,
 ) {
-    match still_syntax_type_node.value {
-        StillSyntaxType::Construct {
+    match lily_syntax_type_node.value {
+        LilySyntaxType::Construct {
             name: variable,
             arguments,
         } => {
-            if let StillSymbolToReference::Type {
+            if let LilySymbolToReference::Type {
                 name: symbol_name,
                 including_declaration_name: _,
             } = symbol_to_collect_uses_of
@@ -5722,55 +5715,55 @@ fn still_syntax_type_uses_of_symbol_into(
                 });
             }
             for argument in arguments {
-                still_syntax_type_uses_of_symbol_into(
+                lily_syntax_type_uses_of_symbol_into(
                     uses_so_far,
-                    still_syntax_node_as_ref(argument),
+                    lily_syntax_node_as_ref(argument),
                     symbol_to_collect_uses_of,
                 );
             }
         }
-        StillSyntaxType::Function {
+        LilySyntaxType::Function {
             inputs,
             arrow_key_symbol_range: _,
             output: maybe_output,
         } => {
             for input in inputs {
-                still_syntax_type_uses_of_symbol_into(
+                lily_syntax_type_uses_of_symbol_into(
                     uses_so_far,
-                    still_syntax_node_as_ref(input),
+                    lily_syntax_node_as_ref(input),
                     symbol_to_collect_uses_of,
                 );
             }
             if let Some(output_node) = maybe_output {
-                still_syntax_type_uses_of_symbol_into(
+                lily_syntax_type_uses_of_symbol_into(
                     uses_so_far,
-                    still_syntax_node_unbox(output_node),
+                    lily_syntax_node_unbox(output_node),
                     symbol_to_collect_uses_of,
                 );
             }
         }
-        StillSyntaxType::Parenthesized(None) => {}
-        StillSyntaxType::Parenthesized(Some(in_parens)) => {
-            still_syntax_type_uses_of_symbol_into(
+        LilySyntaxType::Parenthesized(None) => {}
+        LilySyntaxType::Parenthesized(Some(in_parens)) => {
+            lily_syntax_type_uses_of_symbol_into(
                 uses_so_far,
-                still_syntax_node_unbox(in_parens),
+                lily_syntax_node_unbox(in_parens),
                 symbol_to_collect_uses_of,
             );
         }
-        StillSyntaxType::WithComment {
+        LilySyntaxType::WithComment {
             comment: _,
             type_: maybe_type_after_comment,
         } => {
             if let Some(type_node_after_comment) = maybe_type_after_comment {
-                still_syntax_type_uses_of_symbol_into(
+                lily_syntax_type_uses_of_symbol_into(
                     uses_so_far,
-                    still_syntax_node_unbox(type_node_after_comment),
+                    lily_syntax_node_unbox(type_node_after_comment),
                     symbol_to_collect_uses_of,
                 );
             }
         }
-        StillSyntaxType::Record(fields) => {
-            if let StillSymbolToReference::Field {
+        LilySyntaxType::Record(fields) => {
+            if let LilySymbolToReference::Field {
                 name: field_symbol_name,
                 fields_sorted: symbol_fields_sorted,
             } = symbol_to_collect_uses_of
@@ -5786,52 +5779,52 @@ fn still_syntax_type_uses_of_symbol_into(
             }
             for field in fields {
                 if let Some(field_value_node) = &field.value {
-                    still_syntax_type_uses_of_symbol_into(
+                    lily_syntax_type_uses_of_symbol_into(
                         uses_so_far,
-                        still_syntax_node_as_ref(field_value_node),
+                        lily_syntax_node_as_ref(field_value_node),
                         symbol_to_collect_uses_of,
                     );
                 }
             }
         }
-        StillSyntaxType::Variable(variable) => {
-            if symbol_to_collect_uses_of == StillSymbolToReference::TypeVariable(variable) {
-                uses_so_far.push(still_syntax_type_node.range);
+        LilySyntaxType::Variable(variable) => {
+            if symbol_to_collect_uses_of == LilySymbolToReference::TypeVariable(variable) {
+                uses_so_far.push(lily_syntax_type_node.range);
             }
         }
     }
 }
 
-fn still_syntax_expression_uses_of_symbol_into(
+fn lily_syntax_expression_uses_of_symbol_into(
     uses_so_far: &mut Vec<lsp_types::Range>,
-    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
+    type_aliases: &std::collections::HashMap<LilyName, TypeAliasInfo>,
     local_bindings: &[&str],
-    still_syntax_expression_node: StillSyntaxNode<&StillSyntaxExpression>,
-    symbol_to_collect_uses_of: StillSymbolToReference,
+    lily_syntax_expression_node: LilySyntaxNode<&LilySyntaxExpression>,
+    symbol_to_collect_uses_of: LilySymbolToReference,
 ) {
-    match still_syntax_expression_node.value {
-        StillSyntaxExpression::Unt(_) => {}
-        StillSyntaxExpression::Int(_) => {}
-        StillSyntaxExpression::Dec(_) => {}
-        StillSyntaxExpression::Char(_) => {}
-        StillSyntaxExpression::String { .. } => {}
-        StillSyntaxExpression::VariableOrCall {
+    match lily_syntax_expression_node.value {
+        LilySyntaxExpression::Unt(_) => {}
+        LilySyntaxExpression::Int(_) => {}
+        LilySyntaxExpression::Dec(_) => {}
+        LilySyntaxExpression::Char(_) => {}
+        LilySyntaxExpression::String { .. } => {}
+        LilySyntaxExpression::VariableOrCall {
             variable: variable_node,
             arguments,
         } => {
             let name: &str = variable_node.value.as_str();
             let name_is_symbol_use: bool = match symbol_to_collect_uses_of {
-                StillSymbolToReference::LocalBinding {
+                LilySymbolToReference::LocalBinding {
                     name: symbol_name,
                     including_local_declaration_name: _,
                 } => {
                     // fairly certain we can skip the local_bindings check and collection
                     // since ::LocalBinding is only passed
-                    // into still_syntax_expression_uses_of_symbol_into
+                    // into lily_syntax_expression_uses_of_symbol_into
                     // when checking within a scope expression
                     symbol_name == name && local_bindings.contains(&name)
                 }
-                StillSymbolToReference::Variable {
+                LilySymbolToReference::Variable {
                     name: symbol_name,
                     including_declaration_name: _,
                 } => symbol_name == name,
@@ -5841,32 +5834,32 @@ fn still_syntax_expression_uses_of_symbol_into(
                 uses_so_far.push(variable_node.range);
             }
             for argument_node in arguments {
-                still_syntax_expression_uses_of_symbol_into(
+                lily_syntax_expression_uses_of_symbol_into(
                     uses_so_far,
                     type_aliases,
                     local_bindings,
-                    still_syntax_node_as_ref(argument_node),
+                    lily_syntax_node_as_ref(argument_node),
                     symbol_to_collect_uses_of,
                 );
             }
         }
-        StillSyntaxExpression::Match {
+        LilySyntaxExpression::Match {
             matched: matched_node,
             cases,
         } => {
-            still_syntax_expression_uses_of_symbol_into(
+            lily_syntax_expression_uses_of_symbol_into(
                 uses_so_far,
                 type_aliases,
                 local_bindings,
-                still_syntax_node_unbox(matched_node),
+                lily_syntax_node_unbox(matched_node),
                 symbol_to_collect_uses_of,
             );
             for case in cases {
                 if let Some(case_pattern_node) = &case.pattern {
-                    still_syntax_pattern_uses_of_symbol_into(
+                    lily_syntax_pattern_uses_of_symbol_into(
                         uses_so_far,
                         type_aliases,
-                        still_syntax_node_as_ref(case_pattern_node),
+                        lily_syntax_node_as_ref(case_pattern_node),
                         symbol_to_collect_uses_of,
                     );
                 }
@@ -5874,31 +5867,31 @@ fn still_syntax_expression_uses_of_symbol_into(
                     let mut local_bindings_including_from_case_pattern: Vec<&str> =
                         local_bindings.to_vec();
                     if let Some(case_pattern_node) = &case.pattern {
-                        still_syntax_pattern_binding_names_into(
+                        lily_syntax_pattern_binding_names_into(
                             &mut local_bindings_including_from_case_pattern,
-                            still_syntax_node_as_ref(case_pattern_node),
+                            lily_syntax_node_as_ref(case_pattern_node),
                         );
                     }
-                    still_syntax_expression_uses_of_symbol_into(
+                    lily_syntax_expression_uses_of_symbol_into(
                         uses_so_far,
                         type_aliases,
                         &local_bindings_including_from_case_pattern,
-                        still_syntax_node_as_ref(case_result_node),
+                        lily_syntax_node_as_ref(case_result_node),
                         symbol_to_collect_uses_of,
                     );
                 }
             }
         }
-        StillSyntaxExpression::Lambda {
+        LilySyntaxExpression::Lambda {
             parameters,
             arrow_key_symbol_range: _,
             result: maybe_result,
         } => {
             for parameter_node in parameters {
-                still_syntax_pattern_uses_of_symbol_into(
+                lily_syntax_pattern_uses_of_symbol_into(
                     uses_so_far,
                     type_aliases,
-                    still_syntax_node_as_ref(parameter_node),
+                    lily_syntax_node_as_ref(parameter_node),
                     symbol_to_collect_uses_of,
                 );
             }
@@ -5906,21 +5899,21 @@ fn still_syntax_expression_uses_of_symbol_into(
                 let mut local_bindings_including_from_lambda_parameters: Vec<&str> =
                     local_bindings.to_vec();
                 for parameter_node in parameters {
-                    still_syntax_pattern_binding_names_into(
+                    lily_syntax_pattern_binding_names_into(
                         &mut local_bindings_including_from_lambda_parameters,
-                        still_syntax_node_as_ref(parameter_node),
+                        lily_syntax_node_as_ref(parameter_node),
                     );
                 }
-                still_syntax_expression_uses_of_symbol_into(
+                lily_syntax_expression_uses_of_symbol_into(
                     uses_so_far,
                     type_aliases,
                     &local_bindings_including_from_lambda_parameters,
-                    still_syntax_node_unbox(result_node),
+                    lily_syntax_node_unbox(result_node),
                     symbol_to_collect_uses_of,
                 );
             }
         }
-        StillSyntaxExpression::AfterLocalVariable {
+        LilySyntaxExpression::AfterLocalVariable {
             declaration: maybe_declaration,
             result: maybe_result,
         } => {
@@ -5931,7 +5924,7 @@ fn still_syntax_expression_uses_of_symbol_into(
                     .push(&local_declaration_node.value.name.value);
             }
             if let Some(local_declaration_node) = maybe_declaration {
-                still_syntax_local_variable_declaration_uses_of_symbol_into(
+                lily_syntax_local_variable_declaration_uses_of_symbol_into(
                     uses_so_far,
                     type_aliases,
                     &local_bindings_including_local_declaration_introduced,
@@ -5940,69 +5933,69 @@ fn still_syntax_expression_uses_of_symbol_into(
                 );
             }
             if let Some(result) = maybe_result {
-                still_syntax_expression_uses_of_symbol_into(
+                lily_syntax_expression_uses_of_symbol_into(
                     uses_so_far,
                     type_aliases,
                     &local_bindings_including_local_declaration_introduced,
-                    still_syntax_node_unbox(result),
+                    lily_syntax_node_unbox(result),
                     symbol_to_collect_uses_of,
                 );
             }
         }
-        StillSyntaxExpression::Vec(elements) => {
+        LilySyntaxExpression::Vec(elements) => {
             for element_node in elements {
-                still_syntax_expression_uses_of_symbol_into(
+                lily_syntax_expression_uses_of_symbol_into(
                     uses_so_far,
                     type_aliases,
                     local_bindings,
-                    still_syntax_node_as_ref(element_node),
+                    lily_syntax_node_as_ref(element_node),
                     symbol_to_collect_uses_of,
                 );
             }
         }
-        StillSyntaxExpression::Parenthesized(None) => {}
-        StillSyntaxExpression::Parenthesized(Some(in_parens)) => {
-            still_syntax_expression_uses_of_symbol_into(
+        LilySyntaxExpression::Parenthesized(None) => {}
+        LilySyntaxExpression::Parenthesized(Some(in_parens)) => {
+            lily_syntax_expression_uses_of_symbol_into(
                 uses_so_far,
                 type_aliases,
                 local_bindings,
-                still_syntax_node_unbox(in_parens),
+                lily_syntax_node_unbox(in_parens),
                 symbol_to_collect_uses_of,
             );
         }
-        StillSyntaxExpression::WithComment {
+        LilySyntaxExpression::WithComment {
             comment: _,
             expression: maybe_expression_after_comment,
         } => {
             if let Some(expression_node_after_comment) = maybe_expression_after_comment {
-                still_syntax_expression_uses_of_symbol_into(
+                lily_syntax_expression_uses_of_symbol_into(
                     uses_so_far,
                     type_aliases,
                     local_bindings,
-                    still_syntax_node_unbox(expression_node_after_comment),
+                    lily_syntax_node_unbox(expression_node_after_comment),
                     symbol_to_collect_uses_of,
                 );
             }
         }
-        StillSyntaxExpression::Typed {
+        LilySyntaxExpression::Typed {
             type_: maybe_type,
             closing_colon_range: _,
             expression: maybe_expression_in_typed,
         } => {
             if let Some(type_node) = maybe_type {
-                still_syntax_type_uses_of_symbol_into(
+                lily_syntax_type_uses_of_symbol_into(
                     uses_so_far,
-                    still_syntax_node_as_ref(type_node),
+                    lily_syntax_node_as_ref(type_node),
                     symbol_to_collect_uses_of,
                 );
             }
             if let Some(expression_node_in_typed) = maybe_expression_in_typed {
                 match &expression_node_in_typed.value {
-                    StillSyntaxExpressionUntyped::Variant {
+                    LilySyntaxExpressionUntyped::Variant {
                         name: name_node,
                         value: maybe_value,
                     } => {
-                        if let StillSymbolToReference::Variant {
+                        if let LilySymbolToReference::Variant {
                             name: symbol_name,
                             including_declaration_name: _,
                             origin_type_name: variant_to_collect_uses_of_maybe_origin_type_name,
@@ -6010,9 +6003,9 @@ fn still_syntax_expression_uses_of_symbol_into(
                             && symbol_name == name_node.value.as_str()
                             && let maybe_origin_choice_type_name =
                                 maybe_type.as_ref().and_then(|type_node| {
-                                    still_syntax_type_to_choice_type(
+                                    lily_syntax_type_to_choice_type(
                                         type_aliases,
-                                        still_syntax_node_as_ref(type_node),
+                                        lily_syntax_node_as_ref(type_node),
                                     )
                                     .map(|(origin_choice_type_name, _)| origin_choice_type_name)
                                 })
@@ -6030,21 +6023,21 @@ fn still_syntax_expression_uses_of_symbol_into(
                             uses_so_far.push(name_node.range);
                         }
                         if let Some(value_node) = maybe_value {
-                            still_syntax_expression_uses_of_symbol_into(
+                            lily_syntax_expression_uses_of_symbol_into(
                                 uses_so_far,
                                 type_aliases,
                                 local_bindings,
-                                still_syntax_node_unbox(value_node),
+                                lily_syntax_node_unbox(value_node),
                                 symbol_to_collect_uses_of,
                             );
                         }
                     }
-                    StillSyntaxExpressionUntyped::Other(other_expression_in_typed) => {
-                        still_syntax_expression_uses_of_symbol_into(
+                    LilySyntaxExpressionUntyped::Other(other_expression_in_typed) => {
+                        lily_syntax_expression_uses_of_symbol_into(
                             uses_so_far,
                             type_aliases,
                             local_bindings,
-                            StillSyntaxNode {
+                            LilySyntaxNode {
                                 range: expression_node_in_typed.range,
                                 value: other_expression_in_typed,
                             },
@@ -6054,8 +6047,8 @@ fn still_syntax_expression_uses_of_symbol_into(
                 }
             }
         }
-        StillSyntaxExpression::Record(fields) => {
-            if let StillSymbolToReference::Field {
+        LilySyntaxExpression::Record(fields) => {
+            if let LilySymbolToReference::Field {
                 name: field_symbol_name,
                 fields_sorted: symbol_fields_sorted,
             } = symbol_to_collect_uses_of
@@ -6071,37 +6064,37 @@ fn still_syntax_expression_uses_of_symbol_into(
             }
             for field in fields {
                 if let Some(field_value_node) = &field.value {
-                    still_syntax_expression_uses_of_symbol_into(
+                    lily_syntax_expression_uses_of_symbol_into(
                         uses_so_far,
                         type_aliases,
                         local_bindings,
-                        still_syntax_node_as_ref(field_value_node),
+                        lily_syntax_node_as_ref(field_value_node),
                         symbol_to_collect_uses_of,
                     );
                 }
             }
         }
-        StillSyntaxExpression::RecordUpdate {
+        LilySyntaxExpression::RecordUpdate {
             record: maybe_record,
             spread_key_symbol_range: _,
             fields,
         } => {
             if let Some(record_node) = maybe_record {
-                still_syntax_expression_uses_of_symbol_into(
+                lily_syntax_expression_uses_of_symbol_into(
                     uses_so_far,
                     type_aliases,
                     local_bindings,
-                    still_syntax_node_unbox(record_node),
+                    lily_syntax_node_unbox(record_node),
                     symbol_to_collect_uses_of,
                 );
             }
             for field in fields {
                 if let Some(field_value_node) = &field.value {
-                    still_syntax_expression_uses_of_symbol_into(
+                    lily_syntax_expression_uses_of_symbol_into(
                         uses_so_far,
                         type_aliases,
                         local_bindings,
-                        still_syntax_node_as_ref(field_value_node),
+                        lily_syntax_node_as_ref(field_value_node),
                         symbol_to_collect_uses_of,
                     );
                 }
@@ -6110,15 +6103,15 @@ fn still_syntax_expression_uses_of_symbol_into(
     }
 }
 
-fn still_syntax_local_variable_declaration_uses_of_symbol_into(
+fn lily_syntax_local_variable_declaration_uses_of_symbol_into(
     uses_so_far: &mut Vec<lsp_types::Range>,
-    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
+    type_aliases: &std::collections::HashMap<LilyName, TypeAliasInfo>,
     local_bindings: &[&str],
-    local_declaration: &StillSyntaxLocalVariableDeclaration,
-    symbol_to_collect_uses_of: StillSymbolToReference,
+    local_declaration: &LilySyntaxLocalVariableDeclaration,
+    symbol_to_collect_uses_of: LilySymbolToReference,
 ) {
     if symbol_to_collect_uses_of
-        == (StillSymbolToReference::LocalBinding {
+        == (LilySymbolToReference::LocalBinding {
             name: &local_declaration.name.value,
             including_local_declaration_name: true,
         })
@@ -6127,48 +6120,48 @@ fn still_syntax_local_variable_declaration_uses_of_symbol_into(
         return;
     }
     if let Some(result_node) = &local_declaration.result {
-        still_syntax_expression_uses_of_symbol_into(
+        lily_syntax_expression_uses_of_symbol_into(
             uses_so_far,
             type_aliases,
             local_bindings,
-            still_syntax_node_unbox(result_node),
+            lily_syntax_node_unbox(result_node),
             symbol_to_collect_uses_of,
         );
     }
 }
 
-fn still_syntax_pattern_uses_of_symbol_into(
+fn lily_syntax_pattern_uses_of_symbol_into(
     uses_so_far: &mut Vec<lsp_types::Range>,
-    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
-    still_syntax_pattern_node: StillSyntaxNode<&StillSyntaxPattern>,
-    symbol_to_collect_uses_of: StillSymbolToReference,
+    type_aliases: &std::collections::HashMap<LilyName, TypeAliasInfo>,
+    lily_syntax_pattern_node: LilySyntaxNode<&LilySyntaxPattern>,
+    symbol_to_collect_uses_of: LilySymbolToReference,
 ) {
-    match still_syntax_pattern_node.value {
-        StillSyntaxPattern::Unt(_) => {}
-        StillSyntaxPattern::Int(_) => {}
-        StillSyntaxPattern::Char(_) => {}
-        StillSyntaxPattern::String { .. } => {}
-        StillSyntaxPattern::Typed {
+    match lily_syntax_pattern_node.value {
+        LilySyntaxPattern::Unt(_) => {}
+        LilySyntaxPattern::Int(_) => {}
+        LilySyntaxPattern::Char(_) => {}
+        LilySyntaxPattern::String { .. } => {}
+        LilySyntaxPattern::Typed {
             type_: maybe_type,
             closing_colon_range: _,
             pattern: maybe_pattern_node_in_typed,
         } => {
             if let Some(type_node) = maybe_type {
-                still_syntax_type_uses_of_symbol_into(
+                lily_syntax_type_uses_of_symbol_into(
                     uses_so_far,
-                    still_syntax_node_as_ref(type_node),
+                    lily_syntax_node_as_ref(type_node),
                     symbol_to_collect_uses_of,
                 );
             }
             if let Some(pattern_node_in_typed) = maybe_pattern_node_in_typed {
                 match &pattern_node_in_typed.value {
-                    StillSyntaxPatternUntyped::Ignored => {}
-                    StillSyntaxPatternUntyped::Variable { .. } => {}
-                    StillSyntaxPatternUntyped::Variant {
+                    LilySyntaxPatternUntyped::Ignored => {}
+                    LilySyntaxPatternUntyped::Variable { .. } => {}
+                    LilySyntaxPatternUntyped::Variant {
                         name: variant_name_node,
                         value: maybe_value,
                     } => {
-                        if let StillSymbolToReference::Variant {
+                        if let LilySymbolToReference::Variant {
                             name: variant_to_collect_uses_of_name,
                             including_declaration_name: _,
                             origin_type_name: variant_to_collect_uses_of_maybe_origin_type_name,
@@ -6176,9 +6169,9 @@ fn still_syntax_pattern_uses_of_symbol_into(
                             && variant_to_collect_uses_of_name == variant_name_node.value
                             && let maybe_origin_choice_type_name =
                                 maybe_type.as_ref().and_then(|type_node| {
-                                    still_syntax_type_to_choice_type(
+                                    lily_syntax_type_to_choice_type(
                                         type_aliases,
-                                        still_syntax_node_as_ref(type_node),
+                                        lily_syntax_node_as_ref(type_node),
                                     )
                                     .map(|(origin_choice_type_name, _)| origin_choice_type_name)
                                 })
@@ -6196,19 +6189,19 @@ fn still_syntax_pattern_uses_of_symbol_into(
                             uses_so_far.push(variant_name_node.range);
                         }
                         if let Some(value) = maybe_value {
-                            still_syntax_pattern_uses_of_symbol_into(
+                            lily_syntax_pattern_uses_of_symbol_into(
                                 uses_so_far,
                                 type_aliases,
-                                still_syntax_node_unbox(value),
+                                lily_syntax_node_unbox(value),
                                 symbol_to_collect_uses_of,
                             );
                         }
                     }
-                    StillSyntaxPatternUntyped::Other(other_in_typed) => {
-                        still_syntax_pattern_uses_of_symbol_into(
+                    LilySyntaxPatternUntyped::Other(other_in_typed) => {
+                        lily_syntax_pattern_uses_of_symbol_into(
                             uses_so_far,
                             type_aliases,
-                            StillSyntaxNode {
+                            LilySyntaxNode {
                                 range: pattern_node_in_typed.range,
                                 value: other_in_typed,
                             },
@@ -6218,21 +6211,21 @@ fn still_syntax_pattern_uses_of_symbol_into(
                 }
             }
         }
-        StillSyntaxPattern::WithComment {
+        LilySyntaxPattern::WithComment {
             comment: _,
             pattern: maybe_pattern_after_comment,
         } => {
             if let Some(pattern_node_after_comment) = maybe_pattern_after_comment {
-                still_syntax_pattern_uses_of_symbol_into(
+                lily_syntax_pattern_uses_of_symbol_into(
                     uses_so_far,
                     type_aliases,
-                    still_syntax_node_unbox(pattern_node_after_comment),
+                    lily_syntax_node_unbox(pattern_node_after_comment),
                     symbol_to_collect_uses_of,
                 );
             }
         }
-        StillSyntaxPattern::Record(fields) => {
-            if let StillSymbolToReference::Field {
+        LilySyntaxPattern::Record(fields) => {
+            if let LilySymbolToReference::Field {
                 name: field_symbol_name,
                 fields_sorted: symbol_fields_sorted,
             } = symbol_to_collect_uses_of
@@ -6247,10 +6240,10 @@ fn still_syntax_pattern_uses_of_symbol_into(
                 uses_so_far.push(field_symbol_use.name.range);
             }
             for value in fields.iter().filter_map(|field| field.value.as_ref()) {
-                still_syntax_pattern_uses_of_symbol_into(
+                lily_syntax_pattern_uses_of_symbol_into(
                     uses_so_far,
                     type_aliases,
-                    still_syntax_node_as_ref(value),
+                    lily_syntax_node_as_ref(value),
                     symbol_to_collect_uses_of,
                 );
             }
@@ -6258,20 +6251,20 @@ fn still_syntax_pattern_uses_of_symbol_into(
     }
 }
 
-fn still_syntax_local_declaration_introduced_bindings_into<'a>(
-    bindings_so_far: &Vec<StillLocalBinding<'a>>,
-    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
-    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
-    variable_declarations: &std::collections::HashMap<StillName, CompiledVariableDeclarationInfo>,
-    local_declaration: &'a StillSyntaxLocalVariableDeclaration,
-) -> StillLocalBinding<'a> {
-    StillLocalBinding {
+fn lily_syntax_local_declaration_introduced_bindings_into<'a>(
+    bindings_so_far: &Vec<LilyLocalBinding<'a>>,
+    type_aliases: &std::collections::HashMap<LilyName, TypeAliasInfo>,
+    choice_types: &std::collections::HashMap<LilyName, ChoiceTypeInfo>,
+    variable_declarations: &std::collections::HashMap<LilyName, CompiledVariableDeclarationInfo>,
+    local_declaration: &'a LilySyntaxLocalVariableDeclaration,
+) -> LilyLocalBinding<'a> {
+    LilyLocalBinding {
         name: &local_declaration.name.value,
         origin: LocalBindingOrigin::LocalDeclaredVariable {
             name_range: local_declaration.name.range,
         },
         type_: local_declaration.result.as_ref().and_then(|result_node| {
-            still_syntax_expression_type_with(
+            lily_syntax_expression_type_with(
                 type_aliases,
                 choice_types,
                 variable_declarations,
@@ -6282,69 +6275,69 @@ fn still_syntax_local_declaration_introduced_bindings_into<'a>(
                         .map(|binding| (binding.name, binding.type_.clone()))
                         .collect::<std::collections::HashMap<_, _>>(),
                 ),
-                still_syntax_node_unbox(result_node),
+                lily_syntax_node_unbox(result_node),
             )
         }),
     }
 }
 
-fn still_syntax_pattern_bindings_into<'a>(
-    bindings_so_far: &mut Vec<StillLocalBinding<'a>>,
-    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
-    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
-    still_syntax_pattern_node: StillSyntaxNode<&'a StillSyntaxPattern>,
+fn lily_syntax_pattern_bindings_into<'a>(
+    bindings_so_far: &mut Vec<LilyLocalBinding<'a>>,
+    type_aliases: &std::collections::HashMap<LilyName, TypeAliasInfo>,
+    choice_types: &std::collections::HashMap<LilyName, ChoiceTypeInfo>,
+    lily_syntax_pattern_node: LilySyntaxNode<&'a LilySyntaxPattern>,
 ) {
-    match still_syntax_pattern_node.value {
-        StillSyntaxPattern::Char(_) => {}
-        StillSyntaxPattern::Unt(_) => {}
-        StillSyntaxPattern::Int(_) => {}
-        StillSyntaxPattern::String { .. } => {}
-        StillSyntaxPattern::Typed {
+    match lily_syntax_pattern_node.value {
+        LilySyntaxPattern::Char(_) => {}
+        LilySyntaxPattern::Unt(_) => {}
+        LilySyntaxPattern::Int(_) => {}
+        LilySyntaxPattern::String { .. } => {}
+        LilySyntaxPattern::Typed {
             type_: maybe_type,
             closing_colon_range: _,
             pattern: maybe_pattern_node_in_typed,
         } => {
             if let Some(pattern_node_in_typed) = maybe_pattern_node_in_typed {
                 match &pattern_node_in_typed.value {
-                    StillSyntaxPatternUntyped::Ignored => {}
-                    StillSyntaxPatternUntyped::Variable {
+                    LilySyntaxPatternUntyped::Ignored => {}
+                    LilySyntaxPatternUntyped::Variable {
                         overwriting: _,
                         name: variable_name,
                     } => {
-                        bindings_so_far.push(StillLocalBinding {
+                        bindings_so_far.push(LilyLocalBinding {
                             origin: LocalBindingOrigin::PatternVariable(
                                 pattern_node_in_typed.range,
                             ),
                             name: variable_name,
                             type_: maybe_type.as_ref().and_then(|type_node| {
-                                still_syntax_type_to_type(
+                                lily_syntax_type_to_type(
                                     &mut Vec::new(),
                                     type_aliases,
                                     choice_types,
-                                    still_syntax_node_as_ref(type_node),
+                                    lily_syntax_node_as_ref(type_node),
                                 )
                             }),
                         });
                     }
-                    StillSyntaxPatternUntyped::Variant {
+                    LilySyntaxPatternUntyped::Variant {
                         name: _,
                         value: maybe_value,
                     } => {
                         if let Some(value_node) = maybe_value {
-                            still_syntax_pattern_bindings_into(
+                            lily_syntax_pattern_bindings_into(
                                 bindings_so_far,
                                 type_aliases,
                                 choice_types,
-                                still_syntax_node_unbox(value_node),
+                                lily_syntax_node_unbox(value_node),
                             );
                         }
                     }
-                    StillSyntaxPatternUntyped::Other(other_in_typed) => {
-                        still_syntax_pattern_bindings_into(
+                    LilySyntaxPatternUntyped::Other(other_in_typed) => {
+                        lily_syntax_pattern_bindings_into(
                             bindings_so_far,
                             type_aliases,
                             choice_types,
-                            StillSyntaxNode {
+                            LilySyntaxNode {
                                 range: pattern_node_in_typed.range,
                                 value: other_in_typed,
                             },
@@ -6353,71 +6346,71 @@ fn still_syntax_pattern_bindings_into<'a>(
                 }
             }
         }
-        StillSyntaxPattern::WithComment {
+        LilySyntaxPattern::WithComment {
             comment: _,
             pattern: maybe_pattern_after_comment,
         } => {
             if let Some(pattern_node_after_comment) = maybe_pattern_after_comment {
-                still_syntax_pattern_bindings_into(
+                lily_syntax_pattern_bindings_into(
                     bindings_so_far,
                     type_aliases,
                     choice_types,
-                    still_syntax_node_unbox(pattern_node_after_comment),
+                    lily_syntax_node_unbox(pattern_node_after_comment),
                 );
             }
         }
-        StillSyntaxPattern::Record(fields) => {
+        LilySyntaxPattern::Record(fields) => {
             for field in fields {
                 if let Some(field_value_node) = &field.value {
-                    still_syntax_pattern_bindings_into(
+                    lily_syntax_pattern_bindings_into(
                         bindings_so_far,
                         type_aliases,
                         choice_types,
-                        still_syntax_node_as_ref(field_value_node),
+                        lily_syntax_node_as_ref(field_value_node),
                     );
                 }
             }
         }
     }
 }
-fn still_syntax_pattern_binding_names_into<'a>(
+fn lily_syntax_pattern_binding_names_into<'a>(
     bindings_so_far: &mut Vec<&'a str>,
-    still_syntax_pattern_node: StillSyntaxNode<&'a StillSyntaxPattern>,
+    lily_syntax_pattern_node: LilySyntaxNode<&'a LilySyntaxPattern>,
 ) {
-    match still_syntax_pattern_node.value {
-        StillSyntaxPattern::Char(_) => {}
-        StillSyntaxPattern::Unt(_) => {}
-        StillSyntaxPattern::Int(_) => {}
-        StillSyntaxPattern::String { .. } => {}
-        StillSyntaxPattern::Typed {
+    match lily_syntax_pattern_node.value {
+        LilySyntaxPattern::Char(_) => {}
+        LilySyntaxPattern::Unt(_) => {}
+        LilySyntaxPattern::Int(_) => {}
+        LilySyntaxPattern::String { .. } => {}
+        LilySyntaxPattern::Typed {
             type_: _,
             closing_colon_range: _,
             pattern: maybe_pattern_node_in_typed,
         } => {
             if let Some(pattern_node_in_typed) = maybe_pattern_node_in_typed {
                 match &pattern_node_in_typed.value {
-                    StillSyntaxPatternUntyped::Ignored => {}
-                    StillSyntaxPatternUntyped::Variable {
+                    LilySyntaxPatternUntyped::Ignored => {}
+                    LilySyntaxPatternUntyped::Variable {
                         overwriting: _,
                         name: variable_name,
                     } => {
                         bindings_so_far.push(variable_name);
                     }
-                    StillSyntaxPatternUntyped::Variant {
+                    LilySyntaxPatternUntyped::Variant {
                         name: _,
                         value: maybe_value,
                     } => {
                         if let Some(value_node) = maybe_value {
-                            still_syntax_pattern_binding_names_into(
+                            lily_syntax_pattern_binding_names_into(
                                 bindings_so_far,
-                                still_syntax_node_unbox(value_node),
+                                lily_syntax_node_unbox(value_node),
                             );
                         }
                     }
-                    StillSyntaxPatternUntyped::Other(other_in_typed) => {
-                        still_syntax_pattern_binding_names_into(
+                    LilySyntaxPatternUntyped::Other(other_in_typed) => {
+                        lily_syntax_pattern_binding_names_into(
                             bindings_so_far,
-                            StillSyntaxNode {
+                            LilySyntaxNode {
                                 range: pattern_node_in_typed.range,
                                 value: other_in_typed,
                             },
@@ -6426,83 +6419,83 @@ fn still_syntax_pattern_binding_names_into<'a>(
                 }
             }
         }
-        StillSyntaxPattern::WithComment {
+        LilySyntaxPattern::WithComment {
             comment: _,
             pattern: maybe_pattern_after_comment,
         } => {
             if let Some(pattern_node_after_comment) = maybe_pattern_after_comment {
-                still_syntax_pattern_binding_names_into(
+                lily_syntax_pattern_binding_names_into(
                     bindings_so_far,
-                    still_syntax_node_unbox(pattern_node_after_comment),
+                    lily_syntax_node_unbox(pattern_node_after_comment),
                 );
             }
         }
-        StillSyntaxPattern::Record(fields) => {
+        LilySyntaxPattern::Record(fields) => {
             for field in fields {
                 if let Some(field_value_node) = &field.value {
-                    still_syntax_pattern_binding_names_into(
+                    lily_syntax_pattern_binding_names_into(
                         bindings_so_far,
-                        still_syntax_node_as_ref(field_value_node),
+                        lily_syntax_node_as_ref(field_value_node),
                     );
                 }
             }
         }
     }
 }
-fn still_syntax_pattern_binding_types_into<'a>(
-    bindings_so_far: &mut std::collections::HashMap<&'a str, Option<StillType>>,
-    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
-    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
-    still_syntax_pattern_node: StillSyntaxNode<&'a StillSyntaxPattern>,
+fn lily_syntax_pattern_binding_types_into<'a>(
+    bindings_so_far: &mut std::collections::HashMap<&'a str, Option<LilyType>>,
+    type_aliases: &std::collections::HashMap<LilyName, TypeAliasInfo>,
+    choice_types: &std::collections::HashMap<LilyName, ChoiceTypeInfo>,
+    lily_syntax_pattern_node: LilySyntaxNode<&'a LilySyntaxPattern>,
 ) {
-    match still_syntax_pattern_node.value {
-        StillSyntaxPattern::Char(_) => {}
-        StillSyntaxPattern::Unt(_) => {}
-        StillSyntaxPattern::Int(_) => {}
-        StillSyntaxPattern::String { .. } => {}
-        StillSyntaxPattern::Typed {
+    match lily_syntax_pattern_node.value {
+        LilySyntaxPattern::Char(_) => {}
+        LilySyntaxPattern::Unt(_) => {}
+        LilySyntaxPattern::Int(_) => {}
+        LilySyntaxPattern::String { .. } => {}
+        LilySyntaxPattern::Typed {
             type_: maybe_type,
             closing_colon_range: _,
             pattern: maybe_pattern_node_in_typed,
         } => {
             if let Some(pattern_node_in_typed) = maybe_pattern_node_in_typed {
                 match &pattern_node_in_typed.value {
-                    StillSyntaxPatternUntyped::Ignored => {}
-                    StillSyntaxPatternUntyped::Variable {
+                    LilySyntaxPatternUntyped::Ignored => {}
+                    LilySyntaxPatternUntyped::Variable {
                         overwriting: _,
                         name: variable_name,
                     } => {
                         bindings_so_far.insert(
                             variable_name,
                             maybe_type.as_ref().and_then(|type_node| {
-                                still_syntax_type_to_type(
+                                lily_syntax_type_to_type(
                                     &mut Vec::new(),
                                     type_aliases,
                                     choice_types,
-                                    still_syntax_node_as_ref(type_node),
+                                    lily_syntax_node_as_ref(type_node),
                                 )
                             }),
                         );
                     }
-                    StillSyntaxPatternUntyped::Variant {
+                    LilySyntaxPatternUntyped::Variant {
                         name: _,
                         value: maybe_value,
                     } => {
                         if let Some(value_node) = maybe_value {
-                            still_syntax_pattern_binding_types_into(
+                            lily_syntax_pattern_binding_types_into(
                                 bindings_so_far,
                                 type_aliases,
                                 choice_types,
-                                still_syntax_node_unbox(value_node),
+                                lily_syntax_node_unbox(value_node),
                             );
                         }
                     }
-                    StillSyntaxPatternUntyped::Other(other_in_typed) => {
-                        still_syntax_pattern_binding_types_into(
+                    LilySyntaxPatternUntyped::Other(other_in_typed) => {
+                        lily_syntax_pattern_binding_types_into(
                             bindings_so_far,
                             type_aliases,
                             choice_types,
-                            StillSyntaxNode {
+                            LilySyntaxNode {
                                 range: pattern_node_in_typed.range,
                                 value: other_in_typed,
                             },
@@ -6511,27 +6504,27 @@ fn still_syntax_pattern_binding_types_into<'a>(
                 }
             }
         }
-        StillSyntaxPattern::WithComment {
+        LilySyntaxPattern::WithComment {
             comment: _,
             pattern: maybe_pattern_after_comment,
         } => {
             if let Some(pattern_node_after_comment) = maybe_pattern_after_comment {
-                still_syntax_pattern_binding_types_into(
+                lily_syntax_pattern_binding_types_into(
                     bindings_so_far,
                     type_aliases,
                     choice_types,
-                    still_syntax_node_unbox(pattern_node_after_comment),
+                    lily_syntax_node_unbox(pattern_node_after_comment),
                 );
             }
         }
-        StillSyntaxPattern::Record(fields) => {
+        LilySyntaxPattern::Record(fields) => {
             for field in fields {
                 if let Some(field_value_node) = &field.value {
-                    still_syntax_pattern_binding_types_into(
+                    lily_syntax_pattern_binding_types_into(
                         bindings_so_far,
                         type_aliases,
                         choice_types,
-                        still_syntax_node_as_ref(field_value_node),
+                        lily_syntax_node_as_ref(field_value_node),
                     );
                 }
             }
@@ -6539,7 +6532,7 @@ fn still_syntax_pattern_binding_types_into<'a>(
     }
 }
 
-enum StillSyntaxHighlightKind {
+enum LilySyntaxHighlightKind {
     Type,
     TypeVariable,
     Variant,
@@ -6552,32 +6545,32 @@ enum StillSyntaxHighlightKind {
     KeySymbol,
 }
 
-fn still_syntax_highlight_project_into(
-    highlighted_so_far: &mut Vec<StillSyntaxNode<StillSyntaxHighlightKind>>,
-    still_syntax_project: &StillSyntaxProject,
+fn lily_syntax_highlight_project_into(
+    highlighted_so_far: &mut Vec<LilySyntaxNode<LilySyntaxHighlightKind>>,
+    lily_syntax_project: &LilySyntaxProject,
 ) {
-    for documented_declaration in still_syntax_project
+    for documented_declaration in lily_syntax_project
         .declarations
         .iter()
         .filter_map(|declaration_or_err| declaration_or_err.as_ref().ok())
     {
         if let Some(documentation_node) = &documented_declaration.documentation {
-            highlighted_so_far.extend(still_syntax_lines_ranges(documentation_node.range).map(
-                |range| StillSyntaxNode {
+            highlighted_so_far.extend(lily_syntax_lines_ranges(documentation_node.range).map(
+                |range| LilySyntaxNode {
                     range: range,
-                    value: StillSyntaxHighlightKind::Comment,
+                    value: LilySyntaxHighlightKind::Comment,
                 },
             ));
         }
         if let Some(declaration_node) = &documented_declaration.declaration {
-            still_syntax_highlight_declaration_into(
+            lily_syntax_highlight_declaration_into(
                 highlighted_so_far,
-                still_syntax_node_as_ref(declaration_node),
+                lily_syntax_node_as_ref(declaration_node),
             );
         }
     }
 }
-fn still_syntax_lines_ranges(
+fn lily_syntax_lines_ranges(
     comment_lines_range: lsp_types::Range,
 ) -> impl Iterator<Item = lsp_types::Range> {
     std::iter::once(lsp_types::Range {
@@ -6605,166 +6598,166 @@ fn still_syntax_lines_ranges(
     )
 }
 
-fn still_syntax_highlight_declaration_into(
-    highlighted_so_far: &mut Vec<StillSyntaxNode<StillSyntaxHighlightKind>>,
-    still_syntax_declaration_node: StillSyntaxNode<&StillSyntaxDeclaration>,
+fn lily_syntax_highlight_declaration_into(
+    highlighted_so_far: &mut Vec<LilySyntaxNode<LilySyntaxHighlightKind>>,
+    lily_syntax_declaration_node: LilySyntaxNode<&LilySyntaxDeclaration>,
 ) {
-    match still_syntax_declaration_node.value {
-        StillSyntaxDeclaration::Variable {
+    match lily_syntax_declaration_node.value {
+        LilySyntaxDeclaration::Variable {
             name: name_node,
             result: maybe_result,
         } => {
-            highlighted_so_far.push(StillSyntaxNode {
+            highlighted_so_far.push(LilySyntaxNode {
                 range: name_node.range,
-                value: StillSyntaxHighlightKind::DeclaredVariable,
+                value: LilySyntaxHighlightKind::DeclaredVariable,
             });
             if let Some(result_node) = maybe_result {
-                still_syntax_highlight_expression_into(
+                lily_syntax_highlight_expression_into(
                     highlighted_so_far,
-                    still_syntax_node_as_ref(result_node),
+                    lily_syntax_node_as_ref(result_node),
                 );
             }
         }
-        StillSyntaxDeclaration::ChoiceType {
+        LilySyntaxDeclaration::ChoiceType {
             name: maybe_name,
             parameters,
             variants,
         } => {
-            highlighted_so_far.push(StillSyntaxNode {
+            highlighted_so_far.push(LilySyntaxNode {
                 range: lsp_types::Range {
-                    start: still_syntax_declaration_node.range.start,
-                    end: lsp_position_add_characters(still_syntax_declaration_node.range.start, 6),
+                    start: lily_syntax_declaration_node.range.start,
+                    end: lsp_position_add_characters(lily_syntax_declaration_node.range.start, 6),
                 },
-                value: StillSyntaxHighlightKind::KeySymbol,
+                value: LilySyntaxHighlightKind::KeySymbol,
             });
             if let Some(name_node) = maybe_name {
-                highlighted_so_far.push(StillSyntaxNode {
+                highlighted_so_far.push(LilySyntaxNode {
                     range: name_node.range,
-                    value: StillSyntaxHighlightKind::Type,
+                    value: LilySyntaxHighlightKind::Type,
                 });
             }
             for parameter_name_node in parameters {
-                highlighted_so_far.push(StillSyntaxNode {
+                highlighted_so_far.push(LilySyntaxNode {
                     range: parameter_name_node.range,
-                    value: StillSyntaxHighlightKind::TypeVariable,
+                    value: LilySyntaxHighlightKind::TypeVariable,
                 });
             }
             for variant in variants {
-                highlighted_so_far.push(StillSyntaxNode {
+                highlighted_so_far.push(LilySyntaxNode {
                     range: variant.or_key_symbol_range,
-                    value: StillSyntaxHighlightKind::KeySymbol,
+                    value: LilySyntaxHighlightKind::KeySymbol,
                 });
                 if let Some(variant_name_node) = &variant.name {
-                    highlighted_so_far.push(StillSyntaxNode {
+                    highlighted_so_far.push(LilySyntaxNode {
                         range: variant_name_node.range,
-                        value: StillSyntaxHighlightKind::Variant,
+                        value: LilySyntaxHighlightKind::Variant,
                     });
                 }
                 for variant_value_node in variant.value.iter() {
-                    still_syntax_highlight_type_into(
+                    lily_syntax_highlight_type_into(
                         highlighted_so_far,
-                        still_syntax_node_as_ref(variant_value_node),
+                        lily_syntax_node_as_ref(variant_value_node),
                     );
                 }
             }
         }
-        StillSyntaxDeclaration::TypeAlias {
+        LilySyntaxDeclaration::TypeAlias {
             type_keyword_range,
             name: maybe_name,
             parameters,
             equals_key_symbol_range: maybe_equals_key_symbol_range,
             type_: maybe_type,
         } => {
-            highlighted_so_far.push(StillSyntaxNode {
+            highlighted_so_far.push(LilySyntaxNode {
                 range: *type_keyword_range,
-                value: StillSyntaxHighlightKind::KeySymbol,
+                value: LilySyntaxHighlightKind::KeySymbol,
             });
             if let Some(name_node) = maybe_name {
-                highlighted_so_far.push(StillSyntaxNode {
+                highlighted_so_far.push(LilySyntaxNode {
                     range: name_node.range,
-                    value: StillSyntaxHighlightKind::Type,
+                    value: LilySyntaxHighlightKind::Type,
                 });
             }
             for parameter_name_node in parameters {
-                highlighted_so_far.push(StillSyntaxNode {
+                highlighted_so_far.push(LilySyntaxNode {
                     range: parameter_name_node.range,
-                    value: StillSyntaxHighlightKind::TypeVariable,
+                    value: LilySyntaxHighlightKind::TypeVariable,
                 });
             }
             if let &Some(equals_key_symbol_range) = maybe_equals_key_symbol_range {
-                highlighted_so_far.push(StillSyntaxNode {
+                highlighted_so_far.push(LilySyntaxNode {
                     range: equals_key_symbol_range,
-                    value: StillSyntaxHighlightKind::KeySymbol,
+                    value: LilySyntaxHighlightKind::KeySymbol,
                 });
             }
             if let Some(type_node) = maybe_type {
-                still_syntax_highlight_type_into(
+                lily_syntax_highlight_type_into(
                     highlighted_so_far,
-                    still_syntax_node_as_ref(type_node),
+                    lily_syntax_node_as_ref(type_node),
                 );
             }
         }
     }
 }
 
-fn still_syntax_highlight_pattern_into(
-    highlighted_so_far: &mut Vec<StillSyntaxNode<StillSyntaxHighlightKind>>,
-    pattern_node: StillSyntaxNode<&StillSyntaxPattern>,
+fn lily_syntax_highlight_pattern_into(
+    highlighted_so_far: &mut Vec<LilySyntaxNode<LilySyntaxHighlightKind>>,
+    pattern_node: LilySyntaxNode<&LilySyntaxPattern>,
 ) {
     match pattern_node.value {
-        StillSyntaxPattern::Char(_) => {
-            highlighted_so_far.push(StillSyntaxNode {
+        LilySyntaxPattern::Char(_) => {
+            highlighted_so_far.push(LilySyntaxNode {
                 range: pattern_node.range,
-                value: StillSyntaxHighlightKind::String,
+                value: LilySyntaxHighlightKind::String,
             });
         }
-        StillSyntaxPattern::Unt(_) => {
-            highlighted_so_far.push(StillSyntaxNode {
+        LilySyntaxPattern::Unt(_) => {
+            highlighted_so_far.push(LilySyntaxNode {
                 range: pattern_node.range,
-                value: StillSyntaxHighlightKind::Number,
+                value: LilySyntaxHighlightKind::Number,
             });
         }
-        StillSyntaxPattern::Int(_) => {
-            highlighted_so_far.push(StillSyntaxNode {
+        LilySyntaxPattern::Int(_) => {
+            highlighted_so_far.push(LilySyntaxNode {
                 range: pattern_node.range,
-                value: StillSyntaxHighlightKind::Number,
+                value: LilySyntaxHighlightKind::Number,
             });
         }
-        StillSyntaxPattern::Typed {
+        LilySyntaxPattern::Typed {
             type_: maybe_type_node,
             closing_colon_range: maybe_closing_colon_range,
             pattern: maybe_pattern_node_in_typed,
         } => {
-            highlighted_so_far.push(StillSyntaxNode {
+            highlighted_so_far.push(LilySyntaxNode {
                 range: lsp_types::Range {
                     start: pattern_node.range.start,
                     end: lsp_position_add_characters(pattern_node.range.start, 1),
                 },
-                value: StillSyntaxHighlightKind::KeySymbol,
+                value: LilySyntaxHighlightKind::KeySymbol,
             });
             if let Some(type_node) = maybe_type_node {
-                still_syntax_highlight_type_into(
+                lily_syntax_highlight_type_into(
                     highlighted_so_far,
-                    still_syntax_node_as_ref(type_node),
+                    lily_syntax_node_as_ref(type_node),
                 );
             }
             if let Some(closing_colon_range) = *maybe_closing_colon_range {
-                highlighted_so_far.push(StillSyntaxNode {
+                highlighted_so_far.push(LilySyntaxNode {
                     range: closing_colon_range,
-                    value: StillSyntaxHighlightKind::KeySymbol,
+                    value: LilySyntaxHighlightKind::KeySymbol,
                 });
             }
             if let Some(pattern_node_in_typed) = maybe_pattern_node_in_typed {
                 match &pattern_node_in_typed.value {
-                    StillSyntaxPatternUntyped::Ignored => {
-                        highlighted_so_far.push(StillSyntaxNode {
+                    LilySyntaxPatternUntyped::Ignored => {
+                        highlighted_so_far.push(LilySyntaxNode {
                             range: pattern_node_in_typed.range,
-                            value: StillSyntaxHighlightKind::KeySymbol,
+                            value: LilySyntaxHighlightKind::KeySymbol,
                         });
                     }
-                    StillSyntaxPatternUntyped::Variable { overwriting, name } => {
+                    LilySyntaxPatternUntyped::Variable { overwriting, name } => {
                         if *overwriting {
-                            highlighted_so_far.push(StillSyntaxNode {
+                            highlighted_so_far.push(LilySyntaxNode {
                                 range: lsp_types::Range {
                                     start: pattern_node_in_typed.range.start,
                                     end: lsp_position_add_characters(
@@ -6772,9 +6765,9 @@ fn still_syntax_highlight_pattern_into(
                                         name.len() as i32,
                                     ),
                                 },
-                                value: StillSyntaxHighlightKind::Variable,
+                                value: LilySyntaxHighlightKind::Variable,
                             });
-                            highlighted_so_far.push(StillSyntaxNode {
+                            highlighted_so_far.push(LilySyntaxNode {
                                 range: lsp_types::Range {
                                     start: lsp_position_add_characters(
                                         pattern_node_in_typed.range.end,
@@ -6782,34 +6775,34 @@ fn still_syntax_highlight_pattern_into(
                                     ),
                                     end: pattern_node_in_typed.range.end,
                                 },
-                                value: StillSyntaxHighlightKind::KeySymbol,
+                                value: LilySyntaxHighlightKind::KeySymbol,
                             });
                         } else {
-                            highlighted_so_far.push(StillSyntaxNode {
+                            highlighted_so_far.push(LilySyntaxNode {
                                 range: pattern_node_in_typed.range,
-                                value: StillSyntaxHighlightKind::Variable,
+                                value: LilySyntaxHighlightKind::Variable,
                             });
                         }
                     }
-                    StillSyntaxPatternUntyped::Variant {
+                    LilySyntaxPatternUntyped::Variant {
                         name: name_node,
                         value: maybe_value,
                     } => {
-                        highlighted_so_far.push(StillSyntaxNode {
+                        highlighted_so_far.push(LilySyntaxNode {
                             range: name_node.range,
-                            value: StillSyntaxHighlightKind::Variant,
+                            value: LilySyntaxHighlightKind::Variant,
                         });
                         if let Some(value_node) = maybe_value {
-                            still_syntax_highlight_pattern_into(
+                            lily_syntax_highlight_pattern_into(
                                 highlighted_so_far,
-                                still_syntax_node_unbox(value_node),
+                                lily_syntax_node_unbox(value_node),
                             );
                         }
                     }
-                    StillSyntaxPatternUntyped::Other(other_in_typed) => {
-                        still_syntax_highlight_pattern_into(
+                    LilySyntaxPatternUntyped::Other(other_in_typed) => {
+                        lily_syntax_highlight_pattern_into(
                             highlighted_so_far,
-                            StillSyntaxNode {
+                            LilySyntaxNode {
                                 range: pattern_node_in_typed.range,
                                 value: other_in_typed,
                             },
@@ -6818,355 +6811,349 @@ fn still_syntax_highlight_pattern_into(
                 }
             }
         }
-        StillSyntaxPattern::WithComment {
+        LilySyntaxPattern::WithComment {
             comment: comment_node,
             pattern: maybe_pattern_after_comment,
         } => {
-            highlighted_so_far.extend(still_syntax_lines_ranges(comment_node.range).map(|range| {
-                StillSyntaxNode {
+            highlighted_so_far.extend(lily_syntax_lines_ranges(comment_node.range).map(|range| {
+                LilySyntaxNode {
                     range: range,
-                    value: StillSyntaxHighlightKind::Comment,
+                    value: LilySyntaxHighlightKind::Comment,
                 }
             }));
             if let Some(pattern_node_after_comment) = maybe_pattern_after_comment {
-                still_syntax_highlight_pattern_into(
+                lily_syntax_highlight_pattern_into(
                     highlighted_so_far,
-                    still_syntax_node_unbox(pattern_node_after_comment),
+                    lily_syntax_node_unbox(pattern_node_after_comment),
                 );
             }
         }
-        StillSyntaxPattern::Record(fields) => {
+        LilySyntaxPattern::Record(fields) => {
             for field in fields {
-                highlighted_so_far.push(StillSyntaxNode {
+                highlighted_so_far.push(LilySyntaxNode {
                     range: field.name.range,
-                    value: StillSyntaxHighlightKind::Field,
+                    value: LilySyntaxHighlightKind::Field,
                 });
                 if let Some(field_value_node) = &field.value {
-                    still_syntax_highlight_pattern_into(
+                    lily_syntax_highlight_pattern_into(
                         highlighted_so_far,
-                        still_syntax_node_as_ref(field_value_node),
+                        lily_syntax_node_as_ref(field_value_node),
                     );
                 }
             }
         }
-        StillSyntaxPattern::String {
+        LilySyntaxPattern::String {
             content: _,
             quoting_style: _,
         } => {
-            highlighted_so_far.push(StillSyntaxNode {
+            highlighted_so_far.push(LilySyntaxNode {
                 range: pattern_node.range,
-                value: StillSyntaxHighlightKind::String,
+                value: LilySyntaxHighlightKind::String,
             });
         }
     }
 }
-fn still_syntax_highlight_type_into(
-    highlighted_so_far: &mut Vec<StillSyntaxNode<StillSyntaxHighlightKind>>,
-    type_node: StillSyntaxNode<&StillSyntaxType>,
+fn lily_syntax_highlight_type_into(
+    highlighted_so_far: &mut Vec<LilySyntaxNode<LilySyntaxHighlightKind>>,
+    type_node: LilySyntaxNode<&LilySyntaxType>,
 ) {
     match type_node.value {
-        StillSyntaxType::Construct {
+        LilySyntaxType::Construct {
             name: name_node,
             arguments,
         } => {
-            highlighted_so_far.push(StillSyntaxNode {
+            highlighted_so_far.push(LilySyntaxNode {
                 range: name_node.range,
-                value: StillSyntaxHighlightKind::Type,
+                value: LilySyntaxHighlightKind::Type,
             });
             for argument_node in arguments {
-                still_syntax_highlight_type_into(
+                lily_syntax_highlight_type_into(
                     highlighted_so_far,
-                    still_syntax_node_as_ref(argument_node),
+                    lily_syntax_node_as_ref(argument_node),
                 );
             }
         }
-        StillSyntaxType::Function {
+        LilySyntaxType::Function {
             inputs,
             arrow_key_symbol_range: maybe_arrow_key_symbol_range,
             output: maybe_output,
         } => {
-            highlighted_so_far.push(StillSyntaxNode {
+            highlighted_so_far.push(LilySyntaxNode {
                 range: lsp_types::Range {
                     start: type_node.range.start,
                     end: lsp_position_add_characters(type_node.range.start, 1),
                 },
-                value: StillSyntaxHighlightKind::KeySymbol,
+                value: LilySyntaxHighlightKind::KeySymbol,
             });
             for input in inputs {
-                still_syntax_highlight_type_into(
-                    highlighted_so_far,
-                    still_syntax_node_as_ref(input),
-                );
+                lily_syntax_highlight_type_into(highlighted_so_far, lily_syntax_node_as_ref(input));
             }
             if let Some(arrow_key_symbol_range) = maybe_arrow_key_symbol_range {
-                highlighted_so_far.push(StillSyntaxNode {
+                highlighted_so_far.push(LilySyntaxNode {
                     range: *arrow_key_symbol_range,
-                    value: StillSyntaxHighlightKind::KeySymbol,
+                    value: LilySyntaxHighlightKind::KeySymbol,
                 });
             }
             if let Some(output_node) = maybe_output {
-                still_syntax_highlight_type_into(
+                lily_syntax_highlight_type_into(
                     highlighted_so_far,
-                    still_syntax_node_unbox(output_node),
+                    lily_syntax_node_unbox(output_node),
                 );
             }
         }
-        StillSyntaxType::Parenthesized(None) => {}
-        StillSyntaxType::Parenthesized(Some(in_parens)) => {
-            still_syntax_highlight_type_into(
-                highlighted_so_far,
-                still_syntax_node_unbox(in_parens),
-            );
+        LilySyntaxType::Parenthesized(None) => {}
+        LilySyntaxType::Parenthesized(Some(in_parens)) => {
+            lily_syntax_highlight_type_into(highlighted_so_far, lily_syntax_node_unbox(in_parens));
         }
-        StillSyntaxType::WithComment {
+        LilySyntaxType::WithComment {
             comment: comment_node,
             type_: maybe_type_after_comment,
         } => {
-            highlighted_so_far.extend(still_syntax_lines_ranges(comment_node.range).map(|range| {
-                StillSyntaxNode {
+            highlighted_so_far.extend(lily_syntax_lines_ranges(comment_node.range).map(|range| {
+                LilySyntaxNode {
                     range: range,
-                    value: StillSyntaxHighlightKind::Comment,
+                    value: LilySyntaxHighlightKind::Comment,
                 }
             }));
             if let Some(type_node_after_comment) = maybe_type_after_comment {
-                still_syntax_highlight_type_into(
+                lily_syntax_highlight_type_into(
                     highlighted_so_far,
-                    still_syntax_node_unbox(type_node_after_comment),
+                    lily_syntax_node_unbox(type_node_after_comment),
                 );
             }
         }
-        StillSyntaxType::Record(fields) => {
+        LilySyntaxType::Record(fields) => {
             for field in fields {
-                highlighted_so_far.push(StillSyntaxNode {
+                highlighted_so_far.push(LilySyntaxNode {
                     range: field.name.range,
-                    value: StillSyntaxHighlightKind::Field,
+                    value: LilySyntaxHighlightKind::Field,
                 });
                 if let Some(field_value_node) = &field.value {
-                    still_syntax_highlight_type_into(
+                    lily_syntax_highlight_type_into(
                         highlighted_so_far,
-                        still_syntax_node_as_ref(field_value_node),
+                        lily_syntax_node_as_ref(field_value_node),
                     );
                 }
             }
         }
-        StillSyntaxType::Variable(_) => {
-            highlighted_so_far.push(StillSyntaxNode {
+        LilySyntaxType::Variable(_) => {
+            highlighted_so_far.push(LilySyntaxNode {
                 range: type_node.range,
-                value: StillSyntaxHighlightKind::TypeVariable,
+                value: LilySyntaxHighlightKind::TypeVariable,
             });
         }
     }
 }
 
-fn still_syntax_highlight_expression_into(
-    highlighted_so_far: &mut Vec<StillSyntaxNode<StillSyntaxHighlightKind>>,
-    expression_node: StillSyntaxNode<&StillSyntaxExpression>,
+fn lily_syntax_highlight_expression_into(
+    highlighted_so_far: &mut Vec<LilySyntaxNode<LilySyntaxHighlightKind>>,
+    expression_node: LilySyntaxNode<&LilySyntaxExpression>,
 ) {
     match expression_node.value {
-        StillSyntaxExpression::VariableOrCall {
+        LilySyntaxExpression::VariableOrCall {
             variable: variable_node,
             arguments,
         } => {
-            highlighted_so_far.push(StillSyntaxNode {
+            highlighted_so_far.push(LilySyntaxNode {
                 range: variable_node.range,
-                value: StillSyntaxHighlightKind::DeclaredVariable,
+                value: LilySyntaxHighlightKind::DeclaredVariable,
             });
             for argument_node in arguments {
-                still_syntax_highlight_expression_into(
+                lily_syntax_highlight_expression_into(
                     highlighted_so_far,
-                    still_syntax_node_as_ref(argument_node),
+                    lily_syntax_node_as_ref(argument_node),
                 );
             }
         }
-        StillSyntaxExpression::Match {
+        LilySyntaxExpression::Match {
             matched: matched_node,
             cases,
         } => {
-            still_syntax_highlight_expression_into(
+            lily_syntax_highlight_expression_into(
                 highlighted_so_far,
-                still_syntax_node_unbox(matched_node),
+                lily_syntax_node_unbox(matched_node),
             );
             for case in cases {
-                highlighted_so_far.push(StillSyntaxNode {
+                highlighted_so_far.push(LilySyntaxNode {
                     range: case.or_bar_key_symbol_range,
-                    value: StillSyntaxHighlightKind::KeySymbol,
+                    value: LilySyntaxHighlightKind::KeySymbol,
                 });
                 if let Some(case_pattern_node) = &case.pattern {
-                    still_syntax_highlight_pattern_into(
+                    lily_syntax_highlight_pattern_into(
                         highlighted_so_far,
-                        still_syntax_node_as_ref(case_pattern_node),
+                        lily_syntax_node_as_ref(case_pattern_node),
                     );
                 }
                 if let Some(arrow_key_symbol_range) = case.arrow_key_symbol_range {
-                    highlighted_so_far.push(StillSyntaxNode {
+                    highlighted_so_far.push(LilySyntaxNode {
                         range: arrow_key_symbol_range,
-                        value: StillSyntaxHighlightKind::KeySymbol,
+                        value: LilySyntaxHighlightKind::KeySymbol,
                     });
                 }
                 if let Some(result_node) = &case.result {
-                    still_syntax_highlight_expression_into(
+                    lily_syntax_highlight_expression_into(
                         highlighted_so_far,
-                        still_syntax_node_as_ref(result_node),
+                        lily_syntax_node_as_ref(result_node),
                     );
                 }
             }
         }
-        StillSyntaxExpression::Char(_) => {
-            highlighted_so_far.push(StillSyntaxNode {
+        LilySyntaxExpression::Char(_) => {
+            highlighted_so_far.push(LilySyntaxNode {
                 range: expression_node.range,
-                value: StillSyntaxHighlightKind::String,
+                value: LilySyntaxHighlightKind::String,
             });
         }
-        StillSyntaxExpression::Dec(_) => {
-            highlighted_so_far.push(StillSyntaxNode {
+        LilySyntaxExpression::Dec(_) => {
+            highlighted_so_far.push(LilySyntaxNode {
                 range: expression_node.range,
-                value: StillSyntaxHighlightKind::Number,
+                value: LilySyntaxHighlightKind::Number,
             });
         }
-        StillSyntaxExpression::Unt(_) => {
-            highlighted_so_far.push(StillSyntaxNode {
+        LilySyntaxExpression::Unt(_) => {
+            highlighted_so_far.push(LilySyntaxNode {
                 range: expression_node.range,
-                value: StillSyntaxHighlightKind::Number,
+                value: LilySyntaxHighlightKind::Number,
             });
         }
-        StillSyntaxExpression::Int(_) => {
-            highlighted_so_far.push(StillSyntaxNode {
+        LilySyntaxExpression::Int(_) => {
+            highlighted_so_far.push(LilySyntaxNode {
                 range: expression_node.range,
-                value: StillSyntaxHighlightKind::Number,
+                value: LilySyntaxHighlightKind::Number,
             });
         }
-        StillSyntaxExpression::Lambda {
+        LilySyntaxExpression::Lambda {
             parameters,
             arrow_key_symbol_range: maybe_arrow_key_symbol_range,
             result: maybe_result,
         } => {
-            highlighted_so_far.push(StillSyntaxNode {
+            highlighted_so_far.push(LilySyntaxNode {
                 range: lsp_types::Range {
                     start: expression_node.range.start,
                     end: lsp_position_add_characters(expression_node.range.start, 1),
                 },
-                value: StillSyntaxHighlightKind::KeySymbol,
+                value: LilySyntaxHighlightKind::KeySymbol,
             });
             for parameter_node in parameters {
-                still_syntax_highlight_pattern_into(
+                lily_syntax_highlight_pattern_into(
                     highlighted_so_far,
-                    still_syntax_node_as_ref(parameter_node),
+                    lily_syntax_node_as_ref(parameter_node),
                 );
             }
             if let &Some(arrow_key_symbol_range) = maybe_arrow_key_symbol_range {
-                highlighted_so_far.push(StillSyntaxNode {
+                highlighted_so_far.push(LilySyntaxNode {
                     range: arrow_key_symbol_range,
-                    value: StillSyntaxHighlightKind::KeySymbol,
+                    value: LilySyntaxHighlightKind::KeySymbol,
                 });
             }
             if let Some(result_node) = maybe_result {
-                still_syntax_highlight_expression_into(
+                lily_syntax_highlight_expression_into(
                     highlighted_so_far,
-                    still_syntax_node_unbox(result_node),
+                    lily_syntax_node_unbox(result_node),
                 );
             }
         }
-        StillSyntaxExpression::AfterLocalVariable {
+        LilySyntaxExpression::AfterLocalVariable {
             declaration: maybe_declaration,
             result: maybe_result,
         } => {
-            highlighted_so_far.push(StillSyntaxNode {
+            highlighted_so_far.push(LilySyntaxNode {
                 range: lsp_types::Range {
                     start: expression_node.range.start,
                     end: lsp_position_add_characters(expression_node.range.start, 1),
                 },
-                value: StillSyntaxHighlightKind::KeySymbol,
+                value: LilySyntaxHighlightKind::KeySymbol,
             });
             if let Some(local_declaration_node) = maybe_declaration {
-                still_syntax_highlight_local_variable_declaration_into(
+                lily_syntax_highlight_local_variable_declaration_into(
                     highlighted_so_far,
-                    still_syntax_node_as_ref(local_declaration_node),
+                    lily_syntax_node_as_ref(local_declaration_node),
                 );
             }
             if let Some(result_node) = maybe_result {
-                still_syntax_highlight_expression_into(
+                lily_syntax_highlight_expression_into(
                     highlighted_so_far,
-                    still_syntax_node_unbox(result_node),
+                    lily_syntax_node_unbox(result_node),
                 );
             }
         }
-        StillSyntaxExpression::Vec(elements) => {
+        LilySyntaxExpression::Vec(elements) => {
             for element_node in elements {
-                still_syntax_highlight_expression_into(
+                lily_syntax_highlight_expression_into(
                     highlighted_so_far,
-                    still_syntax_node_as_ref(element_node),
+                    lily_syntax_node_as_ref(element_node),
                 );
             }
         }
-        StillSyntaxExpression::Parenthesized(None) => {}
-        StillSyntaxExpression::Parenthesized(Some(in_parens)) => {
-            still_syntax_highlight_expression_into(
+        LilySyntaxExpression::Parenthesized(None) => {}
+        LilySyntaxExpression::Parenthesized(Some(in_parens)) => {
+            lily_syntax_highlight_expression_into(
                 highlighted_so_far,
-                still_syntax_node_unbox(in_parens),
+                lily_syntax_node_unbox(in_parens),
             );
         }
-        StillSyntaxExpression::WithComment {
+        LilySyntaxExpression::WithComment {
             comment: comment_node,
             expression: maybe_expression_after_comment,
         } => {
-            highlighted_so_far.extend(still_syntax_lines_ranges(comment_node.range).map(|range| {
-                StillSyntaxNode {
+            highlighted_so_far.extend(lily_syntax_lines_ranges(comment_node.range).map(|range| {
+                LilySyntaxNode {
                     range: range,
-                    value: StillSyntaxHighlightKind::Comment,
+                    value: LilySyntaxHighlightKind::Comment,
                 }
             }));
             if let Some(expression_node_after_comment) = maybe_expression_after_comment {
-                still_syntax_highlight_expression_into(
+                lily_syntax_highlight_expression_into(
                     highlighted_so_far,
-                    still_syntax_node_unbox(expression_node_after_comment),
+                    lily_syntax_node_unbox(expression_node_after_comment),
                 );
             }
         }
-        StillSyntaxExpression::Typed {
+        LilySyntaxExpression::Typed {
             type_: maybe_type,
             closing_colon_range: maybe_closing_colon_range,
             expression: maybe_expression_in_typed,
         } => {
-            highlighted_so_far.push(StillSyntaxNode {
+            highlighted_so_far.push(LilySyntaxNode {
                 range: lsp_types::Range {
                     start: expression_node.range.start,
                     end: lsp_position_add_characters(expression_node.range.start, 1),
                 },
-                value: StillSyntaxHighlightKind::KeySymbol,
+                value: LilySyntaxHighlightKind::KeySymbol,
             });
             if let Some(type_node) = maybe_type {
-                still_syntax_highlight_type_into(
+                lily_syntax_highlight_type_into(
                     highlighted_so_far,
-                    still_syntax_node_as_ref(type_node),
+                    lily_syntax_node_as_ref(type_node),
                 );
             }
             if let Some(closing_colon_range) = *maybe_closing_colon_range {
-                highlighted_so_far.push(StillSyntaxNode {
+                highlighted_so_far.push(LilySyntaxNode {
                     range: closing_colon_range,
-                    value: StillSyntaxHighlightKind::KeySymbol,
+                    value: LilySyntaxHighlightKind::KeySymbol,
                 });
             }
             if let Some(expression_node_in_typed) = maybe_expression_in_typed {
                 match &expression_node_in_typed.value {
-                    StillSyntaxExpressionUntyped::Variant {
+                    LilySyntaxExpressionUntyped::Variant {
                         name: name_node,
                         value: maybe_value,
                     } => {
-                        highlighted_so_far.push(StillSyntaxNode {
+                        highlighted_so_far.push(LilySyntaxNode {
                             range: name_node.range,
-                            value: StillSyntaxHighlightKind::Variant,
+                            value: LilySyntaxHighlightKind::Variant,
                         });
                         if let Some(value_node) = maybe_value {
-                            still_syntax_highlight_expression_into(
+                            lily_syntax_highlight_expression_into(
                                 highlighted_so_far,
-                                still_syntax_node_unbox(value_node),
+                                lily_syntax_node_unbox(value_node),
                             );
                         }
                     }
-                    StillSyntaxExpressionUntyped::Other(other_expression_in_typed) => {
-                        still_syntax_highlight_expression_into(
+                    LilySyntaxExpressionUntyped::Other(other_expression_in_typed) => {
+                        lily_syntax_highlight_expression_into(
                             highlighted_so_far,
-                            StillSyntaxNode {
+                            LilySyntaxNode {
                                 range: expression_node_in_typed.range,
                                 value: other_expression_in_typed,
                             },
@@ -7175,63 +7162,63 @@ fn still_syntax_highlight_expression_into(
                 }
             }
         }
-        StillSyntaxExpression::Record(fields) => {
+        LilySyntaxExpression::Record(fields) => {
             for field in fields {
-                highlighted_so_far.push(StillSyntaxNode {
+                highlighted_so_far.push(LilySyntaxNode {
                     range: field.name.range,
-                    value: StillSyntaxHighlightKind::Field,
+                    value: LilySyntaxHighlightKind::Field,
                 });
                 if let Some(value_node) = &field.value {
-                    still_syntax_highlight_expression_into(
+                    lily_syntax_highlight_expression_into(
                         highlighted_so_far,
-                        still_syntax_node_as_ref(value_node),
+                        lily_syntax_node_as_ref(value_node),
                     );
                 }
             }
         }
-        StillSyntaxExpression::RecordUpdate {
+        LilySyntaxExpression::RecordUpdate {
             record: maybe_record,
             spread_key_symbol_range,
             fields,
         } => {
-            highlighted_so_far.push(StillSyntaxNode {
+            highlighted_so_far.push(LilySyntaxNode {
                 range: *spread_key_symbol_range,
-                value: StillSyntaxHighlightKind::KeySymbol,
+                value: LilySyntaxHighlightKind::KeySymbol,
             });
             if let Some(record_node) = maybe_record {
-                highlighted_so_far.push(StillSyntaxNode {
+                highlighted_so_far.push(LilySyntaxNode {
                     range: record_node.range,
-                    value: StillSyntaxHighlightKind::Variable,
+                    value: LilySyntaxHighlightKind::Variable,
                 });
             }
             for field in fields {
-                highlighted_so_far.push(StillSyntaxNode {
+                highlighted_so_far.push(LilySyntaxNode {
                     range: field.name.range,
-                    value: StillSyntaxHighlightKind::Field,
+                    value: LilySyntaxHighlightKind::Field,
                 });
                 if let Some(value_node) = &field.value {
-                    still_syntax_highlight_expression_into(
+                    lily_syntax_highlight_expression_into(
                         highlighted_so_far,
-                        still_syntax_node_as_ref(value_node),
+                        lily_syntax_node_as_ref(value_node),
                     );
                 }
             }
         }
-        StillSyntaxExpression::String {
+        LilySyntaxExpression::String {
             content: _,
             quoting_style,
         } => match quoting_style {
-            StillSyntaxStringQuotingStyle::SingleQuoted => {
-                highlighted_so_far.push(StillSyntaxNode {
+            LilySyntaxStringQuotingStyle::SingleQuoted => {
+                highlighted_so_far.push(LilySyntaxNode {
                     range: expression_node.range,
-                    value: StillSyntaxHighlightKind::String,
+                    value: LilySyntaxHighlightKind::String,
                 });
             }
-            StillSyntaxStringQuotingStyle::TickedLines => {
-                highlighted_so_far.extend(still_syntax_lines_ranges(expression_node.range).map(
-                    |line_range| StillSyntaxNode {
+            LilySyntaxStringQuotingStyle::TickedLines => {
+                highlighted_so_far.extend(lily_syntax_lines_ranges(expression_node.range).map(
+                    |line_range| LilySyntaxNode {
                         range: line_range,
-                        value: StillSyntaxHighlightKind::String,
+                        value: LilySyntaxHighlightKind::String,
                     },
                 ));
             }
@@ -7239,27 +7226,27 @@ fn still_syntax_highlight_expression_into(
     }
 }
 
-fn still_syntax_highlight_local_variable_declaration_into(
-    highlighted_so_far: &mut Vec<StillSyntaxNode<StillSyntaxHighlightKind>>,
-    local_declaration_node: StillSyntaxNode<&StillSyntaxLocalVariableDeclaration>,
+fn lily_syntax_highlight_local_variable_declaration_into(
+    highlighted_so_far: &mut Vec<LilySyntaxNode<LilySyntaxHighlightKind>>,
+    local_declaration_node: LilySyntaxNode<&LilySyntaxLocalVariableDeclaration>,
 ) {
-    highlighted_so_far.push(StillSyntaxNode {
+    highlighted_so_far.push(LilySyntaxNode {
         range: local_declaration_node.value.name.range,
-        value: StillSyntaxHighlightKind::DeclaredVariable,
+        value: LilySyntaxHighlightKind::DeclaredVariable,
     });
     if let Some(caret_key_symbol_start_position) = local_declaration_node.value.overwriting {
-        highlighted_so_far.push(StillSyntaxNode {
+        highlighted_so_far.push(LilySyntaxNode {
             range: lsp_types::Range {
                 start: caret_key_symbol_start_position,
                 end: lsp_position_add_characters(caret_key_symbol_start_position, 1),
             },
-            value: StillSyntaxHighlightKind::DeclaredVariable,
+            value: LilySyntaxHighlightKind::DeclaredVariable,
         });
     }
     if let Some(result_node) = &local_declaration_node.value.result {
-        still_syntax_highlight_expression_into(
+        lily_syntax_highlight_expression_into(
             highlighted_so_far,
-            still_syntax_node_unbox(result_node),
+            lily_syntax_node_unbox(result_node),
         );
     }
 }
@@ -7383,8 +7370,8 @@ fn parse_unsigned_integer_base10(state: &mut ParseState) -> bool {
     }
 }
 
-/// a valid still symbol that must be followed by a character that could not be part of an still identifier
-fn parse_still_keyword_as_range(state: &mut ParseState, symbol: &str) -> Option<lsp_types::Range> {
+/// a valid lily symbol that must be followed by a character that could not be part of an lily identifier
+fn parse_lily_keyword_as_range(state: &mut ParseState, symbol: &str) -> Option<lsp_types::Range> {
     if state.source[state.offset_utf8..].starts_with(symbol)
         && !(state.source[(state.offset_utf8 + symbol.len())..]
             .starts_with(|c: char| c.is_ascii_alphanumeric() || c == '-'))
@@ -7410,29 +7397,29 @@ fn parse_before_next_linebreak_or_end_as_str<'a>(state: &mut ParseState<'a>) -> 
     content
 }
 
-fn parse_still_whitespace(state: &mut ParseState) {
+fn parse_lily_whitespace(state: &mut ParseState) {
     while parse_linebreak(state) || parse_same_line_char_if(state, char::is_whitespace) {}
 }
-fn parse_still_whitespace_until_linebreak(state: &mut ParseState) {
+fn parse_lily_whitespace_until_linebreak(state: &mut ParseState) {
     while parse_same_line_char_if(state, |c| c != '\n' && c != '\r' && c.is_whitespace()) {}
 }
-fn parse_still_comment_lines_then_same_line_whitespace(
+fn parse_lily_comment_lines_then_same_line_whitespace(
     state: &mut ParseState,
-) -> Option<StillSyntaxNode<Box<str>>> {
+) -> Option<LilySyntaxNode<Box<str>>> {
     let start_position: lsp_types::Position = state.position;
-    let first_comment_line: &str = parse_still_comment(state)?;
+    let first_comment_line: &str = parse_lily_comment(state)?;
     let mut full_comment_content: String = first_comment_line.to_string();
     let _: bool = parse_linebreak(state);
     let mut end_position: lsp_types::Position = state.position;
-    parse_still_whitespace_until_linebreak(state);
-    while let Some(next_comment_line) = parse_still_comment(state) {
+    parse_lily_whitespace_until_linebreak(state);
+    while let Some(next_comment_line) = parse_lily_comment(state) {
         full_comment_content.push('\n');
         full_comment_content.push_str(next_comment_line);
         let _: bool = parse_linebreak(state);
         end_position = state.position;
-        parse_still_whitespace_until_linebreak(state);
+        parse_lily_whitespace_until_linebreak(state);
     }
-    Some(StillSyntaxNode {
+    Some(LilySyntaxNode {
         range: lsp_types::Range {
             start: start_position,
             end: end_position,
@@ -7440,13 +7427,13 @@ fn parse_still_comment_lines_then_same_line_whitespace(
         value: full_comment_content.into_boxed_str(),
     })
 }
-fn parse_still_comment<'a>(state: &mut ParseState<'a>) -> Option<&'a str> {
+fn parse_lily_comment<'a>(state: &mut ParseState<'a>) -> Option<&'a str> {
     if !parse_symbol(state, "#") {
         return None;
     }
     Some(parse_before_next_linebreak_or_end_as_str(state))
 }
-fn parse_still_lowercase_name(state: &mut ParseState) -> Option<StillName> {
+fn parse_lily_lowercase_name(state: &mut ParseState) -> Option<LilyName> {
     let mut chars_from_offset: std::str::Chars = state.source[state.offset_utf8..].chars();
     if let Some(first_char) = chars_from_offset.next()
         && first_char.is_ascii_lowercase()
@@ -7460,14 +7447,14 @@ fn parse_still_lowercase_name(state: &mut ParseState) -> Option<StillName> {
         let parsed_str: &str = &state.source[state.offset_utf8..end_offset_utf8];
         state.offset_utf8 = end_offset_utf8;
         state.position.character += parsed_str.encode_utf16().count() as u32;
-        Some(StillName::from(parsed_str))
+        Some(LilyName::from(parsed_str))
     } else {
         None
     }
 }
-fn parse_still_lowercase_name_node(state: &mut ParseState) -> Option<StillSyntaxNode<StillName>> {
+fn parse_lily_lowercase_name_node(state: &mut ParseState) -> Option<LilySyntaxNode<LilyName>> {
     let start_position: lsp_types::Position = state.position;
-    parse_still_lowercase_name(state).map(|name| StillSyntaxNode {
+    parse_lily_lowercase_name(state).map(|name| LilySyntaxNode {
         range: lsp_types::Range {
             start: start_position,
             end: state.position,
@@ -7476,7 +7463,7 @@ fn parse_still_lowercase_name_node(state: &mut ParseState) -> Option<StillSyntax
     })
 }
 
-fn parse_still_uppercase_name(state: &mut ParseState) -> Option<StillName> {
+fn parse_lily_uppercase_name(state: &mut ParseState) -> Option<LilyName> {
     let mut chars_from_offset = state.source[state.offset_utf8..].chars();
     if let Some(first_char) = chars_from_offset.next()
         && first_char.is_ascii_uppercase()
@@ -7490,15 +7477,15 @@ fn parse_still_uppercase_name(state: &mut ParseState) -> Option<StillName> {
         let parsed_str: &str = &state.source[state.offset_utf8..end_offset_utf8];
         state.offset_utf8 = end_offset_utf8;
         state.position.character += parsed_str.encode_utf16().count() as u32;
-        Some(StillName::from(parsed_str))
+        Some(LilyName::from(parsed_str))
     } else {
         None
     }
 }
 
-fn parse_still_uppercase_name_node(state: &mut ParseState) -> Option<StillSyntaxNode<StillName>> {
+fn parse_lily_uppercase_name_node(state: &mut ParseState) -> Option<LilySyntaxNode<LilyName>> {
     let start_position: lsp_types::Position = state.position;
-    parse_still_uppercase_name(state).map(|name| StillSyntaxNode {
+    parse_lily_uppercase_name(state).map(|name| LilySyntaxNode {
         range: lsp_types::Range {
             start: start_position,
             end: state.position,
@@ -7507,23 +7494,23 @@ fn parse_still_uppercase_name_node(state: &mut ParseState) -> Option<StillSyntax
     })
 }
 
-fn parse_still_syntax_type(state: &mut ParseState) -> Option<StillSyntaxNode<StillSyntaxType>> {
+fn parse_lily_syntax_type(state: &mut ParseState) -> Option<LilySyntaxNode<LilySyntaxType>> {
     if state.position.character <= u32::from(state.indent) {
         return None;
     }
-    parse_still_syntax_type_construct(state)
-        .or_else(|| parse_still_syntax_function(state))
-        .or_else(|| parse_still_syntax_type_with_comment(state))
-        .or_else(|| parse_still_syntax_type_not_space_separated_node(state))
+    parse_lily_syntax_type_construct(state)
+        .or_else(|| parse_lily_syntax_function(state))
+        .or_else(|| parse_lily_syntax_type_with_comment(state))
+        .or_else(|| parse_lily_syntax_type_not_space_separated_node(state))
 }
-fn parse_still_syntax_type_with_comment(
+fn parse_lily_syntax_type_with_comment(
     state: &mut ParseState,
-) -> Option<StillSyntaxNode<StillSyntaxType>> {
-    let comment_node: StillSyntaxNode<Box<str>> =
-        parse_still_comment_lines_then_same_line_whitespace(state)?;
-    parse_still_whitespace(state);
-    let maybe_type: Option<StillSyntaxNode<StillSyntaxType>> = parse_still_syntax_type(state);
-    Some(StillSyntaxNode {
+) -> Option<LilySyntaxNode<LilySyntaxType>> {
+    let comment_node: LilySyntaxNode<Box<str>> =
+        parse_lily_comment_lines_then_same_line_whitespace(state)?;
+    parse_lily_whitespace(state);
+    let maybe_type: Option<LilySyntaxNode<LilySyntaxType>> = parse_lily_syntax_type(state);
+    Some(LilySyntaxNode {
         range: lsp_types::Range {
             start: comment_node.range.start,
             end: maybe_type
@@ -7531,34 +7518,34 @@ fn parse_still_syntax_type_with_comment(
                 .map(|n| n.range.end)
                 .unwrap_or(comment_node.range.end),
         },
-        value: StillSyntaxType::WithComment {
+        value: LilySyntaxType::WithComment {
             comment: comment_node,
-            type_: maybe_type.map(still_syntax_node_box),
+            type_: maybe_type.map(lily_syntax_node_box),
         },
     })
 }
-fn parse_still_syntax_function(state: &mut ParseState) -> Option<StillSyntaxNode<StillSyntaxType>> {
+fn parse_lily_syntax_function(state: &mut ParseState) -> Option<LilySyntaxNode<LilySyntaxType>> {
     let backslash_range: lsp_types::Range = parse_symbol_as_range(state, "\\")?;
-    parse_still_whitespace(state);
-    let mut inputs: Vec<StillSyntaxNode<StillSyntaxType>> = Vec::with_capacity(1);
-    while let Some(input_node) = parse_still_syntax_type(state) {
+    parse_lily_whitespace(state);
+    let mut inputs: Vec<LilySyntaxNode<LilySyntaxType>> = Vec::with_capacity(1);
+    while let Some(input_node) = parse_lily_syntax_type(state) {
         inputs.push(input_node);
-        parse_still_whitespace(state);
+        parse_lily_whitespace(state);
         while parse_symbol(state, ",") {
-            parse_still_whitespace(state);
+            parse_lily_whitespace(state);
         }
     }
     let maybe_arrow_key_symbol_range: Option<lsp_types::Range> = parse_symbol_as_range(state, ">")
         .or_else(|| parse_symbol_as_range(state, "->"))
         .or_else(|| parse_symbol_as_range(state, "=>"));
-    parse_still_whitespace(state);
-    let maybe_output_type: Option<StillSyntaxNode<StillSyntaxType>> =
+    parse_lily_whitespace(state);
+    let maybe_output_type: Option<LilySyntaxNode<LilySyntaxType>> =
         if state.position.character > u32::from(state.indent) {
-            parse_still_syntax_type(state)
+            parse_lily_syntax_type(state)
         } else {
             None
         };
-    Some(StillSyntaxNode {
+    Some(LilySyntaxNode {
         range: lsp_types::Range {
             start: backslash_range.start,
             end: match &maybe_output_type {
@@ -7569,54 +7556,54 @@ fn parse_still_syntax_function(state: &mut ParseState) -> Option<StillSyntaxNode
                 Some(output_type_node) => output_type_node.range.end,
             },
         },
-        value: StillSyntaxType::Function {
+        value: LilySyntaxType::Function {
             inputs: inputs,
             arrow_key_symbol_range: maybe_arrow_key_symbol_range,
-            output: maybe_output_type.map(still_syntax_node_box),
+            output: maybe_output_type.map(lily_syntax_node_box),
         },
     })
 }
-fn parse_still_syntax_type_construct(
+fn parse_lily_syntax_type_construct(
     state: &mut ParseState,
-) -> Option<StillSyntaxNode<StillSyntaxType>> {
-    let variable_node: StillSyntaxNode<StillName> = parse_still_lowercase_name_node(state)?;
-    parse_still_whitespace(state);
-    let mut arguments: Vec<StillSyntaxNode<StillSyntaxType>> = Vec::new();
+) -> Option<LilySyntaxNode<LilySyntaxType>> {
+    let variable_node: LilySyntaxNode<LilyName> = parse_lily_lowercase_name_node(state)?;
+    parse_lily_whitespace(state);
+    let mut arguments: Vec<LilySyntaxNode<LilySyntaxType>> = Vec::new();
     let mut construct_end_position: lsp_types::Position = variable_node.range.end;
-    while let Some(argument_node) = parse_still_syntax_type_not_space_separated_node(state) {
+    while let Some(argument_node) = parse_lily_syntax_type_not_space_separated_node(state) {
         construct_end_position = argument_node.range.end;
         arguments.push(argument_node);
-        parse_still_whitespace(state);
+        parse_lily_whitespace(state);
     }
-    Some(StillSyntaxNode {
+    Some(LilySyntaxNode {
         range: lsp_types::Range {
             start: variable_node.range.start,
             end: construct_end_position,
         },
-        value: StillSyntaxType::Construct {
+        value: LilySyntaxType::Construct {
             name: variable_node,
             arguments: arguments,
         },
     })
 }
-fn parse_still_syntax_type_not_space_separated_node(
+fn parse_lily_syntax_type_not_space_separated_node(
     state: &mut ParseState,
-) -> Option<StillSyntaxNode<StillSyntaxType>> {
+) -> Option<LilySyntaxNode<LilySyntaxType>> {
     if state.position.character <= u32::from(state.indent) {
         return None;
     }
     let start_position: lsp_types::Position = state.position;
-    let type_: StillSyntaxType = parse_still_uppercase_name(state)
-        .map(StillSyntaxType::Variable)
-        .or_else(|| parse_still_syntax_type_parenthesized(state))
+    let type_: LilySyntaxType = parse_lily_uppercase_name(state)
+        .map(LilySyntaxType::Variable)
+        .or_else(|| parse_lily_syntax_type_parenthesized(state))
         .or_else(|| {
-            parse_still_lowercase_name_node(state).map(|variable_node| StillSyntaxType::Construct {
+            parse_lily_lowercase_name_node(state).map(|variable_node| LilySyntaxType::Construct {
                 name: variable_node,
                 arguments: vec![],
             })
         })
-        .or_else(|| parse_still_syntax_type_record(state))?;
-    Some(StillSyntaxNode {
+        .or_else(|| parse_lily_syntax_type_record(state))?;
+    Some(LilySyntaxNode {
         range: lsp_types::Range {
             start: start_position,
             end: state.position,
@@ -7625,119 +7612,116 @@ fn parse_still_syntax_type_not_space_separated_node(
     })
 }
 
-fn parse_still_syntax_type_record(state: &mut ParseState) -> Option<StillSyntaxType> {
+fn parse_lily_syntax_type_record(state: &mut ParseState) -> Option<LilySyntaxType> {
     if !parse_symbol(state, "{") {
         return None;
     }
-    parse_still_whitespace(state);
+    parse_lily_whitespace(state);
     while parse_symbol(state, ",") {
-        parse_still_whitespace(state);
+        parse_lily_whitespace(state);
     }
-    let mut fields: Vec<StillSyntaxTypeField> = Vec::with_capacity(2);
-    while let Some(field) = parse_still_syntax_type_field(state) {
+    let mut fields: Vec<LilySyntaxTypeField> = Vec::with_capacity(2);
+    while let Some(field) = parse_lily_syntax_type_field(state) {
         fields.push(field);
-        parse_still_whitespace(state);
+        parse_lily_whitespace(state);
         while parse_symbol(state, ",") {
-            parse_still_whitespace(state);
+            parse_lily_whitespace(state);
         }
     }
     let _: bool = parse_symbol(state, "}");
-    Some(StillSyntaxType::Record(fields))
+    Some(LilySyntaxType::Record(fields))
 }
-fn parse_still_syntax_type_field(state: &mut ParseState) -> Option<StillSyntaxTypeField> {
+fn parse_lily_syntax_type_field(state: &mut ParseState) -> Option<LilySyntaxTypeField> {
     if state.position.character <= u32::from(state.indent) {
         return None;
     }
-    let name_node: StillSyntaxNode<StillName> = parse_still_lowercase_name_node(state)?;
-    parse_still_whitespace(state);
-    let maybe_value: Option<StillSyntaxNode<StillSyntaxType>> = parse_still_syntax_type(state);
-    Some(StillSyntaxTypeField {
+    let name_node: LilySyntaxNode<LilyName> = parse_lily_lowercase_name_node(state)?;
+    parse_lily_whitespace(state);
+    let maybe_value: Option<LilySyntaxNode<LilySyntaxType>> = parse_lily_syntax_type(state);
+    Some(LilySyntaxTypeField {
         name: name_node,
         value: maybe_value,
     })
 }
 
-fn parse_still_syntax_type_parenthesized(state: &mut ParseState) -> Option<StillSyntaxType> {
+fn parse_lily_syntax_type_parenthesized(state: &mut ParseState) -> Option<LilySyntaxType> {
     if !parse_symbol(state, "(") {
         return None;
     }
-    parse_still_whitespace(state);
-    let maybe_in_parens_0: Option<StillSyntaxNode<StillSyntaxType>> =
-        parse_still_syntax_type(state);
-    parse_still_whitespace(state);
+    parse_lily_whitespace(state);
+    let maybe_in_parens_0: Option<LilySyntaxNode<LilySyntaxType>> = parse_lily_syntax_type(state);
+    parse_lily_whitespace(state);
     let _: bool = parse_symbol(state, ")");
-    Some(StillSyntaxType::Parenthesized(
-        maybe_in_parens_0.map(still_syntax_node_box),
+    Some(LilySyntaxType::Parenthesized(
+        maybe_in_parens_0.map(lily_syntax_node_box),
     ))
 }
 
-fn parse_still_syntax_pattern(
-    state: &mut ParseState,
-) -> Option<StillSyntaxNode<StillSyntaxPattern>> {
+fn parse_lily_syntax_pattern(state: &mut ParseState) -> Option<LilySyntaxNode<LilySyntaxPattern>> {
     if state.position.character < u32::from(state.indent) {
         return None;
     }
     let start_position: lsp_types::Position = state.position;
-    parse_still_char(state)
-        .map(StillSyntaxPattern::Char)
-        .or_else(|| parse_still_syntax_pattern_record(state))
-        .or_else(|| parse_still_syntax_pattern_int(state))
-        .or_else(|| parse_still_syntax_pattern_unt(state))
-        .map(|pattern| StillSyntaxNode {
+    parse_lily_char(state)
+        .map(LilySyntaxPattern::Char)
+        .or_else(|| parse_lily_syntax_pattern_record(state))
+        .or_else(|| parse_lily_syntax_pattern_int(state))
+        .or_else(|| parse_lily_syntax_pattern_unt(state))
+        .map(|pattern| LilySyntaxNode {
             range: lsp_types::Range {
                 start: start_position,
                 end: state.position,
             },
             value: pattern,
         })
-        .or_else(|| parse_still_syntax_pattern_string(state))
-        .or_else(|| parse_still_syntax_pattern_with_comment(state))
-        .or_else(|| parse_still_syntax_pattern_typed(state))
+        .or_else(|| parse_lily_syntax_pattern_string(state))
+        .or_else(|| parse_lily_syntax_pattern_with_comment(state))
+        .or_else(|| parse_lily_syntax_pattern_typed(state))
 }
-fn parse_still_syntax_pattern_record(state: &mut ParseState) -> Option<StillSyntaxPattern> {
+fn parse_lily_syntax_pattern_record(state: &mut ParseState) -> Option<LilySyntaxPattern> {
     if !parse_symbol(state, "{") {
         return None;
     }
-    parse_still_whitespace(state);
+    parse_lily_whitespace(state);
     while parse_symbol(state, ",") {
-        parse_still_whitespace(state);
+        parse_lily_whitespace(state);
     }
-    let mut fields: Vec<StillSyntaxPatternField> = Vec::with_capacity(2);
+    let mut fields: Vec<LilySyntaxPatternField> = Vec::with_capacity(2);
     while let Some(field_name_node) = if state.position.character <= u32::from(state.indent) {
         None
     } else {
-        parse_still_lowercase_name_node(state)
+        parse_lily_lowercase_name_node(state)
     } {
-        parse_still_whitespace(state);
-        let maybe_value: Option<StillSyntaxNode<StillSyntaxPattern>> =
-            parse_still_syntax_pattern(state);
-        fields.push(StillSyntaxPatternField {
+        parse_lily_whitespace(state);
+        let maybe_value: Option<LilySyntaxNode<LilySyntaxPattern>> =
+            parse_lily_syntax_pattern(state);
+        fields.push(LilySyntaxPatternField {
             name: field_name_node,
             value: maybe_value,
         });
-        parse_still_whitespace(state);
+        parse_lily_whitespace(state);
         while parse_symbol(state, ",") {
-            parse_still_whitespace(state);
+            parse_lily_whitespace(state);
         }
     }
     let _: bool = parse_symbol(state, "}");
-    Some(StillSyntaxPattern::Record(fields))
+    Some(LilySyntaxPattern::Record(fields))
 }
-fn parse_still_syntax_pattern_typed(
+fn parse_lily_syntax_pattern_typed(
     state: &mut ParseState,
-) -> Option<StillSyntaxNode<StillSyntaxPattern>> {
+) -> Option<LilySyntaxNode<LilySyntaxPattern>> {
     let start_position: lsp_types::Position = state.position;
     if !parse_symbol(state, ":") {
         return None;
     }
-    parse_still_whitespace(state);
-    let maybe_type: Option<StillSyntaxNode<StillSyntaxType>> = parse_still_syntax_type(state);
-    parse_still_whitespace(state);
+    parse_lily_whitespace(state);
+    let maybe_type: Option<LilySyntaxNode<LilySyntaxType>> = parse_lily_syntax_type(state);
+    parse_lily_whitespace(state);
     let maybe_closing_colon_range: Option<lsp_types::Range> = parse_symbol_as_range(state, ":");
-    parse_still_whitespace(state);
-    let maybe_pattern: Option<StillSyntaxNode<StillSyntaxPatternUntyped>> =
-        parse_still_syntax_pattern_untyped(state);
-    Some(StillSyntaxNode {
+    parse_lily_whitespace(state);
+    let maybe_pattern: Option<LilySyntaxNode<LilySyntaxPatternUntyped>> =
+        parse_lily_syntax_pattern_untyped(state);
+    Some(LilySyntaxNode {
         range: lsp_types::Range {
             start: start_position,
             end: maybe_pattern
@@ -7747,23 +7731,23 @@ fn parse_still_syntax_pattern_typed(
                 .or_else(|| maybe_type.as_ref().map(|n| n.range.end))
                 .unwrap_or_else(|| lsp_position_add_characters(start_position, 1)),
         },
-        value: StillSyntaxPattern::Typed {
+        value: LilySyntaxPattern::Typed {
             type_: maybe_type,
             closing_colon_range: maybe_closing_colon_range,
             pattern: maybe_pattern,
         },
     })
 }
-fn parse_still_syntax_pattern_untyped(
+fn parse_lily_syntax_pattern_untyped(
     state: &mut ParseState,
-) -> Option<StillSyntaxNode<StillSyntaxPatternUntyped>> {
+) -> Option<LilySyntaxNode<LilySyntaxPatternUntyped>> {
     parse_symbol_as_range(state, "_")
-        .map(|range| StillSyntaxNode {
+        .map(|range| LilySyntaxNode {
             range: range,
-            value: StillSyntaxPatternUntyped::Ignored,
+            value: LilySyntaxPatternUntyped::Ignored,
         })
         .or_else(|| {
-            parse_still_syntax_local_variable(state).map(|local_variable| StillSyntaxNode {
+            parse_lily_syntax_local_variable(state).map(|local_variable| LilySyntaxNode {
                 range: local_variable
                     .overwriting
                     .map(|end| lsp_types::Range {
@@ -7771,33 +7755,33 @@ fn parse_still_syntax_pattern_untyped(
                         end: end,
                     })
                     .unwrap_or(local_variable.name.range),
-                value: StillSyntaxPatternUntyped::Variable {
+                value: LilySyntaxPatternUntyped::Variable {
                     overwriting: local_variable.overwriting.is_some(),
                     name: local_variable.name.value,
                 },
             })
         })
-        .or_else(|| parse_still_syntax_pattern_variant(state))
+        .or_else(|| parse_lily_syntax_pattern_variant(state))
         .or_else(|| {
-            parse_still_syntax_pattern(state).map(|other_node| {
-                still_syntax_node_map(other_node, |other| {
-                    StillSyntaxPatternUntyped::Other(Box::new(other))
+            parse_lily_syntax_pattern(state).map(|other_node| {
+                lily_syntax_node_map(other_node, |other| {
+                    LilySyntaxPatternUntyped::Other(Box::new(other))
                 })
             })
         })
 }
-struct StillSyntaxLocalVariable {
-    name: StillSyntaxNode<StillName>,
+struct LilySyntaxLocalVariable {
+    name: LilySyntaxNode<LilyName>,
     overwriting: Option<lsp_types::Position>,
 }
-fn parse_still_syntax_local_variable(state: &mut ParseState) -> Option<StillSyntaxLocalVariable> {
+fn parse_lily_syntax_local_variable(state: &mut ParseState) -> Option<LilySyntaxLocalVariable> {
     if state.position.character <= u32::from(state.indent) {
         return None;
     }
-    let name_node: StillSyntaxNode<StillName> = parse_still_lowercase_name_node(state)?;
-    parse_still_whitespace(state);
+    let name_node: LilySyntaxNode<LilyName> = parse_lily_lowercase_name_node(state)?;
+    parse_lily_whitespace(state);
     let ends_in_caret_key_symbol = parse_symbol(state, "^");
-    Some(StillSyntaxLocalVariable {
+    Some(LilySyntaxLocalVariable {
         name: name_node,
         overwriting: if ends_in_caret_key_symbol {
             Some(state.position)
@@ -7806,14 +7790,13 @@ fn parse_still_syntax_local_variable(state: &mut ParseState) -> Option<StillSynt
         },
     })
 }
-fn parse_still_syntax_pattern_variant(
+fn parse_lily_syntax_pattern_variant(
     state: &mut ParseState,
-) -> Option<StillSyntaxNode<StillSyntaxPatternUntyped>> {
-    let variable_node: StillSyntaxNode<StillName> = parse_still_uppercase_name_node(state)?;
-    parse_still_whitespace(state);
-    let maybe_value: Option<StillSyntaxNode<StillSyntaxPattern>> =
-        parse_still_syntax_pattern(state);
-    Some(StillSyntaxNode {
+) -> Option<LilySyntaxNode<LilySyntaxPatternUntyped>> {
+    let variable_node: LilySyntaxNode<LilyName> = parse_lily_uppercase_name_node(state)?;
+    parse_lily_whitespace(state);
+    let maybe_value: Option<LilySyntaxNode<LilySyntaxPattern>> = parse_lily_syntax_pattern(state);
+    Some(LilySyntaxNode {
         range: lsp_types::Range {
             start: variable_node.range.start,
             end: match &maybe_value {
@@ -7821,21 +7804,20 @@ fn parse_still_syntax_pattern_variant(
                 Some(value_node) => value_node.range.end,
             },
         },
-        value: StillSyntaxPatternUntyped::Variant {
+        value: LilySyntaxPatternUntyped::Variant {
             name: variable_node,
-            value: maybe_value.map(still_syntax_node_box),
+            value: maybe_value.map(lily_syntax_node_box),
         },
     })
 }
-fn parse_still_syntax_pattern_with_comment(
+fn parse_lily_syntax_pattern_with_comment(
     state: &mut ParseState,
-) -> Option<StillSyntaxNode<StillSyntaxPattern>> {
-    let comment_node: StillSyntaxNode<Box<str>> =
-        parse_still_comment_lines_then_same_line_whitespace(state)?;
-    parse_still_whitespace(state);
-    let maybe_pattern: Option<StillSyntaxNode<StillSyntaxPattern>> =
-        parse_still_syntax_pattern(state);
-    Some(StillSyntaxNode {
+) -> Option<LilySyntaxNode<LilySyntaxPattern>> {
+    let comment_node: LilySyntaxNode<Box<str>> =
+        parse_lily_comment_lines_then_same_line_whitespace(state)?;
+    parse_lily_whitespace(state);
+    let maybe_pattern: Option<LilySyntaxNode<LilySyntaxPattern>> = parse_lily_syntax_pattern(state);
+    Some(LilySyntaxNode {
         range: lsp_types::Range {
             start: comment_node.range.start,
             end: maybe_pattern
@@ -7843,21 +7825,21 @@ fn parse_still_syntax_pattern_with_comment(
                 .map(|n| n.range.end)
                 .unwrap_or(comment_node.range.end),
         },
-        value: StillSyntaxPattern::WithComment {
+        value: LilySyntaxPattern::WithComment {
             comment: comment_node,
-            pattern: maybe_pattern.map(still_syntax_node_box),
+            pattern: maybe_pattern.map(lily_syntax_node_box),
         },
     })
 }
-fn parse_still_syntax_pattern_string(
+fn parse_lily_syntax_pattern_string(
     state: &mut ParseState,
-) -> Option<StillSyntaxNode<StillSyntaxPattern>> {
+) -> Option<LilySyntaxNode<LilySyntaxPattern>> {
     let start_position: lsp_types::Position = state.position;
-    parse_still_string_single_quoted(state)
-        .map(|content| StillSyntaxNode {
-            value: StillSyntaxPattern::String {
+    parse_lily_string_single_quoted(state)
+        .map(|content| LilySyntaxNode {
+            value: LilySyntaxPattern::String {
                 content: content,
-                quoting_style: StillSyntaxStringQuotingStyle::SingleQuoted,
+                quoting_style: LilySyntaxStringQuotingStyle::SingleQuoted,
             },
             range: lsp_types::Range {
                 start: start_position,
@@ -7865,10 +7847,10 @@ fn parse_still_syntax_pattern_string(
             },
         })
         .or_else(|| {
-            parse_still_string_ticked_lines(state).map(|content| StillSyntaxNode {
-                value: StillSyntaxPattern::String {
+            parse_lily_string_ticked_lines(state).map(|content| LilySyntaxNode {
+                value: LilySyntaxPattern::String {
                     content: content,
-                    quoting_style: StillSyntaxStringQuotingStyle::TickedLines,
+                    quoting_style: LilySyntaxStringQuotingStyle::TickedLines,
                 },
                 range: lsp_types::Range {
                     start: start_position,
@@ -7880,19 +7862,19 @@ fn parse_still_syntax_pattern_string(
             })
         })
 }
-// must be checked for _after_ `parse_still_syntax_pattern_int`
-fn parse_still_syntax_pattern_unt(state: &mut ParseState) -> Option<StillSyntaxPattern> {
+// must be checked for _after_ `parse_lily_syntax_pattern_int`
+fn parse_lily_syntax_pattern_unt(state: &mut ParseState) -> Option<LilySyntaxPattern> {
     let start_offset_utf8: usize = state.offset_utf8;
     if !parse_unsigned_integer_base10(state) {
         return None;
     }
     let decimal_str: &str = &state.source[start_offset_utf8..state.offset_utf8];
-    Some(StillSyntaxPattern::Unt(Box::from(decimal_str)))
+    Some(LilySyntaxPattern::Unt(Box::from(decimal_str)))
 }
-// must be checked for _before_ `parse_still_syntax_pattern_unt`
-fn parse_still_syntax_pattern_int(state: &mut ParseState) -> Option<StillSyntaxPattern> {
+// must be checked for _before_ `parse_lily_syntax_pattern_unt`
+fn parse_lily_syntax_pattern_int(state: &mut ParseState) -> Option<LilySyntaxPattern> {
     if parse_symbol(state, "00") {
-        return Some(StillSyntaxPattern::Int(StillSyntaxInt::Zero));
+        return Some(LilySyntaxPattern::Int(LilySyntaxInt::Zero));
     }
     let start_offset_utf8: usize = state.offset_utf8;
     if !parse_symbol(state, "-") || parse_symbol(state, "+") {
@@ -7900,13 +7882,13 @@ fn parse_still_syntax_pattern_int(state: &mut ParseState) -> Option<StillSyntaxP
     }
     let _: bool = parse_unsigned_integer_base10(state);
     let decimal_str: &str = &state.source[start_offset_utf8..state.offset_utf8];
-    Some(StillSyntaxPattern::Int(StillSyntaxInt::Signed(Box::from(
+    Some(LilySyntaxPattern::Int(LilySyntaxInt::Signed(Box::from(
         decimal_str,
     ))))
 }
-fn parse_still_syntax_expression_number(state: &mut ParseState) -> Option<StillSyntaxExpression> {
+fn parse_lily_syntax_expression_number(state: &mut ParseState) -> Option<LilySyntaxExpression> {
     if parse_symbol(state, "00") {
-        return Some(StillSyntaxExpression::Int(StillSyntaxInt::Zero));
+        return Some(LilySyntaxExpression::Int(LilySyntaxInt::Zero));
     }
     let start_offset_utf8: usize = state.offset_utf8;
     let has_sign: bool = if parse_symbol(state, "-") || parse_symbol(state, "+") {
@@ -7923,25 +7905,25 @@ fn parse_still_syntax_expression_number(state: &mut ParseState) -> Option<StillS
     }
     let full_chomped_str: &str = &state.source[start_offset_utf8..state.offset_utf8];
     Some(if has_decimal_point {
-        StillSyntaxExpression::Dec(Box::from(full_chomped_str))
+        LilySyntaxExpression::Dec(Box::from(full_chomped_str))
     } else if has_sign {
-        StillSyntaxExpression::Int(StillSyntaxInt::Signed(Box::from(full_chomped_str)))
+        LilySyntaxExpression::Int(LilySyntaxInt::Signed(Box::from(full_chomped_str)))
     } else {
-        StillSyntaxExpression::Unt(Box::from(full_chomped_str))
+        LilySyntaxExpression::Unt(Box::from(full_chomped_str))
     })
 }
-fn parse_still_char(state: &mut ParseState) -> Option<Option<char>> {
+fn parse_lily_char(state: &mut ParseState) -> Option<Option<char>> {
     if !parse_symbol(state, "'") {
         return None;
     }
     if parse_symbol(state, "'") {
         return Some(None);
     }
-    let result: Option<char> = parse_still_text_content_char(state);
+    let result: Option<char> = parse_lily_text_content_char(state);
     let _: bool = parse_symbol(state, "'");
     Some(result)
 }
-fn parse_still_string_single_quoted(state: &mut ParseState) -> Option<String> {
+fn parse_lily_string_single_quoted(state: &mut ParseState) -> Option<String> {
     if !parse_symbol(state, "\"") {
         return None;
     }
@@ -7949,7 +7931,7 @@ fn parse_still_string_single_quoted(state: &mut ParseState) -> Option<String> {
     while !(parse_symbol(state, "\"")
         || str_starts_with_linebreak(&state.source[state.offset_utf8..]))
     {
-        match parse_still_text_content_char(state) {
+        match parse_lily_text_content_char(state) {
             Some(next_content_char) => {
                 result.push(next_content_char);
             }
@@ -7963,21 +7945,21 @@ fn parse_still_string_single_quoted(state: &mut ParseState) -> Option<String> {
     }
     Some(result)
 }
-fn parse_still_string_ticked_lines(state: &mut ParseState) -> Option<String> {
+fn parse_lily_string_ticked_lines(state: &mut ParseState) -> Option<String> {
     if !parse_symbol(state, "`") {
         return None;
     }
     let mut result: String = parse_before_next_linebreak_or_end_as_str(state).to_string();
-    parse_still_whitespace(state);
+    parse_lily_whitespace(state);
     while parse_symbol(state, "`") {
         result.push('\n');
         result.push_str(parse_before_next_linebreak_or_end_as_str(state));
-        parse_still_whitespace(state);
+        parse_lily_whitespace(state);
     }
     Some(result)
 }
 
-fn parse_still_text_content_char(state: &mut ParseState) -> Option<char> {
+fn parse_lily_text_content_char(state: &mut ParseState) -> Option<char> {
     parse_symbol_as(state, "\\\\", '\\')
         .or_else(|| parse_symbol_as(state, "\\'", '\''))
         .or_else(|| parse_symbol_as(state, "\\n", '\n'))
@@ -8045,25 +8027,25 @@ fn parse_still_text_content_char(state: &mut ParseState) -> Option<char> {
         })
 }
 
-fn parse_still_syntax_expression_space_separated(
+fn parse_lily_syntax_expression_space_separated(
     state: &mut ParseState,
-) -> Option<StillSyntaxNode<StillSyntaxExpression>> {
+) -> Option<LilySyntaxNode<LilySyntaxExpression>> {
     if state.position.character <= u32::from(state.indent) {
         return None;
     }
-    let start_expression_node: StillSyntaxNode<StillSyntaxExpression> =
-        parse_still_syntax_expression_typed(state)
-            .or_else(|| parse_still_syntax_expression_after_local_variable(state))
-            .or_else(|| parse_still_syntax_expression_lambda(state))
-            .or_else(|| parse_still_syntax_expression_variable_or_call(state))
-            .or_else(|| parse_still_syntax_expression_with_comment_node(state))
-            .or_else(|| parse_still_syntax_expression_string(state))
+    let start_expression_node: LilySyntaxNode<LilySyntaxExpression> =
+        parse_lily_syntax_expression_typed(state)
+            .or_else(|| parse_lily_syntax_expression_after_local_variable(state))
+            .or_else(|| parse_lily_syntax_expression_lambda(state))
+            .or_else(|| parse_lily_syntax_expression_variable_or_call(state))
+            .or_else(|| parse_lily_syntax_expression_with_comment_node(state))
+            .or_else(|| parse_lily_syntax_expression_string(state))
             .or_else(|| {
                 let start_position: lsp_types::Position = state.position;
-                parse_still_syntax_expression_parenthesized(state)
-                    .or_else(|| parse_still_syntax_expression_record_or_record_update(state))
-                    .or_else(|| parse_still_char(state).map(StillSyntaxExpression::Char))
-                    .map(|start_expression| StillSyntaxNode {
+                parse_lily_syntax_expression_parenthesized(state)
+                    .or_else(|| parse_lily_syntax_expression_record_or_record_update(state))
+                    .or_else(|| parse_lily_char(state).map(LilySyntaxExpression::Char))
+                    .map(|start_expression| LilySyntaxNode {
                         range: lsp_types::Range {
                             start: start_position,
                             end: state.position,
@@ -8071,7 +8053,7 @@ fn parse_still_syntax_expression_space_separated(
                         value: start_expression,
                     })
                     .or_else(|| {
-                        parse_still_syntax_expression_list(state).map(|node| StillSyntaxNode {
+                        parse_lily_syntax_expression_list(state).map(|node| LilySyntaxNode {
                             range: lsp_types::Range {
                                 start: start_position,
                                 end: state.position,
@@ -8080,7 +8062,7 @@ fn parse_still_syntax_expression_space_separated(
                         })
                     })
                     .or_else(|| {
-                        parse_still_syntax_expression_number(state).map(|node| StillSyntaxNode {
+                        parse_lily_syntax_expression_number(state).map(|node| LilySyntaxNode {
                             range: lsp_types::Range {
                                 start: start_position,
                                 end: state.position,
@@ -8089,19 +8071,19 @@ fn parse_still_syntax_expression_space_separated(
                         })
                     })
             })?;
-    parse_still_whitespace(state);
-    let mut cases: Vec<StillSyntaxExpressionCase> = Vec::new();
-    'parsing_cases: while let Some(parsed_case) = parse_still_syntax_expression_case(state) {
+    parse_lily_whitespace(state);
+    let mut cases: Vec<LilySyntaxExpressionCase> = Vec::new();
+    'parsing_cases: while let Some(parsed_case) = parse_lily_syntax_expression_case(state) {
         cases.push(parsed_case.syntax);
         if parsed_case.must_be_last_case {
             break 'parsing_cases;
         }
-        parse_still_whitespace(state);
+        parse_lily_whitespace(state);
     }
     if cases.is_empty() {
         Some(start_expression_node)
     } else {
-        Some(StillSyntaxNode {
+        Some(LilySyntaxNode {
             range: lsp_types::Range {
                 start: start_expression_node.range.start,
                 end: cases
@@ -8122,38 +8104,38 @@ fn parse_still_syntax_expression_space_separated(
                     })
                     .unwrap_or(start_expression_node.range.end),
             },
-            value: StillSyntaxExpression::Match {
-                matched: still_syntax_node_box(start_expression_node),
+            value: LilySyntaxExpression::Match {
+                matched: lily_syntax_node_box(start_expression_node),
                 cases,
             },
         })
     }
 }
-fn parse_still_syntax_expression_untyped_node(
+fn parse_lily_syntax_expression_untyped_node(
     state: &mut ParseState,
-) -> Option<StillSyntaxNode<StillSyntaxExpressionUntyped>> {
-    parse_still_syntax_expression_variant_node(state).or_else(|| {
-        parse_still_syntax_expression_space_separated(state).map(|n| StillSyntaxNode {
+) -> Option<LilySyntaxNode<LilySyntaxExpressionUntyped>> {
+    parse_lily_syntax_expression_variant_node(state).or_else(|| {
+        parse_lily_syntax_expression_space_separated(state).map(|n| LilySyntaxNode {
             range: n.range,
-            value: StillSyntaxExpressionUntyped::Other(Box::new(n.value)),
+            value: LilySyntaxExpressionUntyped::Other(Box::new(n.value)),
         })
     })
 }
-fn parse_still_syntax_expression_typed(
+fn parse_lily_syntax_expression_typed(
     state: &mut ParseState,
-) -> Option<StillSyntaxNode<StillSyntaxExpression>> {
+) -> Option<LilySyntaxNode<LilySyntaxExpression>> {
     let start_position: lsp_types::Position = state.position;
     if !parse_symbol(state, ":") {
         return None;
     }
-    parse_still_whitespace(state);
-    let maybe_type: Option<StillSyntaxNode<StillSyntaxType>> = parse_still_syntax_type(state);
-    parse_still_whitespace(state);
+    parse_lily_whitespace(state);
+    let maybe_type: Option<LilySyntaxNode<LilySyntaxType>> = parse_lily_syntax_type(state);
+    parse_lily_whitespace(state);
     let maybe_closing_colon_range: Option<lsp_types::Range> = parse_symbol_as_range(state, ":");
-    parse_still_whitespace(state);
-    let maybe_expression: Option<StillSyntaxNode<StillSyntaxExpressionUntyped>> =
-        parse_still_syntax_expression_untyped_node(state);
-    Some(StillSyntaxNode {
+    parse_lily_whitespace(state);
+    let maybe_expression: Option<LilySyntaxNode<LilySyntaxExpressionUntyped>> =
+        parse_lily_syntax_expression_untyped_node(state);
+    Some(LilySyntaxNode {
         range: lsp_types::Range {
             start: start_position,
             end: maybe_expression
@@ -8163,52 +8145,52 @@ fn parse_still_syntax_expression_typed(
                 .or_else(|| maybe_type.as_ref().map(|n| n.range.end))
                 .unwrap_or_else(|| lsp_position_add_characters(start_position, 1)),
         },
-        value: StillSyntaxExpression::Typed {
+        value: LilySyntaxExpression::Typed {
             type_: maybe_type,
             closing_colon_range: maybe_closing_colon_range,
             expression: maybe_expression,
         },
     })
 }
-fn parse_still_syntax_expression_variable_or_call(
+fn parse_lily_syntax_expression_variable_or_call(
     state: &mut ParseState,
-) -> Option<StillSyntaxNode<StillSyntaxExpression>> {
-    let variable_node: StillSyntaxNode<StillName> =
-        parse_still_syntax_expression_variable_standalone(state)?;
-    parse_still_whitespace(state);
-    let mut arguments: Vec<StillSyntaxNode<StillSyntaxExpression>> = Vec::new();
+) -> Option<LilySyntaxNode<LilySyntaxExpression>> {
+    let variable_node: LilySyntaxNode<LilyName> =
+        parse_lily_syntax_expression_variable_standalone(state)?;
+    parse_lily_whitespace(state);
+    let mut arguments: Vec<LilySyntaxNode<LilySyntaxExpression>> = Vec::new();
     let mut call_end_position: lsp_types::Position = variable_node.range.end;
     'parsing_arguments: loop {
-        match parse_still_syntax_expression_not_space_separated(state) {
+        match parse_lily_syntax_expression_not_space_separated(state) {
             None => {
                 break 'parsing_arguments;
             }
             Some(argument_node) => {
                 call_end_position = argument_node.range.end;
                 arguments.push(argument_node);
-                parse_still_whitespace(state);
+                parse_lily_whitespace(state);
             }
         }
     }
-    Some(StillSyntaxNode {
+    Some(LilySyntaxNode {
         range: lsp_types::Range {
             start: variable_node.range.start,
             end: call_end_position,
         },
-        value: StillSyntaxExpression::VariableOrCall {
+        value: LilySyntaxExpression::VariableOrCall {
             variable: variable_node,
             arguments: arguments,
         },
     })
 }
-fn parse_still_syntax_expression_variant_node(
+fn parse_lily_syntax_expression_variant_node(
     state: &mut ParseState,
-) -> Option<StillSyntaxNode<StillSyntaxExpressionUntyped>> {
-    let name_node: StillSyntaxNode<StillName> = parse_still_uppercase_name_node(state)?;
-    parse_still_whitespace(state);
-    let maybe_value: Option<StillSyntaxNode<StillSyntaxExpression>> =
-        parse_still_syntax_expression_space_separated(state);
-    Some(StillSyntaxNode {
+) -> Option<LilySyntaxNode<LilySyntaxExpressionUntyped>> {
+    let name_node: LilySyntaxNode<LilyName> = parse_lily_uppercase_name_node(state)?;
+    parse_lily_whitespace(state);
+    let maybe_value: Option<LilySyntaxNode<LilySyntaxExpression>> =
+        parse_lily_syntax_expression_space_separated(state);
+    Some(LilySyntaxNode {
         range: lsp_types::Range {
             start: name_node.range.start,
             end: maybe_value
@@ -8216,21 +8198,21 @@ fn parse_still_syntax_expression_variant_node(
                 .map(|n| n.range.end)
                 .unwrap_or(name_node.range.end),
         },
-        value: StillSyntaxExpressionUntyped::Variant {
+        value: LilySyntaxExpressionUntyped::Variant {
             name: name_node,
-            value: maybe_value.map(still_syntax_node_box),
+            value: maybe_value.map(lily_syntax_node_box),
         },
     })
 }
-fn parse_still_syntax_expression_with_comment_node(
+fn parse_lily_syntax_expression_with_comment_node(
     state: &mut ParseState,
-) -> Option<StillSyntaxNode<StillSyntaxExpression>> {
-    let comment_node: StillSyntaxNode<Box<str>> =
-        parse_still_comment_lines_then_same_line_whitespace(state)?;
-    parse_still_whitespace(state);
-    let maybe_expression: Option<StillSyntaxNode<StillSyntaxExpression>> =
-        parse_still_syntax_expression_space_separated(state);
-    Some(StillSyntaxNode {
+) -> Option<LilySyntaxNode<LilySyntaxExpression>> {
+    let comment_node: LilySyntaxNode<Box<str>> =
+        parse_lily_comment_lines_then_same_line_whitespace(state)?;
+    parse_lily_whitespace(state);
+    let maybe_expression: Option<LilySyntaxNode<LilySyntaxExpression>> =
+        parse_lily_syntax_expression_space_separated(state);
+    Some(LilySyntaxNode {
         range: lsp_types::Range {
             start: comment_node.range.start,
             end: maybe_expression
@@ -8238,25 +8220,25 @@ fn parse_still_syntax_expression_with_comment_node(
                 .map(|n| n.range.end)
                 .unwrap_or(comment_node.range.end),
         },
-        value: StillSyntaxExpression::WithComment {
+        value: LilySyntaxExpression::WithComment {
             comment: comment_node,
-            expression: maybe_expression.map(still_syntax_node_box),
+            expression: maybe_expression.map(lily_syntax_node_box),
         },
     })
 }
-fn parse_still_syntax_expression_not_space_separated(
+fn parse_lily_syntax_expression_not_space_separated(
     state: &mut ParseState,
-) -> Option<StillSyntaxNode<StillSyntaxExpression>> {
+) -> Option<LilySyntaxNode<LilySyntaxExpression>> {
     if state.position.character <= u32::from(state.indent) {
         return None;
     }
-    parse_still_syntax_expression_string(state).or_else(|| {
+    parse_lily_syntax_expression_string(state).or_else(|| {
         let start_position: lsp_types::Position = state.position;
-        parse_still_syntax_expression_parenthesized(state)
-            .or_else(|| parse_still_syntax_expression_variable(state))
-            .or_else(|| parse_still_syntax_expression_record_or_record_update(state))
-            .or_else(|| parse_still_char(state).map(StillSyntaxExpression::Char))
-            .map(|start_expression| StillSyntaxNode {
+        parse_lily_syntax_expression_parenthesized(state)
+            .or_else(|| parse_lily_syntax_expression_variable(state))
+            .or_else(|| parse_lily_syntax_expression_record_or_record_update(state))
+            .or_else(|| parse_lily_char(state).map(LilySyntaxExpression::Char))
+            .map(|start_expression| LilySyntaxNode {
                 range: lsp_types::Range {
                     start: start_position,
                     end: state.position,
@@ -8264,7 +8246,7 @@ fn parse_still_syntax_expression_not_space_separated(
                 value: start_expression,
             })
             .or_else(|| {
-                parse_still_syntax_expression_list(state).map(|node| StillSyntaxNode {
+                parse_lily_syntax_expression_list(state).map(|node| LilySyntaxNode {
                     range: lsp_types::Range {
                         start: start_position,
                         end: state.position,
@@ -8273,7 +8255,7 @@ fn parse_still_syntax_expression_not_space_separated(
                 })
             })
             .or_else(|| {
-                parse_still_syntax_expression_number(state).map(|node| StillSyntaxNode {
+                parse_lily_syntax_expression_number(state).map(|node| LilySyntaxNode {
                     range: lsp_types::Range {
                         start: start_position,
                         end: state.position,
@@ -8283,105 +8265,103 @@ fn parse_still_syntax_expression_not_space_separated(
             })
     })
 }
-fn parse_still_syntax_expression_variable_standalone(
+fn parse_lily_syntax_expression_variable_standalone(
     state: &mut ParseState,
-) -> Option<StillSyntaxNode<StillName>> {
-    // can be optimized by e.g. adding a non-state-mutating parse_still_lowercase_as_string
+) -> Option<LilySyntaxNode<LilyName>> {
+    // can be optimized by e.g. adding a non-state-mutating parse_lily_lowercase_as_string
     // that checks for keywords on successful chomp and returns None only then (and if no keyword, mutate the state)
-    parse_still_lowercase_name_node(state).or_else(|| parse_still_uppercase_name_node(state))
+    parse_lily_lowercase_name_node(state).or_else(|| parse_lily_uppercase_name_node(state))
 }
-fn parse_still_syntax_expression_variable(state: &mut ParseState) -> Option<StillSyntaxExpression> {
-    let variable_node = parse_still_syntax_expression_variable_standalone(state)?;
-    Some(StillSyntaxExpression::VariableOrCall {
+fn parse_lily_syntax_expression_variable(state: &mut ParseState) -> Option<LilySyntaxExpression> {
+    let variable_node = parse_lily_syntax_expression_variable_standalone(state)?;
+    Some(LilySyntaxExpression::VariableOrCall {
         variable: variable_node,
         arguments: vec![],
     })
 }
-fn parse_still_syntax_expression_record_or_record_update(
+fn parse_lily_syntax_expression_record_or_record_update(
     state: &mut ParseState,
-) -> Option<StillSyntaxExpression> {
+) -> Option<LilySyntaxExpression> {
     if !parse_symbol(state, "{") {
         return None;
     }
-    parse_still_whitespace(state);
+    parse_lily_whitespace(state);
     if let Some(spread_key_symbol_range) = parse_symbol_as_range(state, "..") {
-        parse_still_whitespace(state);
-        let maybe_record: Option<StillSyntaxNode<StillSyntaxExpression>> =
-            parse_still_syntax_expression_space_separated(state);
-        parse_still_whitespace(state);
+        parse_lily_whitespace(state);
+        let maybe_record: Option<LilySyntaxNode<LilySyntaxExpression>> =
+            parse_lily_syntax_expression_space_separated(state);
+        parse_lily_whitespace(state);
         while parse_symbol(state, ",") {
-            parse_still_whitespace(state);
+            parse_lily_whitespace(state);
         }
-        let mut fields: Vec<StillSyntaxExpressionField> = Vec::with_capacity(1);
-        while let Some(field) = parse_still_syntax_expression_field(state) {
+        let mut fields: Vec<LilySyntaxExpressionField> = Vec::with_capacity(1);
+        while let Some(field) = parse_lily_syntax_expression_field(state) {
             fields.push(field);
-            parse_still_whitespace(state);
+            parse_lily_whitespace(state);
             while parse_symbol(state, ",") {
-                parse_still_whitespace(state);
+                parse_lily_whitespace(state);
             }
         }
         let _: bool = parse_symbol(state, "}");
-        Some(StillSyntaxExpression::RecordUpdate {
-            record: maybe_record.map(still_syntax_node_box),
+        Some(LilySyntaxExpression::RecordUpdate {
+            record: maybe_record.map(lily_syntax_node_box),
             spread_key_symbol_range,
             fields: fields,
         })
     } else {
         while parse_symbol(state, ",") {
-            parse_still_whitespace(state);
+            parse_lily_whitespace(state);
         }
-        let mut fields: Vec<StillSyntaxExpressionField> = Vec::with_capacity(2);
-        while let Some(field) = parse_still_syntax_expression_field(state) {
+        let mut fields: Vec<LilySyntaxExpressionField> = Vec::with_capacity(2);
+        while let Some(field) = parse_lily_syntax_expression_field(state) {
             fields.push(field);
-            parse_still_whitespace(state);
+            parse_lily_whitespace(state);
             while parse_symbol(state, ",") {
-                parse_still_whitespace(state);
+                parse_lily_whitespace(state);
             }
         }
         let _: bool = parse_symbol(state, "}");
-        Some(StillSyntaxExpression::Record(fields))
+        Some(LilySyntaxExpression::Record(fields))
     }
 }
-fn parse_still_syntax_expression_field(
-    state: &mut ParseState,
-) -> Option<StillSyntaxExpressionField> {
+fn parse_lily_syntax_expression_field(state: &mut ParseState) -> Option<LilySyntaxExpressionField> {
     if state.position.character <= u32::from(state.indent) {
         return None;
     }
-    let name_node: StillSyntaxNode<StillName> = parse_still_lowercase_name_node(state)?;
-    parse_still_whitespace(state);
-    let maybe_value: Option<StillSyntaxNode<StillSyntaxExpression>> =
-        parse_still_syntax_expression_space_separated(state);
-    Some(StillSyntaxExpressionField {
+    let name_node: LilySyntaxNode<LilyName> = parse_lily_lowercase_name_node(state)?;
+    parse_lily_whitespace(state);
+    let maybe_value: Option<LilySyntaxNode<LilySyntaxExpression>> =
+        parse_lily_syntax_expression_space_separated(state);
+    Some(LilySyntaxExpressionField {
         name: name_node,
         value: maybe_value,
     })
 }
-fn parse_still_syntax_expression_lambda(
+fn parse_lily_syntax_expression_lambda(
     state: &mut ParseState,
-) -> Option<StillSyntaxNode<StillSyntaxExpression>> {
+) -> Option<LilySyntaxNode<LilySyntaxExpression>> {
     let backslash_key_symbol_range: lsp_types::Range = parse_symbol_as_range(state, "\\")?;
-    parse_still_whitespace(state);
-    let mut parameters: Vec<StillSyntaxNode<StillSyntaxPattern>> = Vec::with_capacity(1);
-    while let Some(parameter_node) = parse_still_syntax_pattern(state) {
+    parse_lily_whitespace(state);
+    let mut parameters: Vec<LilySyntaxNode<LilySyntaxPattern>> = Vec::with_capacity(1);
+    while let Some(parameter_node) = parse_lily_syntax_pattern(state) {
         parameters.push(parameter_node);
-        parse_still_whitespace(state);
+        parse_lily_whitespace(state);
         // be lenient in allowing , after lambda parameters, even though it's invalid syntax
         while parse_symbol(state, ",") {
-            parse_still_whitespace(state);
+            parse_lily_whitespace(state);
         }
     }
     let maybe_arrow_key_symbol_range: Option<lsp_types::Range> = parse_symbol_as_range(state, ">")
         .or_else(|| parse_symbol_as_range(state, "->"))
         .or_else(|| parse_symbol_as_range(state, "=>"));
-    parse_still_whitespace(state);
-    let maybe_result: Option<StillSyntaxNode<StillSyntaxExpression>> =
+    parse_lily_whitespace(state);
+    let maybe_result: Option<LilySyntaxNode<LilySyntaxExpression>> =
         if state.position.character > u32::from(state.indent) {
-            parse_still_syntax_expression_space_separated(state)
+            parse_lily_syntax_expression_space_separated(state)
         } else {
             None
         };
-    Some(StillSyntaxNode {
+    Some(LilySyntaxNode {
         range: lsp_types::Range {
             start: backslash_key_symbol_range.start,
             end: match &maybe_result {
@@ -8392,32 +8372,32 @@ fn parse_still_syntax_expression_lambda(
                 Some(result_node) => result_node.range.end,
             },
         },
-        value: StillSyntaxExpression::Lambda {
+        value: LilySyntaxExpression::Lambda {
             parameters,
             arrow_key_symbol_range: maybe_arrow_key_symbol_range,
-            result: maybe_result.map(still_syntax_node_box),
+            result: maybe_result.map(lily_syntax_node_box),
         },
     })
 }
-struct ParsedStillExpressionCase {
-    syntax: StillSyntaxExpressionCase,
+struct ParsedLilyExpressionCase {
+    syntax: LilySyntaxExpressionCase,
     must_be_last_case: bool,
 }
-fn parse_still_syntax_expression_case(state: &mut ParseState) -> Option<ParsedStillExpressionCase> {
+fn parse_lily_syntax_expression_case(state: &mut ParseState) -> Option<ParsedLilyExpressionCase> {
     if state.position.character <= u32::from(state.indent) {
         return None;
     }
     let bar_key_symbol_range: lsp_types::Range = parse_symbol_as_range(state, "|")?;
-    parse_still_whitespace(state);
-    let maybe_case_pattern: Option<StillSyntaxNode<StillSyntaxPattern>> =
-        parse_still_syntax_pattern(state);
-    parse_still_whitespace(state);
+    parse_lily_whitespace(state);
+    let maybe_case_pattern: Option<LilySyntaxNode<LilySyntaxPattern>> =
+        parse_lily_syntax_pattern(state);
+    parse_lily_whitespace(state);
     match parse_symbol_as_range(state, ">")
         .or_else(|| parse_symbol_as_range(state, "->"))
         .or_else(|| parse_symbol_as_range(state, "=>"))
     {
-        None => Some(ParsedStillExpressionCase {
-            syntax: StillSyntaxExpressionCase {
+        None => Some(ParsedLilyExpressionCase {
+            syntax: LilySyntaxExpressionCase {
                 or_bar_key_symbol_range: bar_key_symbol_range,
                 pattern: maybe_case_pattern,
                 arrow_key_symbol_range: None,
@@ -8426,12 +8406,12 @@ fn parse_still_syntax_expression_case(state: &mut ParseState) -> Option<ParsedSt
             must_be_last_case: false,
         }),
         Some(arrow_key_symbol_range) => {
-            parse_still_whitespace(state);
+            parse_lily_whitespace(state);
             if state.position.character <= bar_key_symbol_range.start.character {
-                let maybe_result: Option<StillSyntaxNode<StillSyntaxExpression>> =
-                    parse_still_syntax_expression_space_separated(state);
-                Some(ParsedStillExpressionCase {
-                    syntax: StillSyntaxExpressionCase {
+                let maybe_result: Option<LilySyntaxNode<LilySyntaxExpression>> =
+                    parse_lily_syntax_expression_space_separated(state);
+                Some(ParsedLilyExpressionCase {
+                    syntax: LilySyntaxExpressionCase {
                         or_bar_key_symbol_range: bar_key_symbol_range,
                         pattern: maybe_case_pattern,
                         arrow_key_symbol_range: Some(arrow_key_symbol_range),
@@ -8441,11 +8421,11 @@ fn parse_still_syntax_expression_case(state: &mut ParseState) -> Option<ParsedSt
                 })
             } else {
                 parse_state_push_indent(state, bar_key_symbol_range.start.character as u16);
-                let maybe_result: Option<StillSyntaxNode<StillSyntaxExpression>> =
-                    parse_still_syntax_expression_space_separated(state);
+                let maybe_result: Option<LilySyntaxNode<LilySyntaxExpression>> =
+                    parse_lily_syntax_expression_space_separated(state);
                 parse_state_pop_indent(state);
-                Some(ParsedStillExpressionCase {
-                    syntax: StillSyntaxExpressionCase {
+                Some(ParsedLilyExpressionCase {
+                    syntax: LilySyntaxExpressionCase {
                         or_bar_key_symbol_range: bar_key_symbol_range,
                         pattern: maybe_case_pattern,
                         arrow_key_symbol_range: Some(arrow_key_symbol_range),
@@ -8458,21 +8438,21 @@ fn parse_still_syntax_expression_case(state: &mut ParseState) -> Option<ParsedSt
     }
 }
 
-fn parse_still_syntax_expression_after_local_variable(
+fn parse_lily_syntax_expression_after_local_variable(
     state: &mut ParseState,
-) -> Option<StillSyntaxNode<StillSyntaxExpression>> {
+) -> Option<LilySyntaxNode<LilySyntaxExpression>> {
     let equals_key_symbol_range: lsp_types::Range = parse_symbol_as_range(state, "=")?;
-    parse_still_whitespace(state);
+    parse_lily_whitespace(state);
 
     parse_state_push_indent(state, equals_key_symbol_range.start.character as u16);
-    let maybe_declaration: Option<StillSyntaxNode<StillSyntaxLocalVariableDeclaration>> =
-        parse_still_syntax_local_variable_declaration(state);
+    let maybe_declaration: Option<LilySyntaxNode<LilySyntaxLocalVariableDeclaration>> =
+        parse_lily_syntax_local_variable_declaration(state);
     parse_state_pop_indent(state);
 
-    parse_still_whitespace(state);
-    let maybe_result: Option<StillSyntaxNode<StillSyntaxExpression>> =
-        parse_still_syntax_expression_space_separated(state);
-    Some(StillSyntaxNode {
+    parse_lily_whitespace(state);
+    let maybe_result: Option<LilySyntaxNode<LilySyntaxExpression>> =
+        parse_lily_syntax_expression_space_separated(state);
+    Some(LilySyntaxNode {
         range: lsp_types::Range {
             start: equals_key_symbol_range.start,
             end: match &maybe_result {
@@ -8483,23 +8463,23 @@ fn parse_still_syntax_expression_after_local_variable(
                 Some(result_node) => result_node.range.end,
             },
         },
-        value: StillSyntaxExpression::AfterLocalVariable {
+        value: LilySyntaxExpression::AfterLocalVariable {
             declaration: maybe_declaration,
-            result: maybe_result.map(still_syntax_node_box),
+            result: maybe_result.map(lily_syntax_node_box),
         },
     })
 }
-fn parse_still_syntax_local_variable_declaration(
+fn parse_lily_syntax_local_variable_declaration(
     state: &mut ParseState,
-) -> Option<StillSyntaxNode<StillSyntaxLocalVariableDeclaration>> {
+) -> Option<LilySyntaxNode<LilySyntaxLocalVariableDeclaration>> {
     if state.position.character < u32::from(state.indent) {
         return None;
     }
-    let variable: StillSyntaxLocalVariable = parse_still_syntax_local_variable(state)?;
-    parse_still_whitespace(state);
-    let maybe_result: Option<StillSyntaxNode<StillSyntaxExpression>> =
-        parse_still_syntax_expression_space_separated(state);
-    Some(StillSyntaxNode {
+    let variable: LilySyntaxLocalVariable = parse_lily_syntax_local_variable(state)?;
+    parse_lily_whitespace(state);
+    let maybe_result: Option<LilySyntaxNode<LilySyntaxExpression>> =
+        parse_lily_syntax_expression_space_separated(state);
+    Some(LilySyntaxNode {
         range: lsp_types::Range {
             start: variable.name.range.start,
             end: maybe_result
@@ -8512,22 +8492,22 @@ fn parse_still_syntax_local_variable_declaration(
                 })
                 .unwrap_or(variable.name.range.end),
         },
-        value: StillSyntaxLocalVariableDeclaration {
+        value: LilySyntaxLocalVariableDeclaration {
             name: variable.name,
             overwriting: variable.overwriting,
-            result: maybe_result.map(still_syntax_node_box),
+            result: maybe_result.map(lily_syntax_node_box),
         },
     })
 }
-fn parse_still_syntax_expression_string(
+fn parse_lily_syntax_expression_string(
     state: &mut ParseState,
-) -> Option<StillSyntaxNode<StillSyntaxExpression>> {
+) -> Option<LilySyntaxNode<LilySyntaxExpression>> {
     let start_position: lsp_types::Position = state.position;
-    parse_still_string_single_quoted(state)
-        .map(|content| StillSyntaxNode {
-            value: StillSyntaxExpression::String {
+    parse_lily_string_single_quoted(state)
+        .map(|content| LilySyntaxNode {
+            value: LilySyntaxExpression::String {
                 content: content,
-                quoting_style: StillSyntaxStringQuotingStyle::SingleQuoted,
+                quoting_style: LilySyntaxStringQuotingStyle::SingleQuoted,
             },
             range: lsp_types::Range {
                 start: start_position,
@@ -8535,10 +8515,10 @@ fn parse_still_syntax_expression_string(
             },
         })
         .or_else(|| {
-            parse_still_string_ticked_lines(state).map(|content| StillSyntaxNode {
-                value: StillSyntaxExpression::String {
+            parse_lily_string_ticked_lines(state).map(|content| LilySyntaxNode {
+                value: LilySyntaxExpression::String {
                     content: content,
-                    quoting_style: StillSyntaxStringQuotingStyle::TickedLines,
+                    quoting_style: LilySyntaxStringQuotingStyle::TickedLines,
                 },
                 range: lsp_types::Range {
                     start: start_position,
@@ -8550,72 +8530,72 @@ fn parse_still_syntax_expression_string(
             })
         })
 }
-fn parse_still_syntax_expression_list(state: &mut ParseState) -> Option<StillSyntaxExpression> {
+fn parse_lily_syntax_expression_list(state: &mut ParseState) -> Option<LilySyntaxExpression> {
     if !parse_symbol(state, "[") {
         return None;
     }
-    parse_still_whitespace(state);
+    parse_lily_whitespace(state);
     while parse_symbol(state, ",") {
-        parse_still_whitespace(state);
+        parse_lily_whitespace(state);
     }
-    let mut elements: Vec<StillSyntaxNode<StillSyntaxExpression>> = Vec::new();
-    while let Some(expression_node) = parse_still_syntax_expression_space_separated(state) {
+    let mut elements: Vec<LilySyntaxNode<LilySyntaxExpression>> = Vec::new();
+    while let Some(expression_node) = parse_lily_syntax_expression_space_separated(state) {
         elements.push(expression_node);
-        parse_still_whitespace(state);
+        parse_lily_whitespace(state);
         while parse_symbol(state, ",") {
-            parse_still_whitespace(state);
+            parse_lily_whitespace(state);
         }
     }
     let _: bool = parse_symbol(state, "]");
-    Some(StillSyntaxExpression::Vec(elements))
+    Some(LilySyntaxExpression::Vec(elements))
 }
-fn parse_still_syntax_expression_parenthesized(
+fn parse_lily_syntax_expression_parenthesized(
     state: &mut ParseState,
-) -> Option<StillSyntaxExpression> {
+) -> Option<LilySyntaxExpression> {
     if !parse_symbol(state, "(") {
         return None;
     }
-    parse_still_whitespace(state);
-    let maybe_in_parens_0: Option<StillSyntaxNode<StillSyntaxExpression>> =
-        parse_still_syntax_expression_space_separated(state);
-    parse_still_whitespace(state);
+    parse_lily_whitespace(state);
+    let maybe_in_parens_0: Option<LilySyntaxNode<LilySyntaxExpression>> =
+        parse_lily_syntax_expression_space_separated(state);
+    parse_lily_whitespace(state);
     let _ = parse_symbol(state, ")");
-    Some(StillSyntaxExpression::Parenthesized(
-        maybe_in_parens_0.map(still_syntax_node_box),
+    Some(LilySyntaxExpression::Parenthesized(
+        maybe_in_parens_0.map(lily_syntax_node_box),
     ))
 }
-fn parse_still_syntax_declaration_node(
+fn parse_lily_syntax_declaration_node(
     state: &mut ParseState,
-) -> Option<StillSyntaxNode<StillSyntaxDeclaration>> {
-    parse_still_syntax_declaration_choice_type_node(state)
-        .or_else(|| parse_still_syntax_declaration_type_alias_node(state))
+) -> Option<LilySyntaxNode<LilySyntaxDeclaration>> {
+    parse_lily_syntax_declaration_choice_type_node(state)
+        .or_else(|| parse_lily_syntax_declaration_type_alias_node(state))
         .or_else(|| {
             if state.indent != 0 {
                 return None;
             }
-            parse_still_syntax_declaration_variable_node(state)
+            parse_lily_syntax_declaration_variable_node(state)
         })
 }
-fn parse_still_syntax_declaration_type_alias_node(
+fn parse_lily_syntax_declaration_type_alias_node(
     state: &mut ParseState,
-) -> Option<StillSyntaxNode<StillSyntaxDeclaration>> {
-    let type_keyword_range: lsp_types::Range = parse_still_keyword_as_range(state, "type")?;
-    parse_still_whitespace(state);
-    let maybe_name_node: Option<StillSyntaxNode<StillName>> =
+) -> Option<LilySyntaxNode<LilySyntaxDeclaration>> {
+    let type_keyword_range: lsp_types::Range = parse_lily_keyword_as_range(state, "type")?;
+    parse_lily_whitespace(state);
+    let maybe_name_node: Option<LilySyntaxNode<LilyName>> =
         if state.position.character <= u32::from(state.indent) {
             None
         } else {
-            parse_still_lowercase_name_node(state)
+            parse_lily_lowercase_name_node(state)
         };
-    parse_still_whitespace(state);
-    let mut parameters: Vec<StillSyntaxNode<StillName>> = Vec::new();
-    while let Some(parameter_node) = parse_still_uppercase_name_node(state) {
+    parse_lily_whitespace(state);
+    let mut parameters: Vec<LilySyntaxNode<LilyName>> = Vec::new();
+    while let Some(parameter_node) = parse_lily_uppercase_name_node(state) {
         parameters.push(parameter_node);
-        parse_still_whitespace(state);
+        parse_lily_whitespace(state);
     }
     let maybe_equals_key_symbol_range: Option<lsp_types::Range> = parse_symbol_as_range(state, "=");
-    parse_still_whitespace(state);
-    let maybe_type: Option<StillSyntaxNode<StillSyntaxType>> = parse_still_syntax_type(state);
+    parse_lily_whitespace(state);
+    let maybe_type: Option<LilySyntaxNode<LilySyntaxType>> = parse_lily_syntax_type(state);
     let full_end_location: lsp_types::Position = maybe_type
         .as_ref()
         .map(|type_node| type_node.range.end)
@@ -8627,12 +8607,12 @@ fn parse_still_syntax_declaration_type_alias_node(
                 .map(|name_node| name_node.range.end)
         })
         .unwrap_or(type_keyword_range.end);
-    Some(StillSyntaxNode {
+    Some(LilySyntaxNode {
         range: lsp_types::Range {
             start: type_keyword_range.start,
             end: full_end_location,
         },
-        value: StillSyntaxDeclaration::TypeAlias {
+        value: LilySyntaxDeclaration::TypeAlias {
             type_keyword_range: type_keyword_range,
             name: maybe_name_node,
             parameters: parameters,
@@ -8641,31 +8621,31 @@ fn parse_still_syntax_declaration_type_alias_node(
         },
     })
 }
-fn parse_still_syntax_declaration_choice_type_node(
+fn parse_lily_syntax_declaration_choice_type_node(
     state: &mut ParseState,
-) -> Option<StillSyntaxNode<StillSyntaxDeclaration>> {
-    let choice_keyword_range: lsp_types::Range = parse_still_keyword_as_range(state, "choice")?;
-    parse_still_whitespace(state);
-    let maybe_name_node: Option<StillSyntaxNode<StillName>> =
+) -> Option<LilySyntaxNode<LilySyntaxDeclaration>> {
+    let choice_keyword_range: lsp_types::Range = parse_lily_keyword_as_range(state, "choice")?;
+    parse_lily_whitespace(state);
+    let maybe_name_node: Option<LilySyntaxNode<LilyName>> =
         if state.position.character <= u32::from(state.indent) {
             None
         } else {
-            parse_still_lowercase_name_node(state)
+            parse_lily_lowercase_name_node(state)
         };
-    parse_still_whitespace(state);
-    let mut parameters: Vec<StillSyntaxNode<StillName>> = Vec::new();
-    while let Some(parameter_node) = parse_still_uppercase_name_node(state) {
+    parse_lily_whitespace(state);
+    let mut parameters: Vec<LilySyntaxNode<LilyName>> = Vec::new();
+    while let Some(parameter_node) = parse_lily_uppercase_name_node(state) {
         parameters.push(parameter_node);
-        parse_still_whitespace(state);
+        parse_lily_whitespace(state);
     }
     let maybe_equals_key_symbol_range: Option<lsp_types::Range> = parse_symbol_as_range(state, "=");
-    parse_still_whitespace(state);
-    let mut variants: Vec<StillSyntaxChoiceTypeVariant> = Vec::with_capacity(2);
-    while let Some(variant) = parse_still_syntax_choice_type_declaration_variant(state) {
+    parse_lily_whitespace(state);
+    let mut variants: Vec<LilySyntaxChoiceTypeVariant> = Vec::with_capacity(2);
+    while let Some(variant) = parse_lily_syntax_choice_type_declaration_variant(state) {
         variants.push(variant);
-        parse_still_whitespace(state);
+        parse_lily_whitespace(state);
     }
-    Some(StillSyntaxNode {
+    Some(LilySyntaxNode {
         range: lsp_types::Range {
             start: choice_keyword_range.start,
             end: variants
@@ -8687,7 +8667,7 @@ fn parse_still_syntax_declaration_choice_type_node(
                 })
                 .unwrap_or(choice_keyword_range.end),
         },
-        value: StillSyntaxDeclaration::ChoiceType {
+        value: LilySyntaxDeclaration::ChoiceType {
             name: maybe_name_node,
             parameters: parameters,
 
@@ -8695,36 +8675,36 @@ fn parse_still_syntax_declaration_choice_type_node(
         },
     })
 }
-fn parse_still_syntax_choice_type_declaration_variant(
+fn parse_lily_syntax_choice_type_declaration_variant(
     state: &mut ParseState,
-) -> Option<StillSyntaxChoiceTypeVariant> {
+) -> Option<LilySyntaxChoiceTypeVariant> {
     let or_key_symbol_range: lsp_types::Range = parse_symbol_as_range(state, "|")?;
-    parse_still_whitespace(state);
+    parse_lily_whitespace(state);
     while parse_symbol(state, "|") {
-        parse_still_whitespace(state);
+        parse_lily_whitespace(state);
     }
-    let maybe_name: Option<StillSyntaxNode<StillName>> = parse_still_uppercase_name_node(state);
-    parse_still_whitespace(state);
-    let maybe_value: Option<StillSyntaxNode<StillSyntaxType>> = parse_still_syntax_type(state);
-    parse_still_whitespace(state);
-    Some(StillSyntaxChoiceTypeVariant {
+    let maybe_name: Option<LilySyntaxNode<LilyName>> = parse_lily_uppercase_name_node(state);
+    parse_lily_whitespace(state);
+    let maybe_value: Option<LilySyntaxNode<LilySyntaxType>> = parse_lily_syntax_type(state);
+    parse_lily_whitespace(state);
+    Some(LilySyntaxChoiceTypeVariant {
         or_key_symbol_range: or_key_symbol_range,
         name: maybe_name,
         value: maybe_value,
     })
 }
-fn parse_still_syntax_declaration_variable_node(
+fn parse_lily_syntax_declaration_variable_node(
     state: &mut ParseState,
-) -> Option<StillSyntaxNode<StillSyntaxDeclaration>> {
-    let name_node: StillSyntaxNode<StillName> = parse_still_lowercase_name_node(state)?;
-    parse_still_whitespace(state);
-    let maybe_result: Option<StillSyntaxNode<StillSyntaxExpression>> =
+) -> Option<LilySyntaxNode<LilySyntaxDeclaration>> {
+    let name_node: LilySyntaxNode<LilyName> = parse_lily_lowercase_name_node(state)?;
+    parse_lily_whitespace(state);
+    let maybe_result: Option<LilySyntaxNode<LilySyntaxExpression>> =
         if state.position.character <= u32::from(state.indent) {
             None
         } else {
-            parse_still_syntax_expression_space_separated(state)
+            parse_lily_syntax_expression_space_separated(state)
         };
-    Some(StillSyntaxNode {
+    Some(LilySyntaxNode {
         range: lsp_types::Range {
             start: name_node.range.start,
             end: maybe_result
@@ -8732,39 +8712,39 @@ fn parse_still_syntax_declaration_variable_node(
                 .map(|node| node.range.end)
                 .unwrap_or(name_node.range.end),
         },
-        value: StillSyntaxDeclaration::Variable {
+        value: LilySyntaxDeclaration::Variable {
             name: name_node,
             result: maybe_result,
         },
     })
 }
-fn parse_still_syntax_documented_declaration_followed_by_whitespace_and_whatever_indented(
+fn parse_lily_syntax_documented_declaration_followed_by_whitespace_and_whatever_indented(
     state: &mut ParseState,
-) -> Option<StillSyntaxDocumentedDeclaration> {
-    let maybe_documentation_node: Option<StillSyntaxNode<Box<str>>> =
-        parse_still_comment_lines_then_same_line_whitespace(state);
+) -> Option<LilySyntaxDocumentedDeclaration> {
+    let maybe_documentation_node: Option<LilySyntaxNode<Box<str>>> =
+        parse_lily_comment_lines_then_same_line_whitespace(state);
     match maybe_documentation_node {
         None => {
-            let declaration_node: StillSyntaxNode<StillSyntaxDeclaration> =
-                parse_still_syntax_declaration_node(state)?;
-            parse_still_whitespace(state);
-            Some(StillSyntaxDocumentedDeclaration {
+            let declaration_node: LilySyntaxNode<LilySyntaxDeclaration> =
+                parse_lily_syntax_declaration_node(state)?;
+            parse_lily_whitespace(state);
+            Some(LilySyntaxDocumentedDeclaration {
                 documentation: None,
                 declaration: Some(declaration_node),
             })
         }
         Some(documentation_node) => {
-            let maybe_declaration: Option<StillSyntaxNode<StillSyntaxDeclaration>> =
-                parse_still_syntax_declaration_node(state);
-            parse_still_whitespace(state);
-            Some(StillSyntaxDocumentedDeclaration {
+            let maybe_declaration: Option<LilySyntaxNode<LilySyntaxDeclaration>> =
+                parse_lily_syntax_declaration_node(state);
+            parse_lily_whitespace(state);
+            Some(LilySyntaxDocumentedDeclaration {
                 documentation: Some(documentation_node),
                 declaration: maybe_declaration,
             })
         }
     }
 }
-fn parse_still_syntax_project(project_source: &str) -> StillSyntaxProject {
+fn parse_lily_syntax_project(project_source: &str) -> LilySyntaxProject {
     let mut state: ParseState = ParseState {
         source: project_source,
         offset_utf8: 0,
@@ -8775,21 +8755,21 @@ fn parse_still_syntax_project(project_source: &str) -> StillSyntaxProject {
         indent: 0,
         lower_indents_stack: vec![],
     };
-    parse_still_whitespace(&mut state);
+    parse_lily_whitespace(&mut state);
     let mut last_valid_end_offset_utf8: usize = state.offset_utf8;
     let mut last_valid_end_position: lsp_types::Position = state.position;
     let mut last_parsed_was_valid: bool = true;
-    let mut declarations: Vec<Result<StillSyntaxDocumentedDeclaration, StillSyntaxNode<Box<str>>>> =
+    let mut declarations: Vec<Result<LilySyntaxDocumentedDeclaration, LilySyntaxNode<Box<str>>>> =
         Vec::with_capacity(8);
     'parsing_declarations: loop {
         let offset_utf8_before_parsing_documented_declaration: usize = state.offset_utf8;
         let position_before_parsing_documented_declaration: lsp_types::Position = state.position;
-        match parse_still_syntax_documented_declaration_followed_by_whitespace_and_whatever_indented(
+        match parse_lily_syntax_documented_declaration_followed_by_whitespace_and_whatever_indented(
             &mut state,
         ) {
             Some(documented_declaration) => {
                 if !last_parsed_was_valid {
-                    declarations.push(Err(StillSyntaxNode {
+                    declarations.push(Err(LilySyntaxNode {
                         range: lsp_types::Range {
                             start: last_valid_end_position,
                             end: position_before_parsing_documented_declaration,
@@ -8802,7 +8782,7 @@ fn parse_still_syntax_project(project_source: &str) -> StillSyntaxProject {
                 }
                 last_parsed_was_valid = true;
                 declarations.push(Ok(documented_declaration));
-                parse_still_whitespace(&mut state);
+                parse_lily_whitespace(&mut state);
                 last_valid_end_offset_utf8 = state.offset_utf8;
                 last_valid_end_position = state.position;
             }
@@ -8834,7 +8814,7 @@ fn parse_still_syntax_project(project_source: &str) -> StillSyntaxProject {
                 }
             }
         };
-        declarations.push(Err(StillSyntaxNode {
+        declarations.push(Err(LilySyntaxNode {
             range: lsp_types::Range {
                 start: last_valid_end_position,
                 end: end_position,
@@ -8842,37 +8822,37 @@ fn parse_still_syntax_project(project_source: &str) -> StillSyntaxProject {
             value: Box::from(unknown_source),
         }));
     }
-    StillSyntaxProject {
+    LilySyntaxProject {
         declarations: declarations,
     }
 }
 
 #[derive(Clone, Copy)]
-struct StillSyntaxVariableDeclarationInfo<'a> {
+struct LilySyntaxVariableDeclarationInfo<'a> {
     range: lsp_types::Range,
-    documentation: Option<&'a StillSyntaxNode<Box<str>>>,
-    name: &'a StillSyntaxNode<StillName>,
-    result: Option<StillSyntaxNode<&'a StillSyntaxExpression>>,
+    documentation: Option<&'a LilySyntaxNode<Box<str>>>,
+    name: &'a LilySyntaxNode<LilyName>,
+    result: Option<LilySyntaxNode<&'a LilySyntaxExpression>>,
 }
 #[derive(Clone, Copy)]
-enum StillSyntaxTypeDeclarationInfo<'a> {
+enum LilySyntaxTypeDeclarationInfo<'a> {
     // consider introducing separate structs instead of separately referencing each field
     ChoiceType {
-        documentation: &'a Option<StillSyntaxNode<Box<str>>>,
-        name: &'a StillSyntaxNode<StillName>,
-        parameters: &'a Vec<StillSyntaxNode<StillName>>,
-        variants: &'a Vec<StillSyntaxChoiceTypeVariant>,
+        documentation: &'a Option<LilySyntaxNode<Box<str>>>,
+        name: &'a LilySyntaxNode<LilyName>,
+        parameters: &'a Vec<LilySyntaxNode<LilyName>>,
+        variants: &'a Vec<LilySyntaxChoiceTypeVariant>,
     },
     TypeAlias {
-        documentation: &'a Option<StillSyntaxNode<Box<str>>>,
-        name: &'a StillSyntaxNode<StillName>,
-        parameters: &'a Vec<StillSyntaxNode<StillName>>,
-        type_: &'a Option<StillSyntaxNode<StillSyntaxType>>,
+        documentation: &'a Option<LilySyntaxNode<Box<str>>>,
+        name: &'a LilySyntaxNode<LilyName>,
+        parameters: &'a Vec<LilySyntaxNode<LilyName>>,
+        type_: &'a Option<LilySyntaxNode<LilySyntaxType>>,
     },
 }
-fn still_project_compile_to_rust(
-    errors: &mut Vec<StillErrorNode>,
-    StillSyntaxProject { declarations }: &StillSyntaxProject,
+fn lily_project_compile_to_rust(
+    errors: &mut Vec<LilyErrorNode>,
+    LilySyntaxProject { declarations }: &LilySyntaxProject,
 ) -> CompiledProject {
     let mut type_graph: strongly_connected_components::Graph =
         strongly_connected_components::Graph::new();
@@ -8882,7 +8862,7 @@ fn still_project_compile_to_rust(
     > = std::collections::HashMap::new();
     let mut type_declaration_by_graph_node: std::collections::HashMap<
         strongly_connected_components::Node,
-        StillSyntaxTypeDeclarationInfo,
+        LilySyntaxTypeDeclarationInfo,
     > = std::collections::HashMap::new();
 
     let mut variable_graph: strongly_connected_components::Graph =
@@ -8893,13 +8873,13 @@ fn still_project_compile_to_rust(
     > = std::collections::HashMap::with_capacity(declarations.len());
     let mut variable_declaration_by_graph_node: std::collections::HashMap<
         strongly_connected_components::Node,
-        StillSyntaxVariableDeclarationInfo,
+        LilySyntaxVariableDeclarationInfo,
     > = std::collections::HashMap::with_capacity(declarations.len());
 
     for declaration_node_or_err in declarations {
         match declaration_node_or_err {
             Err(unknown_node) => {
-                errors.push(StillErrorNode {
+                errors.push(LilyErrorNode {
                     range: unknown_node.range,
                     message: format!("unrecognized syntax. {}
 If you wanted to start a declaration, try one of:
@@ -8937,7 +8917,7 @@ If you wanted to start a declaration, try one of:
                         .value
                         .starts_with('.')
                     {
-                        "Record access is not a feature in still. Instead, use pattern matching, like value | { field :field-value:variable } > result? Otherwise, is everything indented correctly?"
+                        "Record access is not a feature in lily. Instead, use pattern matching, like value | { field :field-value:variable } > result? Otherwise, is everything indented correctly?"
                     } else {
                         "Is it indented correctly? Are brackets/braces/parens or similar closed prematurely?"
                     }).into_boxed_str(),
@@ -8946,13 +8926,13 @@ If you wanted to start a declaration, try one of:
             Ok(documented_declaration) => {
                 if let Some(declaration_node) = &documented_declaration.declaration {
                     match &declaration_node.value {
-                        StillSyntaxDeclaration::ChoiceType {
+                        LilySyntaxDeclaration::ChoiceType {
                             name: maybe_name,
                             parameters,
                             variants,
                         } => match maybe_name {
                             None => {
-                                errors.push(StillErrorNode { range: declaration_node.range, message: Box::from("missing name. Type names start with a lowercase letter any only use ascii alphanumeric characters and -)") });
+                                errors.push(LilyErrorNode { range: declaration_node.range, message: Box::from("missing name. Type names start with a lowercase letter any only use ascii alphanumeric characters and -)") });
                             }
                             Some(name_node) => {
                                 let choice_type_declaration_graph_node: strongly_connected_components::Node =
@@ -8960,10 +8940,10 @@ If you wanted to start a declaration, try one of:
                                 type_graph_node_by_name
                                     .insert(&name_node.value, choice_type_declaration_graph_node);
                                 let existing_type_with_same_name: Option<
-                                    StillSyntaxTypeDeclarationInfo,
+                                    LilySyntaxTypeDeclarationInfo,
                                 > = type_declaration_by_graph_node.insert(
                                     choice_type_declaration_graph_node,
-                                    StillSyntaxTypeDeclarationInfo::ChoiceType {
+                                    LilySyntaxTypeDeclarationInfo::ChoiceType {
                                         documentation: &documented_declaration.documentation,
                                         name: name_node,
                                         parameters: parameters,
@@ -8971,19 +8951,19 @@ If you wanted to start a declaration, try one of:
                                     },
                                 );
                                 if existing_type_with_same_name.is_some() {
-                                    errors.push(StillErrorNode {
+                                    errors.push(LilyErrorNode {
                                         range: name_node.range,
                                         message: Box::from("a type with this name is already declared. Rename one of them")
                                     });
                                 } else if core_choice_type_infos.contains_key(&name_node.value) {
-                                    errors.push(StillErrorNode {
+                                    errors.push(LilyErrorNode {
                                         range: name_node.range,
                                         message: Box::from("a type with this name is already part of core (core types are for example vec, int, str). Rename this type")
                                     });
                                 }
                             }
                         },
-                        StillSyntaxDeclaration::TypeAlias {
+                        LilySyntaxDeclaration::TypeAlias {
                             type_keyword_range: _,
                             name: maybe_name,
                             parameters,
@@ -8991,7 +8971,7 @@ If you wanted to start a declaration, try one of:
                             type_: maybe_type,
                         } => match maybe_name {
                             None => {
-                                errors.push(StillErrorNode { range: declaration_node.range, message: Box::from("missing name. Type names start with a lowercase letter any only use ascii alphanumeric characters and -)") });
+                                errors.push(LilyErrorNode { range: declaration_node.range, message: Box::from("missing name. Type names start with a lowercase letter any only use ascii alphanumeric characters and -)") });
                             }
                             Some(name_node) => {
                                 let type_alias_declaration_graph_node: strongly_connected_components::Node =
@@ -8999,10 +8979,10 @@ If you wanted to start a declaration, try one of:
                                 type_graph_node_by_name
                                     .insert(&name_node.value, type_alias_declaration_graph_node);
                                 let existing_type_with_same_name: Option<
-                                    StillSyntaxTypeDeclarationInfo,
+                                    LilySyntaxTypeDeclarationInfo,
                                 > = type_declaration_by_graph_node.insert(
                                     type_alias_declaration_graph_node,
-                                    StillSyntaxTypeDeclarationInfo::TypeAlias {
+                                    LilySyntaxTypeDeclarationInfo::TypeAlias {
                                         documentation: &documented_declaration.documentation,
                                         name: name_node,
                                         parameters: parameters,
@@ -9010,14 +8990,14 @@ If you wanted to start a declaration, try one of:
                                     },
                                 );
                                 if existing_type_with_same_name.is_some() {
-                                    errors.push(StillErrorNode {
+                                    errors.push(LilyErrorNode {
                                         range: name_node.range,
                                         message: Box::from("a type with this name is already declared. Rename one of them")
                                     });
                                 }
                             }
                         },
-                        StillSyntaxDeclaration::Variable {
+                        LilySyntaxDeclaration::Variable {
                             name: name_node,
                             result: maybe_result,
                         } => {
@@ -9026,23 +9006,23 @@ If you wanted to start a declaration, try one of:
                             variable_graph_node_by_name
                                 .insert(&name_node.value, variable_declaration_graph_node);
                             let existing_variable_with_same_name: Option<
-                                StillSyntaxVariableDeclarationInfo,
+                                LilySyntaxVariableDeclarationInfo,
                             > = variable_declaration_by_graph_node.insert(
                                 variable_declaration_graph_node,
-                                StillSyntaxVariableDeclarationInfo {
+                                LilySyntaxVariableDeclarationInfo {
                                     range: declaration_node.range,
                                     documentation: documented_declaration.documentation.as_ref(),
                                     name: name_node,
-                                    result: maybe_result.as_ref().map(still_syntax_node_as_ref),
+                                    result: maybe_result.as_ref().map(lily_syntax_node_as_ref),
                                 },
                             );
                             if existing_variable_with_same_name.is_some() {
-                                errors.push(StillErrorNode {
+                                errors.push(LilyErrorNode {
                                     range: name_node.range,
                                     message: Box::from("a variable with this name is already declared. Rename one of them")
                                 });
                             } else if core_choice_type_infos.contains_key(&name_node.value) {
-                                errors.push(StillErrorNode {
+                                errors.push(LilyErrorNode {
                                     range: name_node.range,
                                     message: Box::from("a variable with this name is already part of core (core variables are for example int-to-str or dec-add). Rename this variable")
                                 });
@@ -9056,7 +9036,7 @@ If you wanted to start a declaration, try one of:
     for (&type_declaration_graph_node, &type_declaration_info) in
         type_declaration_by_graph_node.iter()
     {
-        still_syntax_type_declaration_connect_type_names_in_graph_from(
+        lily_syntax_type_declaration_connect_type_names_in_graph_from(
             &mut type_graph,
             type_declaration_graph_node,
             &type_graph_node_by_name,
@@ -9067,7 +9047,7 @@ If you wanted to start a declaration, try one of:
         variable_declaration_by_graph_node.iter()
     {
         if let Some(result_node) = variable_declaration_info.result {
-            still_syntax_expression_connect_variables_in_graph_from(
+            lily_syntax_expression_connect_variables_in_graph_from(
                 &mut variable_graph,
                 variable_declaration_graph_node,
                 &variable_graph_node_by_name,
@@ -9075,7 +9055,7 @@ If you wanted to start a declaration, try one of:
             );
         }
     }
-    still_project_info_to_rust(
+    lily_project_info_to_rust(
         errors,
         &type_graph,
         &type_declaration_by_graph_node,
@@ -9085,37 +9065,37 @@ If you wanted to start a declaration, try one of:
 }
 struct CompiledProject {
     rust: syn::File,
-    type_aliases: std::collections::HashMap<StillName, TypeAliasInfo>,
-    choice_types: std::collections::HashMap<StillName, ChoiceTypeInfo>,
-    variable_declarations: std::collections::HashMap<StillName, CompiledVariableDeclarationInfo>,
-    records: std::collections::HashSet<Vec<StillName>>,
+    type_aliases: std::collections::HashMap<LilyName, TypeAliasInfo>,
+    choice_types: std::collections::HashMap<LilyName, ChoiceTypeInfo>,
+    variable_declarations: std::collections::HashMap<LilyName, CompiledVariableDeclarationInfo>,
+    records: std::collections::HashSet<Vec<LilyName>>,
 }
-fn still_project_info_to_rust(
-    errors: &mut Vec<StillErrorNode>,
+fn lily_project_info_to_rust(
+    errors: &mut Vec<LilyErrorNode>,
     type_graph: &strongly_connected_components::Graph,
     type_declaration_by_graph_node: &std::collections::HashMap<
         strongly_connected_components::Node,
-        StillSyntaxTypeDeclarationInfo,
+        LilySyntaxTypeDeclarationInfo,
     >,
     variable_graph: &strongly_connected_components::Graph,
     variable_declaration_by_graph_node: &std::collections::HashMap<
         strongly_connected_components::Node,
-        StillSyntaxVariableDeclarationInfo,
+        LilySyntaxVariableDeclarationInfo,
     >,
 ) -> CompiledProject {
     let mut rust_items: Vec<syn::Item> =
         Vec::with_capacity(type_graph.len() * 3 + variable_graph.len());
-    let mut compiled_type_alias_infos: std::collections::HashMap<StillName, TypeAliasInfo> =
+    let mut compiled_type_alias_infos: std::collections::HashMap<LilyName, TypeAliasInfo> =
         std::collections::HashMap::with_capacity(type_declaration_by_graph_node.len());
-    let mut compiled_choice_type_infos: std::collections::HashMap<StillName, ChoiceTypeInfo> =
+    let mut compiled_choice_type_infos: std::collections::HashMap<LilyName, ChoiceTypeInfo> =
         core_choice_type_infos.clone();
     compiled_choice_type_infos.reserve(type_declaration_by_graph_node.len());
-    let mut records_used: std::collections::HashSet<Vec<StillName>> =
+    let mut records_used: std::collections::HashSet<Vec<LilyName>> =
         std::collections::HashSet::with_capacity(8);
     'compile_types: for type_declaration_strongly_connected_component in
         type_graph.find_sccs().iter_sccs()
     {
-        let type_declaration_infos: Vec<StillSyntaxTypeDeclarationInfo> =
+        let type_declaration_infos: Vec<LilySyntaxTypeDeclarationInfo> =
             type_declaration_strongly_connected_component
                 .iter_nodes()
                 .filter_map(|variable_declaration_graph_node| {
@@ -9128,7 +9108,7 @@ fn still_project_info_to_rust(
         // so that no "not found" errors are raised
         for type_declaration_info in &type_declaration_infos {
             match type_declaration_info {
-                StillSyntaxTypeDeclarationInfo::TypeAlias {
+                LilySyntaxTypeDeclarationInfo::TypeAlias {
                     name: name_node,
                     parameters,
                     ..
@@ -9146,7 +9126,7 @@ fn still_project_info_to_rust(
                         },
                     );
                 }
-                StillSyntaxTypeDeclarationInfo::ChoiceType {
+                LilySyntaxTypeDeclarationInfo::ChoiceType {
                     name: name_node,
                     parameters,
                     ..
@@ -9172,8 +9152,8 @@ fn still_project_info_to_rust(
                 type_declaration_infos
                     .iter()
                     .map(|type_declaration_info| match type_declaration_info {
-                        StillSyntaxTypeDeclarationInfo::TypeAlias { name:name_node, .. } => name_node.value.as_str(),
-                        StillSyntaxTypeDeclarationInfo::ChoiceType { name:name_node,.. } => name_node.value.as_str(),
+                        LilySyntaxTypeDeclarationInfo::TypeAlias { name:name_node, .. } => name_node.value.as_str(),
+                        LilySyntaxTypeDeclarationInfo::ChoiceType { name:name_node,.. } => name_node.value.as_str(),
                     })
                     .collect::<Vec<&str>>()
                     .join(", ")
@@ -9183,14 +9163,14 @@ fn still_project_info_to_rust(
                     .iter()
                     .filter_map(
                         |scc_type_declaration_info| match scc_type_declaration_info {
-                            StillSyntaxTypeDeclarationInfo::TypeAlias {
+                            LilySyntaxTypeDeclarationInfo::TypeAlias {
                                 name: scc_type_alias_name_node,
                                 ..
                             } => Some(scc_type_alias_name_node.range),
-                            StillSyntaxTypeDeclarationInfo::ChoiceType { .. } => None,
+                            LilySyntaxTypeDeclarationInfo::ChoiceType { .. } => None,
                         },
                     )
-                    .map(|scc_type_alias_name_range| StillErrorNode {
+                    .map(|scc_type_alias_name_range| LilyErrorNode {
                         range: scc_type_alias_name_range,
                         message: error_message.clone(),
                     }),
@@ -9204,12 +9184,12 @@ fn still_project_info_to_rust(
             && type_graph
                 .iter_successors(first_scc_type_node)
                 .any(|n| n == first_scc_type_node)
-            && let Some(StillSyntaxTypeDeclarationInfo::TypeAlias {
+            && let Some(LilySyntaxTypeDeclarationInfo::TypeAlias {
                 name: first_scc_type_declaration_name_node,
                 ..
             }) = type_declaration_infos.first()
         {
-            errors.push(StillErrorNode {
+            errors.push(LilyErrorNode {
                     range: first_scc_type_declaration_name_node.range,
                     message: Box::from("this type alias is recursive: it references itself in the type is aliases. This is tricky to represent in compile target languages, and can even lead to the type checker running in circles. You can break this infinite loop by wrapping this type or one of its recursive parts into a choice type."),
                 });
@@ -9218,13 +9198,13 @@ fn still_project_info_to_rust(
         let scc_type_declaration_names: std::collections::HashSet<&str> = type_declaration_infos
             .iter()
             .map(|&type_declaration| match type_declaration {
-                StillSyntaxTypeDeclarationInfo::ChoiceType { name, .. } => name.value.as_str(),
-                StillSyntaxTypeDeclarationInfo::TypeAlias { name, .. } => name.value.as_str(),
+                LilySyntaxTypeDeclarationInfo::ChoiceType { name, .. } => name.value.as_str(),
+                LilySyntaxTypeDeclarationInfo::TypeAlias { name, .. } => name.value.as_str(),
             })
             .collect::<std::collections::HashSet<_>>();
         for type_declaration_info in type_declaration_infos {
             match type_declaration_info {
-                StillSyntaxTypeDeclarationInfo::TypeAlias {
+                LilySyntaxTypeDeclarationInfo::TypeAlias {
                     documentation: maybe_documentation,
                     name: name_node,
                     parameters,
@@ -9237,9 +9217,9 @@ fn still_project_info_to_rust(
                             &compiled_type_alias_infos,
                             &compiled_choice_type_infos,
                             maybe_documentation.as_ref().map(|n| n.value.as_ref()),
-                            still_syntax_node_as_ref(name_node),
+                            lily_syntax_node_as_ref(name_node),
                             parameters,
-                            maybe_type.as_ref().map(still_syntax_node_as_ref),
+                            maybe_type.as_ref().map(lily_syntax_node_as_ref),
                         );
                     if let Some(compiled_type_declaration) = maybe_compiled_type_alias {
                         rust_items.push(compiled_type_declaration.rust);
@@ -9273,7 +9253,7 @@ fn still_project_info_to_rust(
                         );
                     }
                 }
-                StillSyntaxTypeDeclarationInfo::ChoiceType {
+                LilySyntaxTypeDeclarationInfo::ChoiceType {
                     documentation: maybe_documentation,
                     name: name_node,
                     parameters,
@@ -9288,7 +9268,7 @@ fn still_project_info_to_rust(
                             &compiled_choice_type_infos,
                             &scc_type_declaration_names,
                             maybe_documentation.as_ref().map(|n| n.value.as_ref()),
-                            still_syntax_node_as_ref(name_node),
+                            lily_syntax_node_as_ref(name_node),
                             parameters,
                             variants,
                         );
@@ -9317,14 +9297,14 @@ fn still_project_info_to_rust(
         }
     }
     let mut compiled_variable_declaration_infos: std::collections::HashMap<
-        StillName,
+        LilyName,
         CompiledVariableDeclarationInfo,
     > = core_variable_declaration_infos.clone();
     compiled_variable_declaration_infos.reserve(variable_graph.len());
     for variable_declaration_strongly_connected_component in variable_graph.find_sccs().iter_sccs()
     {
         let variable_declarations_in_strongly_connected_component: Vec<
-            StillSyntaxVariableDeclarationInfo,
+            LilySyntaxVariableDeclarationInfo,
         > = variable_declaration_strongly_connected_component
             .iter_nodes()
             .filter_map(|variable_declaration_graph_node| {
@@ -9347,7 +9327,7 @@ fn still_project_info_to_rust(
                     );
                 }
                 Some(result_node) => {
-                    let result_type_node: Option<StillType> = still_syntax_expression_type(
+                    let result_type_node: Option<LilyType> = lily_syntax_expression_type(
                         &compiled_type_alias_infos,
                         &compiled_choice_type_infos,
                         &compiled_variable_declaration_infos,
@@ -9391,7 +9371,7 @@ fn still_project_info_to_rust(
         records_used
             .iter()
             .filter(|fields| !fields.is_empty())
-            .map(|used_record_fields| still_syntax_record_to_rust(used_record_fields)),
+            .map(|used_record_fields| lily_syntax_record_to_rust(used_record_fields)),
     );
     CompiledProject {
         rust: syn::File {
@@ -9408,16 +9388,16 @@ fn still_project_info_to_rust(
 #[derive(Clone)]
 struct CompiledVariableDeclarationInfo {
     documentation: Option<Box<str>>,
-    type_: Option<StillType>,
+    type_: Option<LilyType>,
 }
 static core_variable_declaration_infos: std::sync::LazyLock<
-    std::collections::HashMap<StillName, CompiledVariableDeclarationInfo>,
+    std::collections::HashMap<LilyName, CompiledVariableDeclarationInfo>,
 > = {
-    fn variable(name: &'static str) -> StillType {
-        StillType::Variable(StillName::from(name))
+    fn variable(name: &'static str) -> LilyType {
+        LilyType::Variable(LilyName::from(name))
     }
-    fn function(inputs: impl IntoIterator<Item = StillType>, output: StillType) -> StillType {
-        StillType::Function {
+    fn function(inputs: impl IntoIterator<Item = LilyType>, output: LilyType) -> LilyType {
+        LilyType::Function {
             inputs: inputs.into_iter().collect::<Vec<_>>(),
             output: Box::new(output),
         }
@@ -9426,148 +9406,148 @@ static core_variable_declaration_infos: std::sync::LazyLock<
         std::collections::HashMap::from(
         [
             (
-                StillName::from("unt-add"),
-                function([still_type_unt,still_type_unt], still_type_unt),
+                LilyName::from("unt-add"),
+                function([lily_type_unt,lily_type_unt], lily_type_unt),
                 "Addition operation (`+`)",
             ),
             (
-                StillName::from("unt-mul"),
-                function([still_type_unt,still_type_unt], still_type_unt),
+                LilyName::from("unt-mul"),
+                function([lily_type_unt,lily_type_unt], lily_type_unt),
                 "Multiplication operation (`*`)",
             ),
             (
-                StillName::from("unt-div"),
-                function([still_type_unt,still_type_unt], still_type_unt),
+                LilyName::from("unt-div"),
+                function([lily_type_unt,lily_type_unt], lily_type_unt),
                 "Integer division operation (`/`), discarding any remainder. Try not to divide by 0, as 0 will be returned which is not mathematically correct. This behaviour is consistent with gleam, pony, coq, lean",
             ),
             (
-                StillName::from("unt-order"),
-                function([still_type_unt,still_type_unt], still_type_order),
+                LilyName::from("unt-order"),
+                function([lily_type_unt,lily_type_unt], lily_type_order),
                 "Compare `unt` values",
             ),
             (
-                StillName::from("unt-to-int"),
-                function([still_type_unt], still_type_int),
+                LilyName::from("unt-to-int"),
+                function([lily_type_unt], lily_type_int),
                 "Convert `unt` to `int`",
             ),
             (
-                StillName::from("unt-to-dec"),
-                function([still_type_unt], still_type_dec),
+                LilyName::from("unt-to-dec"),
+                function([lily_type_unt], lily_type_dec),
                 "Convert `unt` to `dec`",
             ),
             (
-                StillName::from("unt-to-str"),
-                function([still_type_unt], still_type_str),
+                LilyName::from("unt-to-str"),
+                function([lily_type_unt], lily_type_str),
                 "Convert `unt` to `str`",
             ),
             (
-                StillName::from("str-to-unt"),
-                function([still_type_str], still_type_opt(still_type_unt)),
+                LilyName::from("str-to-unt"),
+                function([lily_type_str], lily_type_opt(lily_type_unt)),
                 "Parse a complete `str` unto an `unt`, returning :opt unt:Absent otherwise",
             ),
             (
-                StillName::from("int-negate"),
-                function([still_type_int], still_type_int),
+                LilyName::from("int-negate"),
+                function([lily_type_int], lily_type_int),
                 "Flip its sign",
             ),
             (
-                StillName::from("int-absolute"),
-                function([still_type_int], still_type_unt),
+                LilyName::from("int-absolute"),
+                function([lily_type_int], lily_type_unt),
                 "If negative, negate, ultimately yielding an `unt`",
             ),
             (
-                StillName::from("int-add"),
-                function([still_type_int,still_type_int], still_type_int),
+                LilyName::from("int-add"),
+                function([lily_type_int,lily_type_int], lily_type_int),
                 "Addition operation (`+`)",
             ),
             (
-                StillName::from("int-mul"),
-                function([still_type_int,still_type_int], still_type_int),
+                LilyName::from("int-mul"),
+                function([lily_type_int,lily_type_int], lily_type_int),
                 "Multiplication operation (`*`)",
             ),
             (
-                StillName::from("int-div"),
-                function([still_type_int,still_type_int], still_type_int),
+                LilyName::from("int-div"),
+                function([lily_type_int,lily_type_int], lily_type_int),
                 "Integer division operation (`/`), discarding any remainder. Try not to divide by 0, as 0 will be returned which is not mathematically correct. This behaviour is consistent with gleam, pony, coq, lean",
             ),
             (
-                StillName::from("int-order"),
-                function([still_type_int,still_type_int], still_type_order),
+                LilyName::from("int-order"),
+                function([lily_type_int,lily_type_int], lily_type_order),
                 "Compare `int` values",
             ),
             (
-                StillName::from("int-to-dec"),
-                function([still_type_int], still_type_dec),
+                LilyName::from("int-to-dec"),
+                function([lily_type_int], lily_type_dec),
                 "Convert `int` to `dec`",
             ),
             (
-                StillName::from("int-to-str"),
-                function([still_type_int], still_type_str),
+                LilyName::from("int-to-str"),
+                function([lily_type_int], lily_type_str),
                 "Convert `int` to `str`",
             ),
             (
-                StillName::from("int-to-unt"),
-                function([still_type_int], still_type_opt(still_type_unt)),
+                LilyName::from("int-to-unt"),
+                function([lily_type_int], lily_type_opt(lily_type_unt)),
                 "Convert the `int` to `unt` if >= 0, returning :opt unt:Absent otherwise",
             ),
             (
-                StillName::from("str-to-int"),
-                function([still_type_str], still_type_opt(still_type_int)),
+                LilyName::from("str-to-int"),
+                function([lily_type_str], lily_type_opt(lily_type_int)),
                 "Parse a complete `str` into an `int`, returning :opt int:Absent otherwise",
             ),
             (
-                StillName::from("dec-pi"),
-                 still_type_dec,
+                LilyName::from("dec-pi"),
+                 lily_type_dec,
                 r"Archimedes' constant (π)
-```still
+```lily
 turns-to-radians \:dec:turns >
     dec-mul 2 (dec-mul dec-pi turns)
 ```
 ",
             ),
             (
-                StillName::from("dec-negate"),
-                function([still_type_dec], still_type_dec),
+                LilyName::from("dec-negate"),
+                function([lily_type_dec], lily_type_dec),
                 "Flip its sign",
             ),
             (
-                StillName::from("dec-absolute"),
-                function([still_type_dec], still_type_dec),
+                LilyName::from("dec-absolute"),
+                function([lily_type_dec], lily_type_dec),
                 "If negative, negate",
             ),
             (
-                StillName::from("dec-ln"),
-                function([still_type_dec], still_type_opt(still_type_dec)),
+                LilyName::from("dec-ln"),
+                function([lily_type_dec], lily_type_opt(lily_type_dec)),
                 r"Its natural logarithm (log base e). If 0 or negative, results in :opt dec:Absent as ln(_ <= 0) is not concretely defined.
-```still
+```lily
 dec-log \:dec:base, :dec:n >
     dec-div (dec-ln n) (dec-ln base)
 ```
 ",
             ),
             (
-                StillName::from("dec-sin"),
-                function([still_type_dec], still_type_dec),
+                LilyName::from("dec-sin"),
+                function([lily_type_dec], lily_type_dec),
                 "Its sine in radians",
             ),
             (
-                StillName::from("dec-cos"),
-                function([still_type_dec], still_type_dec),
+                LilyName::from("dec-cos"),
+                function([lily_type_dec], lily_type_dec),
                 "Its cosine in radians",
             ),
             (
-                StillName::from("dec-tan"),
-                function([still_type_dec], still_type_dec),
+                LilyName::from("dec-tan"),
+                function([lily_type_dec], lily_type_dec),
                 "Its tangent in radians",
             ),
             (
-                StillName::from("dec-atan"),
-                function([still_type_dec], still_type_dec),
+                LilyName::from("dec-atan"),
+                function([lily_type_dec], lily_type_dec),
                 "Its arctangent in radians in range -pi/2 to pi/2",
             ),
             (
-                StillName::from("dec-atan2"),
-                function([still_type_dec,still_type_dec], still_type_dec),
+                LilyName::from("dec-atan2"),
+                function([lily_type_dec,lily_type_dec], lily_type_dec),
                 "The four quadrant arctangent of y (the first argument) and x (the second argument) in radians,
 defined as:
   - for x >= +0: arctan(y/x)
@@ -9576,132 +9556,132 @@ defined as:
 ",
             ),
             (
-                StillName::from("dec-add"),
-                function([still_type_dec,still_type_dec], still_type_dec),
+                LilyName::from("dec-add"),
+                function([lily_type_dec,lily_type_dec], lily_type_dec),
                 "Addition operation (`+`)",
             ),
             (
-                StillName::from("dec-mul"),
-                function([still_type_dec,still_type_dec], still_type_dec),
+                LilyName::from("dec-mul"),
+                function([lily_type_dec,lily_type_dec], lily_type_dec),
                 "Multiplication operation (`*`)",
             ),
             (
-                StillName::from("dec-div"),
-                function([still_type_dec,still_type_dec], still_type_dec),
+                LilyName::from("dec-div"),
+                function([lily_type_dec,lily_type_dec], lily_type_dec),
                 "Division operation (`/`). Try not to divide by 0.0, as 0.0 will be returned which is not mathematically correct. This behaviour is consistent with gleam, pony, coq, lean.",
             ),
             (
-                StillName::from("dec-to-power-of"),
-                function([still_type_dec,still_type_dec], still_type_dec),
+                LilyName::from("dec-to-power-of"),
+                function([lily_type_dec,lily_type_dec], lily_type_dec),
                 "Exponentiation operation (`^`)",
             ),
             (
-                StillName::from("dec-truncate"),
-                function([still_type_dec], still_type_int),
+                LilyName::from("dec-truncate"),
+                function([lily_type_dec], lily_type_int),
                 "Its integer part, stripping away anything after the decimal point. Its like floor for positive inputs and ceiling for negative inputs",
             ),
             (
-                StillName::from("dec-floor"),
-                function([still_type_dec], still_type_int),
+                LilyName::from("dec-floor"),
+                function([lily_type_dec], lily_type_int),
                 "Its nearest smaller integer",
             ),
             (
-                StillName::from("dec-ceiling"),
-                function([still_type_dec], still_type_int),
+                LilyName::from("dec-ceiling"),
+                function([lily_type_dec], lily_type_int),
                 "Its nearest greater integer",
             ),
             (
-                StillName::from("dec-round"),
-                function([still_type_dec], still_type_int),
+                LilyName::from("dec-round"),
+                function([lily_type_dec], lily_type_int),
                 "Its nearest integer. If the input ends in .5, round away from 0.0",
             ),
             (
-                StillName::from("dec-order"),
-                function([still_type_dec,still_type_dec], still_type_order),
+                LilyName::from("dec-order"),
+                function([lily_type_dec,lily_type_dec], lily_type_order),
                 "Compare `dec` values",
             ),
             (
-                StillName::from("dec-to-str"),
-                function([still_type_dec], still_type_str),
+                LilyName::from("dec-to-str"),
+                function([lily_type_dec], lily_type_str),
                 "Convert `dec` to `str`",
             ),
             (
-                StillName::from("str-to-dec"),
-                function([still_type_str], still_type_opt(still_type_dec)),
+                LilyName::from("str-to-dec"),
+                function([lily_type_str], lily_type_opt(lily_type_dec)),
                 "Parse a complete `str` into an `dec`, returning :opt dec:Absent otherwise",
             ),
             (
-                StillName::from("char-byte-count"),
-                function([still_type_char], still_type_unt),
+                LilyName::from("char-byte-count"),
+                function([lily_type_char], lily_type_unt),
                 "Encoded as UTF-8, how many bytes the `char` spans, between 1 and 4",
             ),
             (
-                StillName::from("char-to-code-point"),
-                function([still_type_char], still_type_unt),
+                LilyName::from("char-to-code-point"),
+                function([lily_type_char], lily_type_unt),
                 "Convert to its 4-byte unicode code point",
             ),
             (
-                StillName::from("code-point-to-char"),
-                function([still_type_unt],  still_type_opt(still_type_char)),
+                LilyName::from("code-point-to-char"),
+                function([lily_type_unt],  lily_type_opt(lily_type_char)),
                 "Convert a 4-byte unicode code point to a `char`, or :opt char:Absent if the `unt` has too many bytes or the code point has no associated character (for example hex 110000).
 Note that the inverse never fails: `char-to-code-point`",
             ),
             (
-                StillName::from("char-order"),
-                function([still_type_char,still_type_char], still_type_order),
+                LilyName::from("char-order"),
+                function([lily_type_char,lily_type_char], lily_type_order),
                 "Compare `char` values by their unicode code point",
             ),
             (
-                StillName::from("char-to-str"),
-                function([still_type_char], still_type_str),
+                LilyName::from("char-to-str"),
+                function([lily_type_char], lily_type_str),
                 "Convert `char` to `str`",
             ),
             (
-                StillName::from("str-byte-count"),
-                function([still_type_str], still_type_unt),
+                LilyName::from("str-byte-count"),
+                function([lily_type_str], lily_type_unt),
                 "Encoded as UTF-8, how many bytes the `str` spans",
             ),
             (
-                StillName::from("str-char-at-byte-index"),
+                LilyName::from("str-char-at-byte-index"),
                 function(
-                    [still_type_str, still_type_unt],
-                    still_type_opt(still_type_char),
+                    [lily_type_str, lily_type_unt],
+                    lily_type_opt(lily_type_char),
                 ),
                 "The `char` at the nearest lower character boundary of a given UTF-8 index. If it lands out of bounds, results in :option Element:Absent",
             ),
             (
-                StillName::from("str-slice-from-byte-index-with-byte-length"),
+                LilyName::from("str-slice-from-byte-index-with-byte-length"),
                 function(
-                    [still_type_str, still_type_unt,still_type_unt],
-                    still_type_str,
+                    [lily_type_str, lily_type_unt,lily_type_unt],
+                    lily_type_str,
                 ),
                 "Create a sub-slice starting at the floor character boundary of a given UTF-8 index, spanning for a given count of UTF-8 bytes until before the nearest higher character boundary",
             ),
             (
-                StillName::from("str-to-chars"),
-                function([still_type_str], still_type_vec(still_type_char)),
+                LilyName::from("str-to-chars"),
+                function([lily_type_str], lily_type_vec(lily_type_char)),
                 "Split the `str` into a `vec` of `char`s",
             ),
             (
-                StillName::from("chars-to-str"),
-                function([still_type_vec(still_type_char)], still_type_str),
+                LilyName::from("chars-to-str"),
+                function([lily_type_vec(lily_type_char)], lily_type_str),
                 "Concatenate a `vec` of `char`s into one `str`",
             ),
             (
-                StillName::from("str-order"),
-                function([still_type_str,still_type_str], still_type_order),
+                LilyName::from("str-order"),
+                function([lily_type_str,lily_type_str], lily_type_order),
                 "Compare `str` values lexicographically (char-wise comparison, then longer is greater). A detailed definition: https://doc.rust-lang.org/std/cmp/trait.Ord.html#lexicographical-comparison",
             ),
             (
-                StillName::from("str-walk-chars-from"),
+                LilyName::from("str-walk-chars-from"),
                 function(
-                 [still_type_str,
-                  function([variable("State"), still_type_char], still_type_continue_or_exit(variable("State"), variable("Exit")))
+                 [lily_type_str,
+                  function([variable("State"), lily_type_char], lily_type_continue_or_exit(variable("State"), variable("Exit")))
                  ],
-                 still_type_continue_or_exit(variable("State"), variable("Exit"))
+                 lily_type_continue_or_exit(variable("State"), variable("Exit"))
                 ),
                 r"Loop through all of its `char`s first to last, collecting state or exiting early
-```still
+```lily
 str-find-spaces-in-first-line \:str:str >
     str-walk-chars-from str
         0
@@ -9723,48 +9703,48 @@ I recommend creating helpers for common cases like splitting into lines.
 ",
             ),
             (
-                StillName::from("str-attach"),
-                function([still_type_str,still_type_str], still_type_str),
+                LilyName::from("str-attach"),
+                function([lily_type_str,lily_type_str], lily_type_str),
                 "Append the chars of the second given string at the end of the first.
 See also `str-attach-char`, `str-attach-unt`, `str-attach-int, `str-attach-dec`.",
             ),
             (
-                StillName::from("str-attach-char"),
-                function([still_type_str,still_type_char], still_type_str),
+                LilyName::from("str-attach-char"),
+                function([lily_type_str,lily_type_char], lily_type_str),
                 "Push a given `char` to the end of the `str`",
             ),
             (
-                StillName::from("str-attach-unt"),
-                function([still_type_str,still_type_unt], still_type_str),
+                LilyName::from("str-attach-unt"),
+                function([lily_type_str,lily_type_unt], lily_type_str),
                 "Push a given `unt` to the end of the `str`, equivalent to but faster than `str-attach str (unt-to-str unt)`",
             ),
             (
-                StillName::from("str-attach-int"),
-                function([still_type_str,still_type_int], still_type_str),
+                LilyName::from("str-attach-int"),
+                function([lily_type_str,lily_type_int], lily_type_str),
                 "Push a given `int` to the end of the `str`, equivalent to but faster than `str-attach str (int-to-str int)`",
             ),
             (
-                StillName::from("str-attach-dec"),
-                function([still_type_str,still_type_dec], still_type_str),
+                LilyName::from("str-attach-dec"),
+                function([lily_type_str,lily_type_dec], lily_type_str),
                 "Push a given `dec` to the end of the `str`, equivalent to but faster than `str-attach str (dec-to-str dec)`",
             ),
             (
-                StillName::from("strs-flatten"),
-                function([still_type_vec(still_type_str)], still_type_str),
+                LilyName::from("strs-flatten"),
+                function([lily_type_vec(lily_type_str)], lily_type_str),
                 r"Concatenate all the string elements.
 When building large strings, prefer `str-attach`, `str-attach-char`, `str-attach-unt`, ...
 ",
             ),
             (
-                StillName::from("vec-repeat"),
-                function([still_type_unt, variable("A")], still_type_vec(variable("A"))),
+                LilyName::from("vec-repeat"),
+                function([lily_type_unt, variable("A")], lily_type_vec(variable("A"))),
                 "Build a `vec` with a given length and a given element at each index",
             ),
             (
-                StillName::from("vec-by-index-for-length"),
-                function([still_type_unt, function([still_type_unt],variable("A"))], still_type_vec(variable("A"))),
+                LilyName::from("vec-by-index-for-length"),
+                function([lily_type_unt, function([lily_type_unt],variable("A"))], lily_type_vec(variable("A"))),
                 r"Build a `vec` with a given length and for each index the element derived from the given function
-```still
+```lily
 vec-unt-range-inclusive \:unt:start, :unt:end >
     = length-int
         int-add (unt-to-int end) (int-negate (unt-to-int (unt-add start 1)))
@@ -9776,18 +9756,18 @@ vec-unt-range-inclusive \:unt:start, :unt:end >
 ",
             ),
             (
-                StillName::from("vec-length"),
-                function([still_type_vec(variable("A"))], still_type_unt),
+                LilyName::from("vec-length"),
+                function([lily_type_vec(variable("A"))], lily_type_unt),
                 "Its element count",
             ),
             (
-                StillName::from("vec-element"),
+                LilyName::from("vec-element"),
                 function(
-                    [still_type_vec(variable("A")),still_type_unt],
-                    still_type_opt(variable("A")),
+                    [lily_type_vec(variable("A")),lily_type_unt],
+                    lily_type_opt(variable("A")),
                 ),
                 r"The element at a given index. If it is too big, results in :option Element:Absent
-```still
+```lily
 vec-last-element \:vec A:vec >
     unt-to-int (int-add (unt-to-int (vec-length vec) -1)
     | :opt unt:Absent > 
@@ -9799,21 +9779,21 @@ vec-last-element \:vec A:vec >
 ",
             ),
             (
-                StillName::from("vec-replace-element"),
+                LilyName::from("vec-replace-element"),
                 function(
-                    [still_type_vec(variable("A")),still_type_unt,variable("A")],
-                    still_type_vec(variable("A")),
+                    [lily_type_vec(variable("A")),lily_type_unt,variable("A")],
+                    lily_type_vec(variable("A")),
                 ),
                 "Set the element at a given index to a given new value. If the index is greater than the last existing index, change nothing",
             ),
             (
-                StillName::from("vec-swap"),
+                LilyName::from("vec-swap"),
                 function(
-                    [still_type_vec(variable("A")),still_type_unt,variable("A")],
-                    still_type_vec(variable("A")),
+                    [lily_type_vec(variable("A")),lily_type_unt,variable("A")],
+                    lily_type_vec(variable("A")),
                 ),
                 r"Exchange the element at the first given index with the element at the second given index. If either index is greater than the last existing index (or the indexes are equal), nothing is changed
-```still
+```lily
 vec-remove-by-swapping-with-last \:vec A:vec, :unt:index >
     = len
         vec-length vec
@@ -9827,13 +9807,13 @@ vec-remove-by-swapping-with-last \:vec A:vec, :unt:index >
 ",
             ),
             (
-                StillName::from("vec-truncate"),
+                LilyName::from("vec-truncate"),
                 function(
-                    [still_type_vec(variable("A")), still_type_unt],
-                    still_type_vec(variable("A")),
+                    [lily_type_vec(variable("A")), lily_type_unt],
+                    lily_type_vec(variable("A")),
                 ),
                 r"Take at most a given count of elements from the start
-```still
+```lily
 vec-remove-last \:vec A:vec >
     unt-to-int (int-add (unt-to-int (vec-length vec) -1)
     | :opt unt:Absent >
@@ -9845,13 +9825,13 @@ vec-remove-last \:vec A:vec >
 ",
             ),
             (
-                StillName::from("vec-slice-from-index-with-length"),
+                LilyName::from("vec-slice-from-index-with-length"),
                 function(
-                    [still_type_vec(variable("A")), still_type_unt, still_type_unt],
-                    still_type_vec(variable("A")),
+                    [lily_type_vec(variable("A")), lily_type_unt, lily_type_unt],
+                    lily_type_vec(variable("A")),
                 ),
                 r"Take at most a given count of elements from a given start index
-```still
+```lily
 vec-remove-first \:vec A:vec >
     vec-slice-from-index-with-length
         vec
@@ -9862,51 +9842,51 @@ vec-remove-first \:vec A:vec >
 ",
             ),
             (
-                StillName::from("vec-increase-capacity-by"),
+                LilyName::from("vec-increase-capacity-by"),
                 function(
-                    [still_type_vec(variable("A")), still_type_unt],
-                    still_type_vec(variable("A")),
+                    [lily_type_vec(variable("A")), lily_type_unt],
+                    lily_type_vec(variable("A")),
                 ),
                 "Reserve capacity for at least a given count of additional elements to be inserted in the given vec (reserving space is done automatically when inserting elements but when knowing more about the final size, we can avoid reallocations).",
             ),
             (
-                StillName::from("vec-sort"),
+                LilyName::from("vec-sort"),
                 function(
-                    [still_type_vec(variable("A")),
-                     function([variable("A"),variable("A")], still_type_order)
+                    [lily_type_vec(variable("A")),
+                     function([variable("A"),variable("A")], lily_type_order)
                     ],
-                    still_type_vec(variable("A")),
+                    lily_type_vec(variable("A")),
                 ),
                 "Reserve capacity for at least a given count of additional elements to be inserted in the given vec (reserving space is done automatically when inserting elements but when knowing more about the final size, we can avoid reallocations).",
             ),
             (
-                StillName::from("vec-attach-element"),
-                function([still_type_vec(variable("A")), variable("A")], still_type_vec(variable("A"))),
+                LilyName::from("vec-attach-element"),
+                function([lily_type_vec(variable("A")), variable("A")], lily_type_vec(variable("A"))),
                 "Glue a single given element after the first given `vec`.
 To append a `vec` of elements, use `vec-attach`",
             ),
             (
-                StillName::from("vec-attach"),
-                function([still_type_vec(variable("A")), still_type_vec(variable("A"))], still_type_vec(variable("A"))),
+                LilyName::from("vec-attach"),
+                function([lily_type_vec(variable("A")), lily_type_vec(variable("A"))], lily_type_vec(variable("A"))),
                 "Glue the elements in a second given `vec` after the first given `vec`.
 To append only a single element, use `vec-append-element`",
             ),
             (
-                StillName::from("vec-flatten"),
-                function([still_type_vec(still_type_vec(variable("A")))], still_type_vec(variable("A"))),
+                LilyName::from("vec-flatten"),
+                function([lily_type_vec(lily_type_vec(variable("A")))], lily_type_vec(variable("A"))),
                 "Concatenate all the elements nested inside the inner `vec`s",
             ),
             (
-                StillName::from("vec-walk-from"),
+                LilyName::from("vec-walk-from"),
                 function(
-                 [still_type_vec(variable("A")),
+                 [lily_type_vec(variable("A")),
                   variable("State"),
-                  function([variable("State"),variable("A")], still_type_continue_or_exit(variable("State"), variable("Exit")))
+                  function([variable("State"),variable("A")], lily_type_continue_or_exit(variable("State"), variable("Exit")))
                  ],
-                 still_type_continue_or_exit(variable("State"), variable("Exit"))
+                 lily_type_continue_or_exit(variable("State"), variable("Exit"))
                 ),
                 r"Loop through all of its elements first to last, collecting state or exiting early
-```still
+```lily
 # if you aren't using any state in Continue, just use {}
 vec-first-present \:vec (opt A):vec >
     vec-walk-from vec
@@ -9951,17 +9931,17 @@ I recommend creating helpers for common cases like mapping to an `opt` and keepi
 };
 
 static core_choice_type_infos: std::sync::LazyLock<
-    std::collections::HashMap<StillName, ChoiceTypeInfo>,
+    std::collections::HashMap<LilyName, ChoiceTypeInfo>,
 > = {
     std::sync::LazyLock::new(|| {
         std::collections::HashMap::from([
         (
-            StillName::from(still_type_unt_name),
+            LilyName::from(lily_type_unt_name),
             ChoiceTypeInfo {
                 name_range: None,
                 documentation: Some(Box::from(
                     r"A natural number >= 0 (unsigned integer). Has the same size as a pointer on the target platform (so 64 bits on 64-bit platforms).
-```still
+```lily
 vec-repeat 5 2
 # = [ 2, 2, 2, 2, 2 ]
 ```
@@ -9974,12 +9954,12 @@ vec-repeat 5 2
             },
         ),
         (
-            StillName::from(still_type_int_name),
+            LilyName::from(lily_type_int_name),
             ChoiceTypeInfo {
                 name_range: None,
                 documentation: Some(Box::from(
                     r"A whole number (signed integer). Has the same size as a pointer on the target platform (so 64 bits on 64-bit platforms).
-```still
+```lily
 some-ints
     [ -2012
     , +3
@@ -9996,12 +9976,12 @@ Notice how a sign (+/-/0) is required, otherwise the number would be of type `un
             },
         ),
         (
-            StillName::from(still_type_dec_name),
+            LilyName::from(lily_type_dec_name),
             ChoiceTypeInfo {
                 name_range: None,
                 documentation: Some(Box::from(
                     r#"A signed floating point number. Has 64 bits of precision and behaves as specified by the "binary64" type defined in IEEE 754-2008.
-```still
+```lily
 five
     # . or .0 is mandatory for dec,
     # otherwise the number is of type :int: or :unt:
@@ -10019,13 +9999,13 @@ dec-div five 2.0
             },
         ),
         (
-            StillName::from(still_type_char_name),
+            LilyName::from(lily_type_char_name),
             ChoiceTypeInfo {
                 name_range: None,
                 documentation: Some(Box::from(
                     r#"A unicode scalar like `'a'` or `'👀'` or `\u{2665}` (hex code for ♥).
 Keep in mind that a human-readable visual symbol can be composed of multiple such unicode scalars (forming a grapheme cluster), For example:
-```still
+```lily
 str-to-chars "🇺🇸"
 # = [ '\u{1F1FA}', '\u{1F1F8}' ]
 #     Indicator U  Indicator S
@@ -10040,13 +10020,13 @@ Read if interested: [swift's grapheme cluster docs](https://docs.swift.org/swift
             },
         ),
         (
-            StillName::from(still_type_str_name),
+            LilyName::from(lily_type_str_name),
             ChoiceTypeInfo {
                 name_range: None,
                 documentation: Some(Box::from(
                     r#"Text like `"abc"` or `"\"hello 👀 \\\r\n world \u{2665}\""` (`\u{2665}` represents the hex code for ♥, `\"` represents ", `\\` represents \\, `\n` represents line break, `\r` represents carriage return).
 Internally, a string is compactly represented as UTF-8 bytes and can be accessed as such.
-```still
+```lily
 strs-flatten [ "My name is ", "Jenna", " and I'm ", int-to-str 60, " years old." ]
 # = "My name is Jenna and I'm 60 years old."
 ```
@@ -10060,12 +10040,12 @@ When building large strings, prefer `str-attach` and `str-attach-char`.
             },
         ),
         (
-            StillName::from(still_type_order_name),
+            LilyName::from(lily_type_order_name),
             ChoiceTypeInfo {
                 name_range: None,
                 documentation: Some(Box::from(
                     r#"The result of a comparison.
-```still
+```lily
 int-cmp 1 2
 # = :order:Less
 
@@ -10090,64 +10070,64 @@ int-order x 10
 vec
 ```
 If necessary you can create order functions for your specific types,
-still does not have "traits"/"type classes" or similar, functions are always passed explicitly.
+lily does not have "traits"/"type classes" or similar, functions are always passed explicitly.
 
 When comparing `int`s for < 0 and >= 0, you might prefer `int-to-unt`
 "#
                 )),
                 parameters: vec![],
                 type_variants: vec![
-                    StillChoiceTypeVariantInfo{
-                        name:StillName::from("Less"),
+                    LilyChoiceTypeVariantInfo{
+                        name:LilyName::from("Less"),
                         value: None
                     },
-                    StillChoiceTypeVariantInfo{
-                        name:StillName::from("Equal"),
+                    LilyChoiceTypeVariantInfo{
+                        name:LilyName::from("Equal"),
                         value: None
                     },
-                    StillChoiceTypeVariantInfo{
-                        name:StillName::from("Greater"),
+                    LilyChoiceTypeVariantInfo{
+                        name:LilyName::from("Greater"),
                         value: None
                     },
                 ],
                 is_copy: true,
                 // should be able to be omitted
                 variants: vec![
-                    StillSyntaxChoiceTypeVariant {
+                    LilySyntaxChoiceTypeVariant {
                         or_key_symbol_range: lsp_types::Range::default(),
-                        name: Some(still_syntax_node_empty(StillName::from("Less"))),
+                        name: Some(lily_syntax_node_empty(LilyName::from("Less"))),
                         value: None,
                     },
-                    StillSyntaxChoiceTypeVariant {
+                    LilySyntaxChoiceTypeVariant {
                         or_key_symbol_range: lsp_types::Range::default(),
-                        name: Some(still_syntax_node_empty(StillName::from("Equal"))),
+                        name: Some(lily_syntax_node_empty(LilyName::from("Equal"))),
                         value: None,
                     },
-                    StillSyntaxChoiceTypeVariant {
+                    LilySyntaxChoiceTypeVariant {
                         or_key_symbol_range: lsp_types::Range::default(),
-                        name: Some(still_syntax_node_empty(StillName::from("Greater"))),
+                        name: Some(lily_syntax_node_empty(LilyName::from("Greater"))),
                         value: None,
                     },
                 ],
             },
         ),
         (
-            StillName::from(still_type_opt_name),
+            LilyName::from(lily_type_opt_name),
             ChoiceTypeInfo {
                 name_range: None,
                 documentation: Some(Box::from(
                     r"Either you have some value or you have nothing."
                 )),
-                parameters: vec![still_syntax_node_empty(StillName::from("A"))],
+                parameters: vec![lily_syntax_node_empty(LilyName::from("A"))],
                 type_variants: vec![
-                    StillChoiceTypeVariantInfo{
-                        name:StillName::from("Absent"),
+                    LilyChoiceTypeVariantInfo{
+                        name:LilyName::from("Absent"),
                         value: None
                     },
-                    StillChoiceTypeVariantInfo{
-                        name:StillName::from("Present"),
-                        value: Some(StillChoiceTypeVariantValueInfo {
-                            type_: StillType::Variable(StillName::from("A")),
+                    LilyChoiceTypeVariantInfo{
+                        name:LilyName::from("Present"),
+                        value: Some(LilyChoiceTypeVariantValueInfo {
+                            type_: LilyType::Variable(LilyName::from("A")),
                             constructs_recursive_type: false
                         })
                     }
@@ -10155,29 +10135,29 @@ When comparing `int`s for < 0 and >= 0, you might prefer `int-to-unt`
                 is_copy: true,
                 // should be able to be omitted
                 variants: vec![
-                    StillSyntaxChoiceTypeVariant {
+                    LilySyntaxChoiceTypeVariant {
                         or_key_symbol_range: lsp_types::Range::default(),
-                        name: Some(still_syntax_node_empty(StillName::from("Absent"))),
+                        name: Some(lily_syntax_node_empty(LilyName::from("Absent"))),
                         value: None,
                     },
-                    StillSyntaxChoiceTypeVariant {
+                    LilySyntaxChoiceTypeVariant {
                         or_key_symbol_range: lsp_types::Range::default(),
-                        name: Some(still_syntax_node_empty(StillName::from("Present"))),
-                        value: Some(still_syntax_node_empty(StillSyntaxType::Variable(
-                            StillName::from("A"),
+                        name: Some(lily_syntax_node_empty(LilyName::from("Present"))),
+                        value: Some(lily_syntax_node_empty(LilySyntaxType::Variable(
+                            LilyName::from("A"),
                         ))),
                     }
                 ],
             },
         ),
         (
-            StillName::from(still_type_continue_or_exit_name),
+            LilyName::from(lily_type_continue_or_exit_name),
             ChoiceTypeInfo {
                 name_range: None,
                 documentation: Some(Box::from(
                     r"Either done with a final result or continuing with a partial result.
 Typically used for operations that can shortcut.
-```still
+```lily
 # If you aren't using any state in Continue, just use {}
 vec-first-present \:vec (opt A):vec >
     vec-walk-from vec
@@ -10212,19 +10192,19 @@ numbers0-9
 ```
 "
                 )),
-                parameters: vec![still_syntax_node_empty(StillName::from("Continue")), still_syntax_node_empty(StillName::from("Exit"))],
+                parameters: vec![lily_syntax_node_empty(LilyName::from("Continue")), lily_syntax_node_empty(LilyName::from("Exit"))],
                 type_variants: vec![
-                    StillChoiceTypeVariantInfo{
-                        name:StillName::from("Continue"),
-                        value: Some(StillChoiceTypeVariantValueInfo {
-                            type_: StillType::Variable(StillName::from("Continue")),
+                    LilyChoiceTypeVariantInfo{
+                        name:LilyName::from("Continue"),
+                        value: Some(LilyChoiceTypeVariantValueInfo {
+                            type_: LilyType::Variable(LilyName::from("Continue")),
                             constructs_recursive_type: false
                         })
                     },
-                    StillChoiceTypeVariantInfo{
-                        name:StillName::from("Exit"),
-                        value: Some(StillChoiceTypeVariantValueInfo {
-                            type_: StillType::Variable(StillName::from("Exit")),
+                    LilyChoiceTypeVariantInfo{
+                        name:LilyName::from("Exit"),
+                        value: Some(LilyChoiceTypeVariantValueInfo {
+                            type_: LilyType::Variable(LilyName::from("Exit")),
                             constructs_recursive_type: false
                         })
                     }
@@ -10232,30 +10212,30 @@ numbers0-9
                 is_copy: true,
                 // should be able to be omitted
                 variants: vec![
-                    StillSyntaxChoiceTypeVariant {
+                    LilySyntaxChoiceTypeVariant {
                         or_key_symbol_range: lsp_types::Range::default(),
-                        name: Some(still_syntax_node_empty(StillName::from("Continue"))),
-                        value: Some(still_syntax_node_empty(StillSyntaxType::Variable(
-                            StillName::from("Continue"),
+                        name: Some(lily_syntax_node_empty(LilyName::from("Continue"))),
+                        value: Some(lily_syntax_node_empty(LilySyntaxType::Variable(
+                            LilyName::from("Continue"),
                         ))),
                     },
-                    StillSyntaxChoiceTypeVariant {
+                    LilySyntaxChoiceTypeVariant {
                         or_key_symbol_range: lsp_types::Range::default(),
-                        name: Some(still_syntax_node_empty(StillName::from("Exit"))),
-                        value: Some(still_syntax_node_empty(StillSyntaxType::Variable(
-                            StillName::from("Exit"),
+                        name: Some(lily_syntax_node_empty(LilyName::from("Exit"))),
+                        value: Some(lily_syntax_node_empty(LilySyntaxType::Variable(
+                            LilyName::from("Exit"),
                         ))),
                     }
                 ],
             },
         ),
         (
-            StillName::from(still_type_vec_name),
+            LilyName::from(lily_type_vec_name),
             ChoiceTypeInfo {
                 name_range: None,
                 documentation: Some(Box::from(
                     "A growable array of elements. Arrays have constant time access and mutation and amortized constant time push.
-```still
+```lily
 my-vec :vec int:
     [ 1, 2, 3 ]
 
@@ -10267,7 +10247,7 @@ vec-element 3 my-vec
 ```
 "
                 )),
-                parameters: vec![still_syntax_node_empty(StillName::from("A"))],
+                parameters: vec![lily_syntax_node_empty(LilyName::from("A"))],
                 variants: vec![],
                 is_copy: false,
                 type_variants: vec![],
@@ -10277,9 +10257,9 @@ vec-element 3 my-vec
     })
 };
 
-fn still_syntax_record_to_rust(used_still_record_fields: &[StillName]) -> syn::Item {
+fn lily_syntax_record_to_rust(used_lily_record_fields: &[LilyName]) -> syn::Item {
     let rust_struct_name: String =
-        still_field_names_to_rust_record_struct_name(used_still_record_fields.iter());
+        lily_field_names_to_rust_record_struct_name(used_lily_record_fields.iter());
     let rust_struct: syn::Item = syn::Item::Struct(syn::ItemStruct {
         attrs: vec![syn_attribute_derive(
             [
@@ -10299,12 +10279,12 @@ fn still_syntax_record_to_rust(used_still_record_fields: &[StillName]) -> syn::I
         ident: syn_ident(&rust_struct_name),
         generics: syn::Generics {
             lt_token: Some(syn::token::Lt(syn_span())),
-            params: used_still_record_fields
+            params: used_lily_record_fields
                 .iter()
                 .map(|field_name| {
                     syn::GenericParam::Type(syn::TypeParam {
                         attrs: vec![],
-                        ident: syn_ident(&still_type_variable_to_rust(field_name)),
+                        ident: syn_ident(&lily_type_variable_to_rust(field_name)),
                         colon_token: None,
                         bounds: syn::punctuated::Punctuated::new(),
                         eq_token: None,
@@ -10317,17 +10297,17 @@ fn still_syntax_record_to_rust(used_still_record_fields: &[StillName]) -> syn::I
         },
         fields: syn::Fields::Named(syn::FieldsNamed {
             brace_token: syn::token::Brace(syn_span()),
-            named: used_still_record_fields
+            named: used_lily_record_fields
                 .iter()
                 .map(|field_name| syn::Field {
                     attrs: vec![],
                     vis: syn::Visibility::Public(syn::token::Pub(syn_span())),
                     mutability: syn::FieldMutability::None,
-                    ident: Some(syn_ident(&still_name_to_lowercase_rust(field_name))),
+                    ident: Some(syn_ident(&lily_name_to_lowercase_rust(field_name))),
                     colon_token: Some(syn::token::Colon(syn_span())),
                     ty: syn::Type::Path(syn::TypePath {
                         qself: None,
-                        path: syn_path_reference([&still_type_variable_to_rust(field_name)]),
+                        path: syn_path_reference([&lily_type_variable_to_rust(field_name)]),
                     }),
                 })
                 .collect(),
@@ -10336,104 +10316,104 @@ fn still_syntax_record_to_rust(used_still_record_fields: &[StillName]) -> syn::I
     });
     rust_struct
 }
-fn sorted_field_names<'a>(field_names: impl Iterator<Item = &'a StillName>) -> Vec<StillName> {
-    let mut field_names_vec: Vec<StillName> = field_names.map(StillName::clone).collect();
+fn sorted_field_names<'a>(field_names: impl Iterator<Item = &'a LilyName>) -> Vec<LilyName> {
+    let mut field_names_vec: Vec<LilyName> = field_names.map(LilyName::clone).collect();
     field_names_vec.sort_unstable();
     field_names_vec
 }
-fn still_syntax_type_declaration_connect_type_names_in_graph_from(
+fn lily_syntax_type_declaration_connect_type_names_in_graph_from(
     type_graph: &mut strongly_connected_components::Graph,
     origin_type_declaration_graph_node: strongly_connected_components::Node,
     type_graph_node_by_name: &std::collections::HashMap<&str, strongly_connected_components::Node>,
-    type_declaration_info: StillSyntaxTypeDeclarationInfo,
+    type_declaration_info: LilySyntaxTypeDeclarationInfo,
 ) {
     match type_declaration_info {
-        StillSyntaxTypeDeclarationInfo::ChoiceType {
+        LilySyntaxTypeDeclarationInfo::ChoiceType {
             documentation: _,
             name: _,
             parameters: _,
             variants,
         } => {
             for variant_value_node in variants.iter().filter_map(|variant| variant.value.as_ref()) {
-                still_syntax_type_connect_type_names_in_graph_from(
+                lily_syntax_type_connect_type_names_in_graph_from(
                     type_graph,
                     origin_type_declaration_graph_node,
                     type_graph_node_by_name,
-                    still_syntax_node_as_ref(variant_value_node),
+                    lily_syntax_node_as_ref(variant_value_node),
                 );
             }
         }
-        StillSyntaxTypeDeclarationInfo::TypeAlias {
+        LilySyntaxTypeDeclarationInfo::TypeAlias {
             documentation: _,
             name: _,
             parameters: _,
             type_: maybe_type,
         } => {
             if let Some(type_node) = maybe_type {
-                still_syntax_type_connect_type_names_in_graph_from(
+                lily_syntax_type_connect_type_names_in_graph_from(
                     type_graph,
                     origin_type_declaration_graph_node,
                     type_graph_node_by_name,
-                    still_syntax_node_as_ref(type_node),
+                    lily_syntax_node_as_ref(type_node),
                 );
             }
         }
     }
 }
-fn still_syntax_type_connect_type_names_in_graph_from(
+fn lily_syntax_type_connect_type_names_in_graph_from(
     type_graph: &mut strongly_connected_components::Graph,
     origin_type_declaration_graph_node: strongly_connected_components::Node,
     type_graph_node_by_name: &std::collections::HashMap<&str, strongly_connected_components::Node>,
-    type_node: StillSyntaxNode<&StillSyntaxType>,
+    type_node: LilySyntaxNode<&LilySyntaxType>,
 ) {
     match type_node.value {
-        StillSyntaxType::Variable(_) => {}
-        StillSyntaxType::Parenthesized(maybe_in_parens) => {
+        LilySyntaxType::Variable(_) => {}
+        LilySyntaxType::Parenthesized(maybe_in_parens) => {
             if let Some(in_parens_type_node) = maybe_in_parens {
-                still_syntax_type_connect_type_names_in_graph_from(
+                lily_syntax_type_connect_type_names_in_graph_from(
                     type_graph,
                     origin_type_declaration_graph_node,
                     type_graph_node_by_name,
-                    still_syntax_node_unbox(in_parens_type_node),
+                    lily_syntax_node_unbox(in_parens_type_node),
                 );
             }
         }
-        StillSyntaxType::WithComment {
+        LilySyntaxType::WithComment {
             comment: _,
             type_: maybe_type_after_comment,
         } => {
             if let Some(after_comment_type_node) = maybe_type_after_comment {
-                still_syntax_type_connect_type_names_in_graph_from(
+                lily_syntax_type_connect_type_names_in_graph_from(
                     type_graph,
                     origin_type_declaration_graph_node,
                     type_graph_node_by_name,
-                    still_syntax_node_unbox(after_comment_type_node),
+                    lily_syntax_node_unbox(after_comment_type_node),
                 );
             }
         }
-        StillSyntaxType::Function {
+        LilySyntaxType::Function {
             inputs,
             arrow_key_symbol_range: _,
             output: maybe_output,
         } => {
             for input_type_node in inputs {
-                still_syntax_type_connect_type_names_in_graph_from(
+                lily_syntax_type_connect_type_names_in_graph_from(
                     type_graph,
                     origin_type_declaration_graph_node,
                     type_graph_node_by_name,
-                    still_syntax_node_as_ref(input_type_node),
+                    lily_syntax_node_as_ref(input_type_node),
                 );
             }
             if let Some(output_type_node) = maybe_output {
-                still_syntax_type_connect_type_names_in_graph_from(
+                lily_syntax_type_connect_type_names_in_graph_from(
                     type_graph,
                     origin_type_declaration_graph_node,
                     type_graph_node_by_name,
-                    still_syntax_node_unbox(output_type_node),
+                    lily_syntax_node_unbox(output_type_node),
                 );
             }
         }
-        StillSyntaxType::Construct {
+        LilySyntaxType::Construct {
             name: name_node,
             arguments,
         } => {
@@ -10447,44 +10427,44 @@ fn still_syntax_type_connect_type_names_in_graph_from(
                 );
             }
             for argument_type_node in arguments {
-                still_syntax_type_connect_type_names_in_graph_from(
+                lily_syntax_type_connect_type_names_in_graph_from(
                     type_graph,
                     origin_type_declaration_graph_node,
                     type_graph_node_by_name,
-                    still_syntax_node_as_ref(argument_type_node),
+                    lily_syntax_node_as_ref(argument_type_node),
                 );
             }
         }
-        StillSyntaxType::Record(fields) => {
+        LilySyntaxType::Record(fields) => {
             for field in fields {
                 if let Some(output_type_node) = &field.value {
-                    still_syntax_type_connect_type_names_in_graph_from(
+                    lily_syntax_type_connect_type_names_in_graph_from(
                         type_graph,
                         origin_type_declaration_graph_node,
                         type_graph_node_by_name,
-                        still_syntax_node_as_ref(output_type_node),
+                        lily_syntax_node_as_ref(output_type_node),
                     );
                 }
             }
         }
     }
 }
-fn still_syntax_expression_connect_variables_in_graph_from(
+fn lily_syntax_expression_connect_variables_in_graph_from(
     variable_graph: &mut strongly_connected_components::Graph,
     origin_variable_declaration_graph_node: strongly_connected_components::Node,
     variable_graph_node_by_name: &std::collections::HashMap<
         &str,
         strongly_connected_components::Node,
     >,
-    expression_node: StillSyntaxNode<&StillSyntaxExpression>,
+    expression_node: LilySyntaxNode<&LilySyntaxExpression>,
 ) {
     match expression_node.value {
-        StillSyntaxExpression::Char(_) => {}
-        StillSyntaxExpression::Dec(_) => {}
-        StillSyntaxExpression::Unt(_) => {}
-        StillSyntaxExpression::Int(_) => {}
-        StillSyntaxExpression::String { .. } => {}
-        StillSyntaxExpression::VariableOrCall {
+        LilySyntaxExpression::Char(_) => {}
+        LilySyntaxExpression::Dec(_) => {}
+        LilySyntaxExpression::Unt(_) => {}
+        LilySyntaxExpression::Int(_) => {}
+        LilySyntaxExpression::String { .. } => {}
+        LilySyntaxExpression::VariableOrCall {
             variable: variable_node,
             arguments,
         } => {
@@ -10496,131 +10476,131 @@ fn still_syntax_expression_connect_variables_in_graph_from(
                     .new_edge(origin_variable_declaration_graph_node, variable_graph_node);
             }
             for argument_node in arguments {
-                still_syntax_expression_connect_variables_in_graph_from(
+                lily_syntax_expression_connect_variables_in_graph_from(
                     variable_graph,
                     origin_variable_declaration_graph_node,
                     variable_graph_node_by_name,
-                    still_syntax_node_as_ref(argument_node),
+                    lily_syntax_node_as_ref(argument_node),
                 );
             }
         }
-        StillSyntaxExpression::Match {
+        LilySyntaxExpression::Match {
             matched: matched_node,
             cases,
         } => {
-            still_syntax_expression_connect_variables_in_graph_from(
+            lily_syntax_expression_connect_variables_in_graph_from(
                 variable_graph,
                 origin_variable_declaration_graph_node,
                 variable_graph_node_by_name,
-                still_syntax_node_unbox(matched_node),
+                lily_syntax_node_unbox(matched_node),
             );
             for case in cases {
                 if let Some(field_value_node) = &case.result {
-                    still_syntax_expression_connect_variables_in_graph_from(
+                    lily_syntax_expression_connect_variables_in_graph_from(
                         variable_graph,
                         origin_variable_declaration_graph_node,
                         variable_graph_node_by_name,
-                        still_syntax_node_as_ref(field_value_node),
+                        lily_syntax_node_as_ref(field_value_node),
                     );
                 }
             }
         }
-        StillSyntaxExpression::Lambda {
+        LilySyntaxExpression::Lambda {
             parameters: _,
             arrow_key_symbol_range: _,
             result: maybe_result,
         } => {
             if let Some(result_node) = maybe_result {
-                still_syntax_expression_connect_variables_in_graph_from(
+                lily_syntax_expression_connect_variables_in_graph_from(
                     variable_graph,
                     origin_variable_declaration_graph_node,
                     variable_graph_node_by_name,
-                    still_syntax_node_unbox(result_node),
+                    lily_syntax_node_unbox(result_node),
                 );
             }
         }
-        StillSyntaxExpression::AfterLocalVariable {
+        LilySyntaxExpression::AfterLocalVariable {
             declaration: maybe_declaration,
             result: maybe_result,
         } => {
             if let Some(declaration_node) = maybe_declaration
                 && let Some(variable_result_expression_node) = &declaration_node.value.result
             {
-                still_syntax_expression_connect_variables_in_graph_from(
+                lily_syntax_expression_connect_variables_in_graph_from(
                     variable_graph,
                     origin_variable_declaration_graph_node,
                     variable_graph_node_by_name,
-                    still_syntax_node_unbox(variable_result_expression_node),
+                    lily_syntax_node_unbox(variable_result_expression_node),
                 );
             }
             if let Some(result_node) = maybe_result {
-                still_syntax_expression_connect_variables_in_graph_from(
+                lily_syntax_expression_connect_variables_in_graph_from(
                     variable_graph,
                     origin_variable_declaration_graph_node,
                     variable_graph_node_by_name,
-                    still_syntax_node_unbox(result_node),
+                    lily_syntax_node_unbox(result_node),
                 );
             }
         }
-        StillSyntaxExpression::Vec(elements) => {
+        LilySyntaxExpression::Vec(elements) => {
             for element_node in elements {
-                still_syntax_expression_connect_variables_in_graph_from(
+                lily_syntax_expression_connect_variables_in_graph_from(
                     variable_graph,
                     origin_variable_declaration_graph_node,
                     variable_graph_node_by_name,
-                    still_syntax_node_as_ref(element_node),
+                    lily_syntax_node_as_ref(element_node),
                 );
             }
         }
-        StillSyntaxExpression::Parenthesized(maybe_in_parens) => {
+        LilySyntaxExpression::Parenthesized(maybe_in_parens) => {
             if let Some(in_parens_node) = maybe_in_parens {
-                still_syntax_expression_connect_variables_in_graph_from(
+                lily_syntax_expression_connect_variables_in_graph_from(
                     variable_graph,
                     origin_variable_declaration_graph_node,
                     variable_graph_node_by_name,
-                    still_syntax_node_unbox(in_parens_node),
+                    lily_syntax_node_unbox(in_parens_node),
                 );
             }
         }
-        StillSyntaxExpression::WithComment {
+        LilySyntaxExpression::WithComment {
             comment: _,
             expression: maybe_expression_after_comment,
         } => {
             if let Some(expression_node_after_comment) = maybe_expression_after_comment {
-                still_syntax_expression_connect_variables_in_graph_from(
+                lily_syntax_expression_connect_variables_in_graph_from(
                     variable_graph,
                     origin_variable_declaration_graph_node,
                     variable_graph_node_by_name,
-                    still_syntax_node_unbox(expression_node_after_comment),
+                    lily_syntax_node_unbox(expression_node_after_comment),
                 );
             }
         }
-        StillSyntaxExpression::Typed {
+        LilySyntaxExpression::Typed {
             type_: _,
             closing_colon_range: _,
             expression: expression_in_typed,
         } => {
             if let Some(expression_node_in_typed) = expression_in_typed {
                 match &expression_node_in_typed.value {
-                    StillSyntaxExpressionUntyped::Variant {
+                    LilySyntaxExpressionUntyped::Variant {
                         name: _,
                         value: maybe_variant_value,
                     } => {
                         if let Some(variant_value_node) = maybe_variant_value {
-                            still_syntax_expression_connect_variables_in_graph_from(
+                            lily_syntax_expression_connect_variables_in_graph_from(
                                 variable_graph,
                                 origin_variable_declaration_graph_node,
                                 variable_graph_node_by_name,
-                                still_syntax_node_unbox(variant_value_node),
+                                lily_syntax_node_unbox(variant_value_node),
                             );
                         }
                     }
-                    StillSyntaxExpressionUntyped::Other(other_expression_in_typed) => {
-                        still_syntax_expression_connect_variables_in_graph_from(
+                    LilySyntaxExpressionUntyped::Other(other_expression_in_typed) => {
+                        lily_syntax_expression_connect_variables_in_graph_from(
                             variable_graph,
                             origin_variable_declaration_graph_node,
                             variable_graph_node_by_name,
-                            StillSyntaxNode {
+                            LilySyntaxNode {
                                 range: expression_node_in_typed.range,
                                 value: other_expression_in_typed,
                             },
@@ -10629,38 +10609,38 @@ fn still_syntax_expression_connect_variables_in_graph_from(
                 }
             }
         }
-        StillSyntaxExpression::Record(fields) => {
+        LilySyntaxExpression::Record(fields) => {
             for field in fields {
                 if let Some(field_value_node) = &field.value {
-                    still_syntax_expression_connect_variables_in_graph_from(
+                    lily_syntax_expression_connect_variables_in_graph_from(
                         variable_graph,
                         origin_variable_declaration_graph_node,
                         variable_graph_node_by_name,
-                        still_syntax_node_as_ref(field_value_node),
+                        lily_syntax_node_as_ref(field_value_node),
                     );
                 }
             }
         }
-        StillSyntaxExpression::RecordUpdate {
+        LilySyntaxExpression::RecordUpdate {
             record: maybe_updated_record,
             spread_key_symbol_range: _,
             fields,
         } => {
             if let Some(updated_record_node) = maybe_updated_record {
-                still_syntax_expression_connect_variables_in_graph_from(
+                lily_syntax_expression_connect_variables_in_graph_from(
                     variable_graph,
                     origin_variable_declaration_graph_node,
                     variable_graph_node_by_name,
-                    still_syntax_node_unbox(updated_record_node),
+                    lily_syntax_node_unbox(updated_record_node),
                 );
             }
             for field in fields {
                 if let Some(field_value_node) = &field.value {
-                    still_syntax_expression_connect_variables_in_graph_from(
+                    lily_syntax_expression_connect_variables_in_graph_from(
                         variable_graph,
                         origin_variable_declaration_graph_node,
                         variable_graph_node_by_name,
-                        still_syntax_node_as_ref(field_value_node),
+                        lily_syntax_node_as_ref(field_value_node),
                     );
                 }
             }
@@ -10670,37 +10650,37 @@ fn still_syntax_expression_connect_variables_in_graph_from(
 struct CompiledTypeAlias {
     rust: syn::Item,
     is_copy: bool,
-    type_: StillType,
+    type_: LilyType,
 }
 fn type_alias_declaration_to_rust(
-    errors: &mut Vec<StillErrorNode>,
-    records_used: &mut std::collections::HashSet<Vec<StillName>>,
-    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
-    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
+    errors: &mut Vec<LilyErrorNode>,
+    records_used: &mut std::collections::HashSet<Vec<LilyName>>,
+    type_aliases: &std::collections::HashMap<LilyName, TypeAliasInfo>,
+    choice_types: &std::collections::HashMap<LilyName, ChoiceTypeInfo>,
     maybe_documentation: Option<&str>,
-    name_node: StillSyntaxNode<&StillName>,
-    parameters: &[StillSyntaxNode<StillName>],
-    maybe_type: Option<StillSyntaxNode<&StillSyntaxType>>,
+    name_node: LilySyntaxNode<&LilyName>,
+    parameters: &[LilySyntaxNode<LilyName>],
+    maybe_type: Option<LilySyntaxNode<&LilySyntaxType>>,
 ) -> Option<CompiledTypeAlias> {
-    let rust_name: String = still_name_to_uppercase_rust(name_node.value);
+    let rust_name: String = lily_name_to_uppercase_rust(name_node.value);
     let Some(type_node) = maybe_type else {
-        errors.push(StillErrorNode {
+        errors.push(LilyErrorNode {
             range: name_node.range,
             message: Box::from("type alias declaration is missing a type the given name is equal to after type alias ..type-name.. = here"),
         });
         return None;
     };
-    let Some(type_) = still_syntax_type_to_type(errors, type_aliases, choice_types, type_node)
+    let Some(type_) = lily_syntax_type_to_type(errors, type_aliases, choice_types, type_node)
     else {
         return None;
     };
-    let type_rust: syn::Type = still_type_to_rust(FnRepresentation::RcDyn, &type_);
-    let mut actually_used_type_variables: std::collections::HashSet<StillName> =
+    let type_rust: syn::Type = lily_type_to_rust(FnRepresentation::RcDyn, &type_);
+    let mut actually_used_type_variables: std::collections::HashSet<LilyName> =
         std::collections::HashSet::with_capacity(parameters.len());
-    still_type_variables_and_records_into(&mut actually_used_type_variables, records_used, &type_);
+    lily_type_variables_and_records_into(&mut actually_used_type_variables, records_used, &type_);
     let mut rust_parameters: syn::punctuated::Punctuated<syn::GenericParam, syn::token::Comma> =
         syn::punctuated::Punctuated::new();
-    if let Err(()) = still_parameters_to_rust_into_error_if_different_to_actual_type_parameters(
+    if let Err(()) = lily_parameters_to_rust_into_error_if_different_to_actual_type_parameters(
         errors,
         &mut rust_parameters,
         name_node.range,
@@ -10728,40 +10708,40 @@ fn type_alias_declaration_to_rust(
             ty: Box::new(type_rust),
             semi_token: syn::token::Semi(syn_span()),
         }),
-        is_copy: still_type_is_copy(true, type_aliases, choice_types, &type_),
+        is_copy: lily_type_is_copy(true, type_aliases, choice_types, &type_),
         type_: type_,
     })
 }
 /// returns false if
-fn still_parameters_to_rust_into_error_if_different_to_actual_type_parameters(
-    errors: &mut Vec<StillErrorNode>,
+fn lily_parameters_to_rust_into_error_if_different_to_actual_type_parameters(
+    errors: &mut Vec<LilyErrorNode>,
     rust_parameters: &mut syn::punctuated::Punctuated<syn::GenericParam, syn::token::Comma>,
     name_range: lsp_types::Range,
-    parameters: &[StillSyntaxNode<StillName>],
-    mut actually_used_type_variables: std::collections::HashSet<StillName>,
+    parameters: &[LilySyntaxNode<LilyName>],
+    mut actually_used_type_variables: std::collections::HashSet<LilyName>,
 ) -> Result<(), ()> {
     let mut bad_parameters: bool = false;
     for parameter_node in parameters {
         if !actually_used_type_variables.remove(parameter_node.value.as_str()) {
             bad_parameters = true;
-            errors.push(StillErrorNode {
+            errors.push(LilyErrorNode {
                 range: parameter_node.range,
                 message: Box::from("this type variable is not used. Remove it or use it"),
             });
         }
         rust_parameters.push(syn::GenericParam::Type(syn::TypeParam::from(syn_ident(
-            &still_type_variable_to_rust(&parameter_node.value),
+            &lily_type_variable_to_rust(&parameter_node.value),
         ))));
     }
     if !actually_used_type_variables.is_empty() {
         bad_parameters = true;
-        errors.push(StillErrorNode {
+        errors.push(LilyErrorNode {
             range: name_range,
             message: format!(
                 "some type variables are used but not declared, namely {}. Add {}",
                 actually_used_type_variables
                     .iter()
-                    .map(StillName::as_str)
+                    .map(LilyName::as_str)
                     .collect::<Vec<&str>>()
                     .join(", "),
                 if actually_used_type_variables.len() >= 2 {
@@ -10778,41 +10758,40 @@ fn still_parameters_to_rust_into_error_if_different_to_actual_type_parameters(
 
 struct CompiledRustChoiceTypeInfo {
     is_copy: bool,
-    variants: Vec<StillChoiceTypeVariantInfo>,
+    variants: Vec<LilyChoiceTypeVariantInfo>,
 }
 #[derive(Clone)]
-struct StillChoiceTypeVariantInfo {
-    name: StillName,
-    value: Option<StillChoiceTypeVariantValueInfo>,
+struct LilyChoiceTypeVariantInfo {
+    name: LilyName,
+    value: Option<LilyChoiceTypeVariantValueInfo>,
 }
 #[derive(Clone)]
-struct StillChoiceTypeVariantValueInfo {
-    type_: StillType,
+struct LilyChoiceTypeVariantValueInfo {
+    type_: LilyType,
     constructs_recursive_type: bool,
 }
 fn choice_type_declaration_to_rust_into<'a>(
     rust_items: &mut Vec<syn::Item>,
-    errors: &mut Vec<StillErrorNode>,
-    records_used: &mut std::collections::HashSet<Vec<StillName>>,
-    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
-    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
+    errors: &mut Vec<LilyErrorNode>,
+    records_used: &mut std::collections::HashSet<Vec<LilyName>>,
+    type_aliases: &std::collections::HashMap<LilyName, TypeAliasInfo>,
+    choice_types: &std::collections::HashMap<LilyName, ChoiceTypeInfo>,
     scc_type_declaration_names: &std::collections::HashSet<&str>,
     maybe_documentation: Option<&str>,
-    name_node: StillSyntaxNode<&StillName>,
-    parameters: &'a [StillSyntaxNode<StillName>],
-    variants: &'a [StillSyntaxChoiceTypeVariant],
+    name_node: LilySyntaxNode<&LilyName>,
+    parameters: &'a [LilySyntaxNode<LilyName>],
+    variants: &'a [LilySyntaxChoiceTypeVariant],
 ) -> Option<CompiledRustChoiceTypeInfo> {
     let mut rust_variants: syn::punctuated::Punctuated<syn::Variant, syn::token::Comma> =
         syn::punctuated::Punctuated::new();
-    let mut type_variants: Vec<StillChoiceTypeVariantInfo> =
-        Vec::with_capacity(rust_variants.len());
+    let mut type_variants: Vec<LilyChoiceTypeVariantInfo> = Vec::with_capacity(rust_variants.len());
     let mut is_copy: bool = true;
-    let mut actually_used_type_variables: std::collections::HashSet<StillName> =
+    let mut actually_used_type_variables: std::collections::HashSet<LilyName> =
         std::collections::HashSet::with_capacity(parameters.len());
     'compiling_variants: for variant in variants {
         let Some(variant_name) = &variant.name else {
             // no point in generating a variant since it's never referenced
-            errors.push(StillErrorNode {
+            errors.push(LilyErrorNode {
                 range: variant.or_key_symbol_range,
                 message: Box::from("missing variant name"),
             });
@@ -10820,61 +10799,58 @@ fn choice_type_declaration_to_rust_into<'a>(
         };
         match &variant.value {
             None => {
-                type_variants.push(StillChoiceTypeVariantInfo {
+                type_variants.push(LilyChoiceTypeVariantInfo {
                     name: variant_name.value.clone(),
                     value: None,
                 });
                 rust_variants.push(syn::Variant {
                     attrs: vec![],
-                    ident: syn_ident(&still_name_to_uppercase_rust(&variant_name.value)),
+                    ident: syn_ident(&lily_name_to_uppercase_rust(&variant_name.value)),
                     fields: syn::Fields::Unit,
                     discriminant: None,
                 });
             }
             Some(variant_value_node) => {
-                let Some(value_type) = still_syntax_type_to_type(
+                let Some(value_type) = lily_syntax_type_to_type(
                     errors,
                     type_aliases,
                     choice_types,
-                    still_syntax_node_as_ref(variant_value_node),
+                    lily_syntax_node_as_ref(variant_value_node),
                 ) else {
-                    type_variants.push(StillChoiceTypeVariantInfo {
+                    type_variants.push(LilyChoiceTypeVariantInfo {
                         name: variant_name.value.clone(),
                         value: None,
                     });
                     rust_variants.push(syn::Variant {
                         attrs: vec![],
-                        ident: syn_ident(&still_name_to_uppercase_rust(&variant_name.value)),
+                        ident: syn_ident(&lily_name_to_uppercase_rust(&variant_name.value)),
                         fields: syn::Fields::Unit,
                         discriminant: None,
                     });
                     continue 'compiling_variants;
                 };
                 let variant_value_constructs_recursive_type: bool =
-                    still_type_constructs_recursive_type_in(
-                        scc_type_declaration_names,
-                        &value_type,
-                    );
+                    lily_type_constructs_recursive_type_in(scc_type_declaration_names, &value_type);
                 is_copy = is_copy
                     && !variant_value_constructs_recursive_type
-                    && still_type_is_copy(true, type_aliases, choice_types, &value_type);
-                still_type_variables_and_records_into(
+                    && lily_type_is_copy(true, type_aliases, choice_types, &value_type);
+                lily_type_variables_and_records_into(
                     &mut actually_used_type_variables,
                     records_used,
                     &value_type,
                 );
                 let rust_variant_value: syn::Type =
-                    still_type_to_rust(FnRepresentation::RcDyn, &value_type);
-                type_variants.push(StillChoiceTypeVariantInfo {
+                    lily_type_to_rust(FnRepresentation::RcDyn, &value_type);
+                type_variants.push(LilyChoiceTypeVariantInfo {
                     name: variant_name.value.clone(),
-                    value: Some(StillChoiceTypeVariantValueInfo {
+                    value: Some(LilyChoiceTypeVariantValueInfo {
                         type_: value_type,
                         constructs_recursive_type: variant_value_constructs_recursive_type,
                     }),
                 });
                 rust_variants.push(syn::Variant {
                     attrs: vec![],
-                    ident: syn_ident(&still_name_to_uppercase_rust(&variant_name.value)),
+                    ident: syn_ident(&lily_name_to_uppercase_rust(&variant_name.value)),
                     fields: syn::Fields::Unnamed(syn::FieldsUnnamed {
                         paren_token: syn::token::Paren(syn_span()),
                         unnamed: std::iter::once(syn::Field {
@@ -10925,7 +10901,7 @@ fn choice_type_declaration_to_rust_into<'a>(
     }
     let mut rust_parameters: syn::punctuated::Punctuated<syn::GenericParam, syn::token::Comma> =
         syn::punctuated::Punctuated::new();
-    if let Err(()) = still_parameters_to_rust_into_error_if_different_to_actual_type_parameters(
+    if let Err(()) = lily_parameters_to_rust_into_error_if_different_to_actual_type_parameters(
         errors,
         &mut rust_parameters,
         name_node.range,
@@ -10934,7 +10910,7 @@ fn choice_type_declaration_to_rust_into<'a>(
     ) {
         return None;
     }
-    let rust_enum_name: String = still_name_to_uppercase_rust(name_node.value);
+    let rust_enum_name: String = lily_name_to_uppercase_rust(name_node.value);
     rust_items.push(syn::Item::Enum(syn::ItemEnum {
         attrs: maybe_documentation
             .map(syn_attribute_doc)
@@ -10960,16 +10936,16 @@ fn choice_type_declaration_to_rust_into<'a>(
         variants: type_variants,
     })
 }
-fn still_type_is_copy(
+fn lily_type_is_copy(
     variables_are_copy: bool,
-    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
-    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
-    type_: &StillType,
+    type_aliases: &std::collections::HashMap<LilyName, TypeAliasInfo>,
+    choice_types: &std::collections::HashMap<LilyName, ChoiceTypeInfo>,
+    type_: &LilyType,
 ) -> bool {
     match type_ {
-        StillType::Variable(_) => variables_are_copy,
-        StillType::Function { .. } => false,
-        StillType::ChoiceConstruct {
+        LilyType::Variable(_) => variables_are_copy,
+        LilyType::Function { .. } => false,
+        LilyType::ChoiceConstruct {
             name: name_node,
             arguments,
         } => {
@@ -10986,29 +10962,29 @@ fn still_type_is_copy(
                 }
                 Some(choice_type_info) => choice_type_info.is_copy,
             }) && arguments.iter().all(|input_type| {
-                still_type_is_copy(variables_are_copy, type_aliases, choice_types, input_type)
+                lily_type_is_copy(variables_are_copy, type_aliases, choice_types, input_type)
             })
         }
-        StillType::Record(fields) => fields.iter().all(|field| {
-            still_type_is_copy(variables_are_copy, type_aliases, choice_types, &field.value)
+        LilyType::Record(fields) => fields.iter().all(|field| {
+            lily_type_is_copy(variables_are_copy, type_aliases, choice_types, &field.value)
         }),
     }
 }
-fn still_type_constructs_recursive_type_in(
+fn lily_type_constructs_recursive_type_in(
     scc_type_declaration_names: &std::collections::HashSet<&str>,
-    type_: &StillType,
+    type_: &LilyType,
 ) -> bool {
     match type_ {
-        StillType::Variable(_) => false,
-        StillType::Function { inputs, output } => {
-            still_type_constructs_recursive_type_in(scc_type_declaration_names, output)
+        LilyType::Variable(_) => false,
+        LilyType::Function { inputs, output } => {
+            lily_type_constructs_recursive_type_in(scc_type_declaration_names, output)
                 || (inputs.iter().any(|input_type| {
-                    still_type_constructs_recursive_type_in(scc_type_declaration_names, input_type)
+                    lily_type_constructs_recursive_type_in(scc_type_declaration_names, input_type)
                 }))
         }
-        StillType::ChoiceConstruct { name, arguments } => {
+        LilyType::ChoiceConstruct { name, arguments } => {
             // skipped for now as recursive types are currently assumed to always contain a lifetime
-            // if name_node.value == still_type_vec_name {
+            // if name_node.value == lily_type_vec_name {
             //     // is already behind a reference
             //     false
             // } else
@@ -11018,31 +10994,31 @@ fn still_type_constructs_recursive_type_in(
             // skipped for now for performance
             scc_type_declaration_names.contains(name.as_str())
                 || (arguments.iter().any(|argument_type| {
-                    still_type_constructs_recursive_type_in(
+                    lily_type_constructs_recursive_type_in(
                         scc_type_declaration_names,
                         argument_type,
                     )
                 }))
         }
-        StillType::Record(fields) => fields.iter().any(|field| {
-            still_type_constructs_recursive_type_in(scc_type_declaration_names, &field.value)
+        LilyType::Record(fields) => fields.iter().any(|field| {
+            lily_type_constructs_recursive_type_in(scc_type_declaration_names, &field.value)
         }),
     }
 }
 struct CompiledVariableDeclaration {
     rust: syn::Item,
-    type_: StillType,
+    type_: LilyType,
 }
 fn variable_declaration_to_rust<'a>(
-    errors: &mut Vec<StillErrorNode>,
-    records_used: &mut std::collections::HashSet<Vec<StillName>>,
-    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
-    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
-    variable_declarations: &std::collections::HashMap<StillName, CompiledVariableDeclarationInfo>,
-    variable_declaration_info: StillSyntaxVariableDeclarationInfo<'a>,
+    errors: &mut Vec<LilyErrorNode>,
+    records_used: &mut std::collections::HashSet<Vec<LilyName>>,
+    type_aliases: &std::collections::HashMap<LilyName, TypeAliasInfo>,
+    choice_types: &std::collections::HashMap<LilyName, ChoiceTypeInfo>,
+    variable_declarations: &std::collections::HashMap<LilyName, CompiledVariableDeclarationInfo>,
+    variable_declaration_info: LilySyntaxVariableDeclarationInfo<'a>,
 ) -> Option<CompiledVariableDeclaration> {
     let Some(result_node) = variable_declaration_info.result else {
-        errors.push(StillErrorNode {
+        errors.push(LilyErrorNode {
             range: variable_declaration_info.range,
             message: Box::from(
                 "missing expression after the variable declaration name ..variable-name.. here",
@@ -11050,7 +11026,7 @@ fn variable_declaration_to_rust<'a>(
         });
         return None;
     };
-    let compiled_result: CompiledStillExpression = still_syntax_expression_to_rust(
+    let compiled_result: CompiledLilyExpression = lily_syntax_expression_to_rust(
         errors,
         records_used,
         type_aliases,
@@ -11069,33 +11045,33 @@ fn variable_declaration_to_rust<'a>(
         .map(|n| syn_attribute_doc(&n.value))
         .into_iter()
         .collect::<Vec<_>>();
-    let rust_ident: syn::Ident = syn_ident(&still_name_to_lowercase_rust(
+    let rust_ident: syn::Ident = syn_ident(&lily_name_to_lowercase_rust(
         &variable_declaration_info.name.value,
     ));
     match &type_ {
-        StillType::Function {
+        LilyType::Function {
             inputs: input_types,
             output: output_type,
         } => {
-            let mut still_input_type_parameters: std::collections::HashSet<&str> =
+            let mut lily_input_type_parameters: std::collections::HashSet<&str> =
                 std::collections::HashSet::new();
             for input_type in input_types {
-                still_type_variables_into(&mut still_input_type_parameters, input_type);
+                lily_type_variables_into(&mut lily_input_type_parameters, input_type);
             }
             {
                 let mut output_type_parameters: std::collections::HashSet<&str> =
                     std::collections::HashSet::new();
-                still_type_variables_into(&mut output_type_parameters, output_type);
+                lily_type_variables_into(&mut output_type_parameters, output_type);
                 output_type_parameters.retain(|output_type_parameter| {
-                    !still_input_type_parameters.contains(output_type_parameter)
+                    !lily_input_type_parameters.contains(output_type_parameter)
                 });
                 if !output_type_parameters.is_empty() {
                     let mut full_type_as_string: String = String::new();
-                    still_type_info_into(&mut full_type_as_string, 0, &type_);
-                    errors.push(StillErrorNode {
+                    lily_type_info_into(&mut full_type_as_string, 0, &type_);
+                    errors.push(LilyErrorNode {
                         range: variable_declaration_info.name.range,
                         message: format!(
-                            "its output type contains variables not introduced in its input types, namely {}. In still, every value has a concrete type, so no value could satisfy such a type. Here is the full type:\n{}",
+                            "its output type contains variables not introduced in its input types, namely {}. In lily, every value has a concrete type, so no value could satisfy such a type. Here is the full type:\n{}",
                             output_type_parameters.iter().copied().collect::<Vec<&str>>().join(", "),
                             &full_type_as_string
                         ).into_boxed_str()
@@ -11105,12 +11081,12 @@ fn variable_declaration_to_rust<'a>(
             }
             let rust_generics: syn::Generics = syn::Generics {
                 lt_token: Some(syn::token::Lt(syn_span())),
-                params: still_input_type_parameters
+                params: lily_input_type_parameters
                     .iter()
                     .map(|name| {
                         syn::GenericParam::Type(syn::TypeParam {
                             attrs: vec![],
-                            ident: syn_ident(&still_type_variable_to_rust(name)),
+                            ident: syn_ident(&lily_type_variable_to_rust(name)),
                             colon_token: Some(syn::token::Colon(syn_span())),
                             bounds: default_parameter_bounds().collect(),
                             eq_token: None,
@@ -11152,7 +11128,7 @@ fn variable_declaration_to_rust<'a>(
                                 inputs: rust_parameters,
                                 output: syn::ReturnType::Type(
                                     syn::token::RArrow(syn_span()),
-                                    Box::new(still_type_to_rust(
+                                    Box::new(lily_type_to_rust(
                                         FnRepresentation::RcDyn,
                                         output_type,
                                     )),
@@ -11191,7 +11167,7 @@ fn variable_declaration_to_rust<'a>(
                                         })),
                                         attrs: vec![],
                                         colon_token: syn::token::Colon(syn_span()),
-                                        ty: Box::new(still_type_to_rust(
+                                        ty: Box::new(lily_type_to_rust(
                                             FnRepresentation::Impl,
                                             input_type_node,
                                         )),
@@ -11200,7 +11176,7 @@ fn variable_declaration_to_rust<'a>(
                                 .collect(),
                             output: syn::ReturnType::Type(
                                 syn::token::RArrow(syn_span()),
-                                Box::new(still_type_to_rust(FnRepresentation::Impl, output_type)),
+                                Box::new(lily_type_to_rust(FnRepresentation::Impl, output_type)),
                             ),
                             variadic: None,
                         },
@@ -11237,14 +11213,14 @@ fn variable_declaration_to_rust<'a>(
             {
                 let mut type_parameters: std::collections::HashSet<&str> =
                     std::collections::HashSet::new();
-                still_type_variables_into(&mut type_parameters, type_not_function);
+                lily_type_variables_into(&mut type_parameters, type_not_function);
                 if !type_parameters.is_empty() {
                     let mut full_type_as_string: String = String::new();
-                    still_type_info_into(&mut full_type_as_string, 0, &type_);
-                    errors.push(StillErrorNode {
+                    lily_type_info_into(&mut full_type_as_string, 0, &type_);
+                    errors.push(LilyErrorNode {
                         range: variable_declaration_info.name.range,
                         message: format!(
-                            "its type contains variables, namely {}. In still, every value has a concrete type, so no value could satisfy such a type. Here is the full type:\n{}",
+                            "its type contains variables, namely {}. In lily, every value has a concrete type, so no value could satisfy such a type. Here is the full type:\n{}",
                             type_parameters.iter().copied().collect::<Vec<&str>>().join(", "),
                             &full_type_as_string
                         ).into_boxed_str()
@@ -11274,10 +11250,7 @@ fn variable_declaration_to_rust<'a>(
                         inputs: syn::punctuated::Punctuated::new(),
                         output: syn::ReturnType::Type(
                             syn::token::RArrow(syn_span()),
-                            Box::new(still_type_to_rust(
-                                FnRepresentation::Impl,
-                                type_not_function,
-                            )),
+                            Box::new(lily_type_to_rust(FnRepresentation::Impl, type_not_function)),
                         ),
                         variadic: None,
                     },
@@ -11300,80 +11273,79 @@ fn syn_spread_expr_block(syn_expr: syn::Expr) -> syn::Block {
 fn rust_generated_fn_parameter_name(index: usize) -> String {
     format!("parameter·{index}")
 }
-fn still_syntax_type_to_choice_type(
-    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
-    still_type_node: StillSyntaxNode<&StillSyntaxType>,
-) -> Option<(StillName, Vec<StillSyntaxNode<StillSyntaxType>>)> {
-    match still_type_node.value {
-        StillSyntaxType::WithComment {
+fn lily_syntax_type_to_choice_type(
+    type_aliases: &std::collections::HashMap<LilyName, TypeAliasInfo>,
+    lily_type_node: LilySyntaxNode<&LilySyntaxType>,
+) -> Option<(LilyName, Vec<LilySyntaxNode<LilySyntaxType>>)> {
+    match lily_type_node.value {
+        LilySyntaxType::WithComment {
             comment: _,
             type_: Some(after_comment_node),
-        } => still_syntax_type_to_choice_type(
+        } => lily_syntax_type_to_choice_type(
             type_aliases,
-            still_syntax_node_unbox(after_comment_node),
+            lily_syntax_node_unbox(after_comment_node),
         ),
-        StillSyntaxType::Parenthesized(Some(in_parens_node)) => {
-            still_syntax_type_to_choice_type(type_aliases, still_syntax_node_unbox(in_parens_node))
+        LilySyntaxType::Parenthesized(Some(in_parens_node)) => {
+            lily_syntax_type_to_choice_type(type_aliases, lily_syntax_node_unbox(in_parens_node))
         }
-        StillSyntaxType::Construct {
+        LilySyntaxType::Construct {
             name: name_node,
             arguments,
-        } => match still_syntax_type_resolve_while_type_alias(type_aliases, still_type_node) {
+        } => match lily_syntax_type_resolve_while_type_alias(type_aliases, lily_type_node) {
             None => Some((name_node.value.clone(), arguments.clone())),
             Some(resolved) => {
-                still_syntax_type_to_choice_type(type_aliases, still_syntax_node_as_ref(&resolved))
+                lily_syntax_type_to_choice_type(type_aliases, lily_syntax_node_as_ref(&resolved))
             }
         },
         _ => None,
     }
 }
-fn still_type_construct_resolve_type_alias(
+fn lily_type_construct_resolve_type_alias(
     origin_type_alias: &TypeAliasInfo,
-    argument_types: &[StillType],
-) -> Option<StillType> {
+    argument_types: &[LilyType],
+) -> Option<LilyType> {
     let Some(type_alias_type) = &origin_type_alias.type_ else {
         return None;
     };
     if origin_type_alias.parameters.is_empty() {
         return Some(type_alias_type.clone());
     }
-    let type_parameter_replacements: std::collections::HashMap<&str, &StillType> =
-        origin_type_alias
-            .parameters
-            .iter()
-            .map(|n| n.value.as_str())
-            .zip(argument_types.iter())
-            .collect::<std::collections::HashMap<_, _>>();
-    let mut peeled: StillType = type_alias_type.clone();
-    still_type_replace_variables(&type_parameter_replacements, &mut peeled);
+    let type_parameter_replacements: std::collections::HashMap<&str, &LilyType> = origin_type_alias
+        .parameters
+        .iter()
+        .map(|n| n.value.as_str())
+        .zip(argument_types.iter())
+        .collect::<std::collections::HashMap<_, _>>();
+    let mut peeled: LilyType = type_alias_type.clone();
+    lily_type_replace_variables(&type_parameter_replacements, &mut peeled);
     Some(peeled)
 }
-fn still_type_replace_variables(
-    type_parameter_replacements: &std::collections::HashMap<&str, &StillType>,
-    type_: &mut StillType,
+fn lily_type_replace_variables(
+    type_parameter_replacements: &std::collections::HashMap<&str, &LilyType>,
+    type_: &mut LilyType,
 ) {
     match type_ {
-        StillType::Variable(variable) => {
+        LilyType::Variable(variable) => {
             if let Some(&replacement_type_node) = type_parameter_replacements.get(variable.as_str())
             {
                 *type_ = replacement_type_node.clone();
             }
         }
-        StillType::ChoiceConstruct { name: _, arguments } => {
+        LilyType::ChoiceConstruct { name: _, arguments } => {
             for argument_type in arguments {
-                still_type_replace_variables(type_parameter_replacements, argument_type);
+                lily_type_replace_variables(type_parameter_replacements, argument_type);
             }
         }
-        StillType::Record(fields) => {
+        LilyType::Record(fields) => {
             for field in fields {
-                still_type_replace_variables(type_parameter_replacements, &mut field.value);
+                lily_type_replace_variables(type_parameter_replacements, &mut field.value);
             }
         }
-        StillType::Function { inputs, output } => {
+        LilyType::Function { inputs, output } => {
             for input_type in inputs {
-                still_type_replace_variables(type_parameter_replacements, input_type);
+                lily_type_replace_variables(type_parameter_replacements, input_type);
             }
-            still_type_replace_variables(type_parameter_replacements, output);
+            lily_type_replace_variables(type_parameter_replacements, output);
         }
     }
 }
@@ -11381,30 +11353,30 @@ fn still_type_replace_variables(
 struct TypeAliasInfo {
     name_range: Option<lsp_types::Range>,
     documentation: Option<Box<str>>,
-    parameters: Vec<StillSyntaxNode<StillName>>,
-    type_syntax: Option<StillSyntaxNode<StillSyntaxType>>,
-    type_: Option<StillType>,
+    parameters: Vec<LilySyntaxNode<LilyName>>,
+    type_syntax: Option<LilySyntaxNode<LilySyntaxType>>,
+    type_: Option<LilyType>,
     is_copy: bool,
 }
 #[derive(Clone)]
 struct ChoiceTypeInfo {
     name_range: Option<lsp_types::Range>,
     documentation: Option<Box<str>>,
-    parameters: Vec<StillSyntaxNode<StillName>>,
-    variants: Vec<StillSyntaxChoiceTypeVariant>,
-    type_variants: Vec<StillChoiceTypeVariantInfo>,
+    parameters: Vec<LilySyntaxNode<LilyName>>,
+    variants: Vec<LilySyntaxChoiceTypeVariant>,
+    type_variants: Vec<LilyChoiceTypeVariantInfo>,
     is_copy: bool,
 }
 
 /// Keep peeling until the type is not a type alias anymore.
 /// _Inner_ type aliases in a sub-part will not be resolved.
 /// This will also not check for aliases inside parenthesized types or after comments
-fn still_syntax_type_resolve_while_type_alias(
-    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
-    type_node: StillSyntaxNode<&StillSyntaxType>,
-) -> Option<StillSyntaxNode<StillSyntaxType>> {
+fn lily_syntax_type_resolve_while_type_alias(
+    type_aliases: &std::collections::HashMap<LilyName, TypeAliasInfo>,
+    type_node: LilySyntaxNode<&LilySyntaxType>,
+) -> Option<LilySyntaxNode<LilySyntaxType>> {
     match type_node.value {
-        StillSyntaxType::Construct {
+        LilySyntaxType::Construct {
             name: name_node,
             arguments,
         } => match type_aliases.get(&name_node.value) {
@@ -11417,22 +11389,21 @@ fn still_syntax_type_resolve_while_type_alias(
                     }
                     let type_parameter_replacements: std::collections::HashMap<
                         &str,
-                        StillSyntaxNode<&StillSyntaxType>,
+                        LilySyntaxNode<&LilySyntaxType>,
                     > = type_alias
                         .parameters
                         .iter()
                         .map(|n| n.value.as_str())
-                        .zip(arguments.iter().map(still_syntax_node_as_ref))
+                        .zip(arguments.iter().map(lily_syntax_node_as_ref))
                         .collect::<std::collections::HashMap<_, _>>();
-                    let peeled: StillSyntaxNode<StillSyntaxType> =
-                        still_syntax_type_replace_variables(
-                            &type_parameter_replacements,
-                            still_syntax_node_as_ref(type_alias_type_node),
-                        );
+                    let peeled: LilySyntaxNode<LilySyntaxType> = lily_syntax_type_replace_variables(
+                        &type_parameter_replacements,
+                        lily_syntax_node_as_ref(type_alias_type_node),
+                    );
                     Some(
-                        match still_syntax_type_resolve_while_type_alias(
+                        match lily_syntax_type_resolve_while_type_alias(
                             type_aliases,
-                            still_syntax_node_as_ref(&peeled),
+                            lily_syntax_node_as_ref(&peeled),
                         ) {
                             None => peeled,
                             Some(fully_peeled) => fully_peeled,
@@ -11444,125 +11415,122 @@ fn still_syntax_type_resolve_while_type_alias(
         _ => None,
     }
 }
-fn still_syntax_type_replace_variables(
-    type_parameter_replacements: &std::collections::HashMap<
-        &str,
-        StillSyntaxNode<&StillSyntaxType>,
-    >,
-    type_node: StillSyntaxNode<&StillSyntaxType>,
-) -> StillSyntaxNode<StillSyntaxType> {
+fn lily_syntax_type_replace_variables(
+    type_parameter_replacements: &std::collections::HashMap<&str, LilySyntaxNode<&LilySyntaxType>>,
+    type_node: LilySyntaxNode<&LilySyntaxType>,
+) -> LilySyntaxNode<LilySyntaxType> {
     match type_node.value {
-        StillSyntaxType::Variable(variable) => {
+        LilySyntaxType::Variable(variable) => {
             match type_parameter_replacements.get(variable.as_str()) {
-                None => still_syntax_node_map(type_node, StillSyntaxType::clone),
+                None => lily_syntax_node_map(type_node, LilySyntaxType::clone),
                 Some(&replacement_type_node) => {
-                    still_syntax_node_map(replacement_type_node, StillSyntaxType::clone)
+                    lily_syntax_node_map(replacement_type_node, LilySyntaxType::clone)
                 }
             }
         }
-        StillSyntaxType::Parenthesized(maybe_in_parens) => match maybe_in_parens {
-            None => still_syntax_node_map(type_node, StillSyntaxType::clone),
-            Some(in_parens_node) => StillSyntaxNode {
+        LilySyntaxType::Parenthesized(maybe_in_parens) => match maybe_in_parens {
+            None => lily_syntax_node_map(type_node, LilySyntaxType::clone),
+            Some(in_parens_node) => LilySyntaxNode {
                 range: type_node.range,
-                value: StillSyntaxType::Parenthesized(Some(still_syntax_node_box(
-                    still_syntax_type_replace_variables(
+                value: LilySyntaxType::Parenthesized(Some(lily_syntax_node_box(
+                    lily_syntax_type_replace_variables(
                         type_parameter_replacements,
-                        still_syntax_node_unbox(in_parens_node),
+                        lily_syntax_node_unbox(in_parens_node),
                     ),
                 ))),
             },
         },
-        StillSyntaxType::WithComment {
+        LilySyntaxType::WithComment {
             comment: maybe_comment,
             type_: maybe_type,
-        } => StillSyntaxNode {
+        } => LilySyntaxNode {
             range: type_node.range,
-            value: StillSyntaxType::WithComment {
+            value: LilySyntaxType::WithComment {
                 comment: maybe_comment.clone(),
                 type_: maybe_type.as_ref().map(|after_comment_node| {
-                    still_syntax_node_box(still_syntax_type_replace_variables(
+                    lily_syntax_node_box(lily_syntax_type_replace_variables(
                         type_parameter_replacements,
-                        still_syntax_node_unbox(after_comment_node),
+                        lily_syntax_node_unbox(after_comment_node),
                     ))
                 }),
             },
         },
-        StillSyntaxType::Construct {
+        LilySyntaxType::Construct {
             name: name_node,
             arguments,
-        } => StillSyntaxNode {
+        } => LilySyntaxNode {
             range: type_node.range,
-            value: StillSyntaxType::Construct {
+            value: LilySyntaxType::Construct {
                 name: name_node.clone(),
                 arguments: arguments
                     .iter()
                     .map(|argument_node| {
-                        still_syntax_type_replace_variables(
+                        lily_syntax_type_replace_variables(
                             type_parameter_replacements,
-                            still_syntax_node_as_ref(argument_node),
+                            lily_syntax_node_as_ref(argument_node),
                         )
                     })
                     .collect(),
             },
         },
-        StillSyntaxType::Record(fields) => StillSyntaxNode {
+        LilySyntaxType::Record(fields) => LilySyntaxNode {
             range: type_node.range,
-            value: StillSyntaxType::Record(
+            value: LilySyntaxType::Record(
                 fields
                     .iter()
-                    .map(|field| StillSyntaxTypeField {
+                    .map(|field| LilySyntaxTypeField {
                         name: field.name.clone(),
                         value: field.value.as_ref().map(|field_value_node| {
-                            still_syntax_type_replace_variables(
+                            lily_syntax_type_replace_variables(
                                 type_parameter_replacements,
-                                still_syntax_node_as_ref(field_value_node),
+                                lily_syntax_node_as_ref(field_value_node),
                             )
                         }),
                     })
                     .collect(),
             ),
         },
-        StillSyntaxType::Function {
+        LilySyntaxType::Function {
             inputs,
             arrow_key_symbol_range: maybe_arrow_key_symbol_range,
             output: maybe_output,
-        } => StillSyntaxNode {
+        } => LilySyntaxNode {
             range: type_node.range,
-            value: StillSyntaxType::Function {
+            value: LilySyntaxType::Function {
                 inputs: inputs
                     .iter()
                     .map(|argument_node| {
-                        still_syntax_type_replace_variables(
+                        lily_syntax_type_replace_variables(
                             type_parameter_replacements,
-                            still_syntax_node_as_ref(argument_node),
+                            lily_syntax_node_as_ref(argument_node),
                         )
                     })
                     .collect(),
                 arrow_key_symbol_range: *maybe_arrow_key_symbol_range,
                 output: maybe_output.as_ref().map(|after_comment_node| {
-                    still_syntax_node_box(still_syntax_type_replace_variables(
+                    lily_syntax_node_box(lily_syntax_type_replace_variables(
                         type_parameter_replacements,
-                        still_syntax_node_unbox(after_comment_node),
+                        lily_syntax_node_unbox(after_comment_node),
                     ))
                 }),
             },
         },
     }
 }
-fn still_type_collect_variables_that_are_concrete_into<'a>(
-    type_parameter_replacements: &mut std::collections::HashMap<&'a str, &'a StillType>,
-    type_with_variables: &'a StillType,
-    concrete_type: &'a StillType,
+fn lily_type_collect_variables_that_are_concrete_into<'a>(
+    type_parameter_replacements: &mut std::collections::HashMap<&'a str, &'a LilyType>,
+    type_with_variables: &'a LilyType,
+    concrete_type: &'a LilyType,
 ) {
     match type_with_variables {
-        StillType::Variable(variable_name) => {
+        LilyType::Variable(variable_name) => {
             type_parameter_replacements.insert(variable_name.as_str(), concrete_type);
         }
-        StillType::Function {
+        LilyType::Function {
             inputs,
             output: output_type,
         } => {
-            if let StillType::Function {
+            if let LilyType::Function {
                 inputs: concrete_function_inputs,
                 output: concrete_function_output_type,
             } = concrete_type
@@ -11570,21 +11538,21 @@ fn still_type_collect_variables_that_are_concrete_into<'a>(
                 for (input_type, concrete_input_type) in
                     inputs.iter().zip(concrete_function_inputs.iter())
                 {
-                    still_type_collect_variables_that_are_concrete_into(
+                    lily_type_collect_variables_that_are_concrete_into(
                         type_parameter_replacements,
                         input_type,
                         concrete_input_type,
                     );
                 }
-                still_type_collect_variables_that_are_concrete_into(
+                lily_type_collect_variables_that_are_concrete_into(
                     type_parameter_replacements,
                     output_type,
                     concrete_function_output_type,
                 );
             }
         }
-        StillType::ChoiceConstruct { name, arguments } => {
-            if let StillType::ChoiceConstruct {
+        LilyType::ChoiceConstruct { name, arguments } => {
+            if let LilyType::ChoiceConstruct {
                 name: concrete_choice_type_construct_name,
                 arguments: concrete_choice_type_construct_arguments,
             } = concrete_type
@@ -11594,7 +11562,7 @@ fn still_type_collect_variables_that_are_concrete_into<'a>(
                     .iter()
                     .zip(concrete_choice_type_construct_arguments.iter())
                 {
-                    still_type_collect_variables_that_are_concrete_into(
+                    lily_type_collect_variables_that_are_concrete_into(
                         type_parameter_replacements,
                         argument_type,
                         concrete_argument_type,
@@ -11602,14 +11570,14 @@ fn still_type_collect_variables_that_are_concrete_into<'a>(
                 }
             }
         }
-        StillType::Record(fields) => {
-            if let StillType::Record(concrete_fields) = concrete_type {
+        LilyType::Record(fields) => {
+            if let LilyType::Record(concrete_fields) = concrete_type {
                 for field in fields {
                     if let Some(matching_concrete_field) = concrete_fields
                         .iter()
                         .find(|concrete_field| concrete_field.name == field.name)
                     {
-                        still_type_collect_variables_that_are_concrete_into(
+                        lily_type_collect_variables_that_are_concrete_into(
                             type_parameter_replacements,
                             &field.value,
                             &matching_concrete_field.value,
@@ -11623,116 +11591,116 @@ fn still_type_collect_variables_that_are_concrete_into<'a>(
 
 /// Fully validated type
 #[derive(Clone, Debug)]
-enum StillTypeDiff {
-    Variable(StillName),
+enum LilyTypeDiff {
+    Variable(LilyName),
     Conflict {
-        expected: StillType,
-        actual: StillType,
+        expected: LilyType,
+        actual: LilyType,
     },
     Function {
-        inputs: Vec<StillTypeDiff>,
-        output: Box<StillTypeDiff>,
+        inputs: Vec<LilyTypeDiff>,
+        output: Box<LilyTypeDiff>,
     },
     ChoiceConstruct {
-        name: StillName,
-        arguments: Vec<StillTypeDiff>,
+        name: LilyName,
+        arguments: Vec<LilyTypeDiff>,
     },
-    Record(Vec<StillTypeDiffField>),
+    Record(Vec<LilyTypeDiffField>),
 }
 #[derive(Clone, Debug)]
-struct StillTypeDiffField {
-    name: StillName,
-    value: StillTypeDiff,
+struct LilyTypeDiffField {
+    name: LilyName,
+    value: LilyTypeDiff,
 }
-fn still_type_diff_error_message(type_diff: &StillTypeDiff) -> String {
+fn lily_type_diff_error_message(type_diff: &LilyTypeDiff) -> String {
     let mut builder: String = String::from("type mismatch:\n");
-    still_type_diff_into(&mut builder, 0, type_diff);
+    lily_type_diff_into(&mut builder, 0, type_diff);
     builder
 }
-fn still_type_diff_into(so_far: &mut String, indent: usize, type_diff: &StillTypeDiff) {
+fn lily_type_diff_into(so_far: &mut String, indent: usize, type_diff: &LilyTypeDiff) {
     match type_diff {
-        StillTypeDiff::Conflict { expected, actual } => {
+        LilyTypeDiff::Conflict { expected, actual } => {
             so_far.push_str("expected:");
             space_or_linebreak_indented_into(
                 so_far,
-                still_type_info_line_span(expected),
+                lily_type_info_line_span(expected),
                 next_indent(indent),
             );
-            still_type_info_into(so_far, next_indent(indent), expected);
+            lily_type_info_into(so_far, next_indent(indent), expected);
             linebreak_indented_into(so_far, indent);
             so_far.push_str("actual:");
             space_or_linebreak_indented_into(
                 so_far,
-                still_type_info_line_span(actual),
+                lily_type_info_line_span(actual),
                 next_indent(indent),
             );
-            still_type_info_into(so_far, next_indent(indent), actual);
+            lily_type_info_into(so_far, next_indent(indent), actual);
         }
-        StillTypeDiff::Variable(name) => {
+        LilyTypeDiff::Variable(name) => {
             so_far.push_str(name);
         }
-        StillTypeDiff::Function { inputs, output } => {
+        LilyTypeDiff::Function { inputs, output } => {
             so_far.push('\\');
-            let line_span: LineSpan = still_type_diff_line_span(type_diff);
+            let line_span: LineSpan = lily_type_diff_line_span(type_diff);
             if line_span == LineSpan::Multiple {
                 so_far.push(' ');
             }
             if let Some((input0, input1_up)) = inputs.split_first() {
-                still_type_diff_into(so_far, indent + 2, input0);
+                lily_type_diff_into(so_far, indent + 2, input0);
                 for input in input1_up {
                     if line_span == LineSpan::Multiple {
                         linebreak_indented_into(so_far, indent);
                     }
                     so_far.push_str(", ");
-                    still_type_diff_into(so_far, indent + 2, input);
+                    lily_type_diff_into(so_far, indent + 2, input);
                 }
             }
             space_or_linebreak_indented_into(so_far, line_span, indent);
             so_far.push('>');
             space_or_linebreak_indented_into(so_far, line_span, next_indent(indent));
-            still_type_diff_into(so_far, next_indent(indent), output);
+            lily_type_diff_into(so_far, next_indent(indent), output);
         }
-        StillTypeDiff::ChoiceConstruct { name, arguments } => {
+        LilyTypeDiff::ChoiceConstruct { name, arguments } => {
             so_far.push_str(name);
-            let line_span: LineSpan = still_type_diff_line_span(type_diff);
+            let line_span: LineSpan = lily_type_diff_line_span(type_diff);
             for argument in arguments {
                 space_or_linebreak_indented_into(so_far, line_span, next_indent(indent));
                 let should_parenthesize_argument: bool = match argument {
-                    StillTypeDiff::Variable(_) => false,
-                    StillTypeDiff::Conflict { .. } => true,
-                    StillTypeDiff::Function { .. } => true,
-                    StillTypeDiff::ChoiceConstruct {
+                    LilyTypeDiff::Variable(_) => false,
+                    LilyTypeDiff::Conflict { .. } => true,
+                    LilyTypeDiff::Function { .. } => true,
+                    LilyTypeDiff::ChoiceConstruct {
                         name: _,
                         arguments: argument_arguments,
                     } => !argument_arguments.is_empty(),
-                    StillTypeDiff::Record(_) => false,
+                    LilyTypeDiff::Record(_) => false,
                 };
                 if should_parenthesize_argument {
                     so_far.push('(');
-                    still_type_diff_into(so_far, next_indent(indent) + 1, argument);
-                    if still_type_diff_line_span(argument) == LineSpan::Multiple {
+                    lily_type_diff_into(so_far, next_indent(indent) + 1, argument);
+                    if lily_type_diff_line_span(argument) == LineSpan::Multiple {
                         linebreak_indented_into(so_far, next_indent(indent));
                     }
                     so_far.push(')');
                 } else {
-                    still_type_diff_into(so_far, next_indent(indent), argument);
+                    lily_type_diff_into(so_far, next_indent(indent), argument);
                 }
             }
         }
-        StillTypeDiff::Record(fields) => match fields.as_slice() {
+        LilyTypeDiff::Record(fields) => match fields.as_slice() {
             [] => {
                 so_far.push_str("{}");
             }
             [field0, field1_up @ ..] => {
                 so_far.push_str("{ ");
-                let line_span: LineSpan = still_type_diff_line_span(type_diff);
-                still_type_diff_field_into(so_far, indent, field0);
+                let line_span: LineSpan = lily_type_diff_line_span(type_diff);
+                lily_type_diff_field_into(so_far, indent, field0);
                 for field in field1_up {
                     if line_span == LineSpan::Multiple {
                         linebreak_indented_into(so_far, indent);
                     }
                     so_far.push_str(", ");
-                    still_type_diff_field_into(so_far, indent, field);
+                    lily_type_diff_field_into(so_far, indent, field);
                 }
                 space_or_linebreak_indented_into(so_far, line_span, indent);
                 so_far.push('}');
@@ -11740,117 +11708,117 @@ fn still_type_diff_into(so_far: &mut String, indent: usize, type_diff: &StillTyp
         },
     }
 }
-fn still_type_diff_field_into(
+fn lily_type_diff_field_into(
     so_far: &mut String,
     indent: usize,
-    type_diff_field: &StillTypeDiffField,
+    type_diff_field: &LilyTypeDiffField,
 ) {
     so_far.push_str(&type_diff_field.name);
     space_or_linebreak_indented_into(
         so_far,
-        still_type_diff_line_span(&type_diff_field.value),
+        lily_type_diff_line_span(&type_diff_field.value),
         next_indent(indent),
     );
-    still_type_diff_into(so_far, next_indent(indent), &type_diff_field.value);
+    lily_type_diff_into(so_far, next_indent(indent), &type_diff_field.value);
 }
 const type_info_line_length_estimate_maximum: usize = 56;
-fn still_type_diff_line_span(type_diff: &StillTypeDiff) -> LineSpan {
-    if still_type_diff_length_estimate(type_diff) <= type_info_line_length_estimate_maximum {
+fn lily_type_diff_line_span(type_diff: &LilyTypeDiff) -> LineSpan {
+    if lily_type_diff_length_estimate(type_diff) <= type_info_line_length_estimate_maximum {
         LineSpan::Single
     } else {
         LineSpan::Multiple
     }
 }
-fn still_type_diff_length_estimate(type_diff: &StillTypeDiff) -> usize {
+fn lily_type_diff_length_estimate(type_diff: &LilyTypeDiff) -> usize {
     match type_diff {
-        StillTypeDiff::Conflict { .. } => type_info_line_length_estimate_maximum + 1,
-        StillTypeDiff::Variable(variable_name) => variable_name.len(),
-        StillTypeDiff::Function { inputs, output } => {
-            still_type_diff_length_estimate(output)
+        LilyTypeDiff::Conflict { .. } => type_info_line_length_estimate_maximum + 1,
+        LilyTypeDiff::Variable(variable_name) => variable_name.len(),
+        LilyTypeDiff::Function { inputs, output } => {
+            lily_type_diff_length_estimate(output)
                 + inputs
                     .iter()
-                    .map(still_type_diff_length_estimate)
+                    .map(lily_type_diff_length_estimate)
                     .sum::<usize>()
         }
-        StillTypeDiff::ChoiceConstruct { name, arguments } => {
+        LilyTypeDiff::ChoiceConstruct { name, arguments } => {
             name.len()
                 + arguments
                     .iter()
-                    .map(still_type_diff_length_estimate)
+                    .map(lily_type_diff_length_estimate)
                     .sum::<usize>()
         }
-        StillTypeDiff::Record(fields) => fields
+        LilyTypeDiff::Record(fields) => fields
             .iter()
-            .map(|field| field.name.len() + still_type_diff_length_estimate(&field.value))
+            .map(|field| field.name.len() + lily_type_diff_length_estimate(&field.value))
             .sum(),
     }
 }
-fn still_type_info_into(so_far: &mut String, indent: usize, type_: &StillType) {
+fn lily_type_info_into(so_far: &mut String, indent: usize, type_: &LilyType) {
     match type_ {
-        StillType::Variable(name) => {
+        LilyType::Variable(name) => {
             so_far.push_str(name);
         }
-        StillType::Function { inputs, output } => {
+        LilyType::Function { inputs, output } => {
             so_far.push('\\');
-            let line_span: LineSpan = still_type_info_line_span(type_);
+            let line_span: LineSpan = lily_type_info_line_span(type_);
             if line_span == LineSpan::Multiple {
                 so_far.push(' ');
             }
             if let Some((input0, input1_up)) = inputs.split_first() {
-                still_type_info_into(so_far, indent + 2, input0);
+                lily_type_info_into(so_far, indent + 2, input0);
                 for input in input1_up {
                     if line_span == LineSpan::Multiple {
                         linebreak_indented_into(so_far, indent);
                     }
                     so_far.push_str(", ");
-                    still_type_info_into(so_far, indent + 2, input);
+                    lily_type_info_into(so_far, indent + 2, input);
                 }
             }
             space_or_linebreak_indented_into(so_far, line_span, indent);
             so_far.push('>');
             space_or_linebreak_indented_into(so_far, line_span, next_indent(indent));
-            still_type_info_into(so_far, next_indent(indent), output);
+            lily_type_info_into(so_far, next_indent(indent), output);
         }
-        StillType::ChoiceConstruct { name, arguments } => {
+        LilyType::ChoiceConstruct { name, arguments } => {
             so_far.push_str(name);
-            let line_span: LineSpan = still_type_info_line_span(type_);
+            let line_span: LineSpan = lily_type_info_line_span(type_);
             for argument in arguments {
                 space_or_linebreak_indented_into(so_far, line_span, next_indent(indent));
                 let should_parenthesize_argument: bool = match argument {
-                    StillType::Variable(_) => false,
-                    StillType::Record(_) => false,
-                    StillType::Function { .. } => true,
-                    StillType::ChoiceConstruct {
+                    LilyType::Variable(_) => false,
+                    LilyType::Record(_) => false,
+                    LilyType::Function { .. } => true,
+                    LilyType::ChoiceConstruct {
                         name: _,
                         arguments: argument_arguments,
                     } => !argument_arguments.is_empty(),
                 };
                 if should_parenthesize_argument {
                     so_far.push('(');
-                    still_type_info_into(so_far, next_indent(indent) + 1, argument);
-                    if still_type_info_line_span(argument) == LineSpan::Multiple {
+                    lily_type_info_into(so_far, next_indent(indent) + 1, argument);
+                    if lily_type_info_line_span(argument) == LineSpan::Multiple {
                         linebreak_indented_into(so_far, next_indent(indent));
                     }
                     so_far.push(')');
                 } else {
-                    still_type_info_into(so_far, next_indent(indent), argument);
+                    lily_type_info_into(so_far, next_indent(indent), argument);
                 }
             }
         }
-        StillType::Record(fields) => match fields.as_slice() {
+        LilyType::Record(fields) => match fields.as_slice() {
             [] => {
                 so_far.push_str("{}");
             }
             [field0, field1_up @ ..] => {
                 so_far.push_str("{ ");
-                let line_span: LineSpan = still_type_info_line_span(type_);
-                still_type_field_into(so_far, indent, field0);
+                let line_span: LineSpan = lily_type_info_line_span(type_);
+                lily_type_field_into(so_far, indent, field0);
                 for field in field1_up {
                     if line_span == LineSpan::Multiple {
                         linebreak_indented_into(so_far, indent);
                     }
                     so_far.push_str(", ");
-                    still_type_field_into(so_far, indent, field);
+                    lily_type_field_into(so_far, indent, field);
                 }
                 space_or_linebreak_indented_into(so_far, line_span, indent);
                 so_far.push('}');
@@ -11858,107 +11826,106 @@ fn still_type_info_into(so_far: &mut String, indent: usize, type_: &StillType) {
         },
     }
 }
-fn still_type_field_into(so_far: &mut String, indent: usize, type_field: &StillTypeField) {
+fn lily_type_field_into(so_far: &mut String, indent: usize, type_field: &LilyTypeField) {
     so_far.push_str(&type_field.name);
     space_or_linebreak_indented_into(
         so_far,
-        still_type_info_line_span(&type_field.value),
+        lily_type_info_line_span(&type_field.value),
         next_indent(indent),
     );
-    still_type_info_into(so_far, next_indent(indent), &type_field.value);
+    lily_type_info_into(so_far, next_indent(indent), &type_field.value);
 }
-fn still_type_info_line_span(type_: &StillType) -> LineSpan {
-    if still_type_length_estimate(type_) <= type_info_line_length_estimate_maximum {
+fn lily_type_info_line_span(type_: &LilyType) -> LineSpan {
+    if lily_type_length_estimate(type_) <= type_info_line_length_estimate_maximum {
         LineSpan::Single
     } else {
         LineSpan::Multiple
     }
 }
-fn still_type_length_estimate(type_: &StillType) -> usize {
+fn lily_type_length_estimate(type_: &LilyType) -> usize {
     match type_ {
-        StillType::Variable(variable_name) => variable_name.len(),
-        StillType::Function { inputs, output } => {
-            still_type_length_estimate(output)
-                + inputs.iter().map(still_type_length_estimate).sum::<usize>()
+        LilyType::Variable(variable_name) => variable_name.len(),
+        LilyType::Function { inputs, output } => {
+            lily_type_length_estimate(output)
+                + inputs.iter().map(lily_type_length_estimate).sum::<usize>()
         }
-        StillType::ChoiceConstruct { name, arguments } => {
+        LilyType::ChoiceConstruct { name, arguments } => {
             name.len()
                 + arguments
                     .iter()
-                    .map(still_type_length_estimate)
+                    .map(lily_type_length_estimate)
                     .sum::<usize>()
         }
-        StillType::Record(fields) => fields
+        LilyType::Record(fields) => fields
             .iter()
-            .map(|field| field.name.len() + still_type_length_estimate(&field.value))
+            .map(|field| field.name.len() + lily_type_length_estimate(&field.value))
             .sum(),
     }
 }
 
 /// None means the types are equal
-fn still_type_diff(expected_type: &StillType, actual_type: &StillType) -> Option<StillTypeDiff> {
+fn lily_type_diff(expected_type: &LilyType, actual_type: &LilyType) -> Option<LilyTypeDiff> {
     match expected_type {
-        StillType::Variable(expected_variable) => {
-            if let StillType::Variable(actual_variable) = actual_type
+        LilyType::Variable(expected_variable) => {
+            if let LilyType::Variable(actual_variable) = actual_type
                 && expected_variable == actual_variable
             {
                 None
             } else {
-                Some(StillTypeDiff::Conflict {
+                Some(LilyTypeDiff::Conflict {
                     expected: expected_type.clone(),
                     actual: actual_type.clone(),
                 })
             }
         }
-        StillType::Function {
+        LilyType::Function {
             inputs: expected_inputs,
             output: expected_output,
         } => {
-            if let StillType::Function {
+            if let LilyType::Function {
                 inputs: actual_inputs,
                 output: actual_output,
             } = actual_type
                 && expected_inputs.len() == actual_inputs.len()
             {
-                let maybe_output_diff: Option<StillTypeDiff> =
-                    still_type_diff(expected_output, actual_output);
+                let maybe_output_diff: Option<LilyTypeDiff> =
+                    lily_type_diff(expected_output, actual_output);
                 if maybe_output_diff.is_none()
                     && expected_inputs.iter().zip(actual_inputs.iter()).all(
                         |(expected_input, actual_input)| {
-                            still_type_diff(expected_input, actual_input).is_none()
+                            lily_type_diff(expected_input, actual_input).is_none()
                         },
                     )
                 {
                     return None;
                 }
-                Some(StillTypeDiff::Function {
+                Some(LilyTypeDiff::Function {
                     inputs: expected_inputs
                         .iter()
                         .zip(actual_inputs.iter())
                         .map(|(expected_input, actual_input)| {
-                            still_type_diff(expected_input, actual_input).unwrap_or_else(|| {
-                                still_type_to_diff_without_conflict(expected_input)
+                            lily_type_diff(expected_input, actual_input).unwrap_or_else(|| {
+                                lily_type_to_diff_without_conflict(expected_input)
                             })
                         })
                         .collect(),
                     output: Box::new(
-                        maybe_output_diff.unwrap_or_else(|| {
-                            still_type_to_diff_without_conflict(expected_output)
-                        }),
+                        maybe_output_diff
+                            .unwrap_or_else(|| lily_type_to_diff_without_conflict(expected_output)),
                     ),
                 })
             } else {
-                Some(StillTypeDiff::Conflict {
+                Some(LilyTypeDiff::Conflict {
                     expected: expected_type.clone(),
                     actual: actual_type.clone(),
                 })
             }
         }
-        StillType::ChoiceConstruct {
+        LilyType::ChoiceConstruct {
             name: expected_name,
             arguments: expected_arguments,
         } => {
-            if let StillType::ChoiceConstruct {
+            if let LilyType::ChoiceConstruct {
                 name: actual_choice_type_construct_name,
                 arguments: actual_choice_type_construct_arguments,
             } = actual_type
@@ -11968,32 +11935,32 @@ fn still_type_diff(expected_type: &StillType, actual_type: &StillType) -> Option
                     .iter()
                     .zip(actual_choice_type_construct_arguments.iter())
                     .all(|(expected_argument, actual_argument)| {
-                        still_type_diff(expected_argument, actual_argument).is_none()
+                        lily_type_diff(expected_argument, actual_argument).is_none()
                     })
                 {
                     return None;
                 }
-                Some(StillTypeDiff::ChoiceConstruct {
+                Some(LilyTypeDiff::ChoiceConstruct {
                     name: expected_name.clone(),
                     arguments: expected_arguments
                         .iter()
                         .zip(actual_choice_type_construct_arguments.iter())
                         .map(|(expected_argument, actual_argument)| {
-                            still_type_diff(expected_argument, actual_argument).unwrap_or_else(
-                                || still_type_to_diff_without_conflict(expected_argument),
+                            lily_type_diff(expected_argument, actual_argument).unwrap_or_else(
+                                || lily_type_to_diff_without_conflict(expected_argument),
                             )
                         })
                         .collect(),
                 })
             } else {
-                Some(StillTypeDiff::Conflict {
+                Some(LilyTypeDiff::Conflict {
                     expected: expected_type.clone(),
                     actual: actual_type.clone(),
                 })
             }
         }
-        StillType::Record(expected_fields) => {
-            if let StillType::Record(actual_fields) = actual_type
+        LilyType::Record(expected_fields) => {
+            if let LilyType::Record(actual_fields) = actual_type
                 && expected_fields.len() == actual_fields.len()
                 && expected_fields.iter().all(|expected_field| {
                     actual_fields
@@ -12010,12 +11977,12 @@ fn still_type_diff(expected_type: &StillType, actual_type: &StillType) -> Option
                             .map(|actual_field| (&expected_field.value, &actual_field.value))
                     })
                     .all(|(expected_field_value, actual_field_value)| {
-                        still_type_diff(expected_field_value, actual_field_value).is_none()
+                        lily_type_diff(expected_field_value, actual_field_value).is_none()
                     })
                 {
                     return None;
                 }
-                Some(StillTypeDiff::Record(
+                Some(LilyTypeDiff::Record(
                     expected_fields
                         .iter()
                         .filter_map(|expected_field| {
@@ -12024,17 +11991,17 @@ fn still_type_diff(expected_type: &StillType, actual_type: &StillType) -> Option
                                 .find(|actual_field| actual_field.name == expected_field.name)
                                 .map(|actual_field| (expected_field, &actual_field.value))
                         })
-                        .map(|(expected_field, actual_field_value)| StillTypeDiffField {
+                        .map(|(expected_field, actual_field_value)| LilyTypeDiffField {
                             name: expected_field.name.clone(),
-                            value: still_type_diff(&expected_field.value, actual_field_value)
+                            value: lily_type_diff(&expected_field.value, actual_field_value)
                                 .unwrap_or_else(|| {
-                                    still_type_to_diff_without_conflict(&expected_field.value)
+                                    lily_type_to_diff_without_conflict(&expected_field.value)
                                 }),
                         })
                         .collect(),
                 ))
             } else {
-                Some(StillTypeDiff::Conflict {
+                Some(LilyTypeDiff::Conflict {
                     expected: expected_type.clone(),
                     actual: actual_type.clone(),
                 })
@@ -12042,29 +12009,29 @@ fn still_type_diff(expected_type: &StillType, actual_type: &StillType) -> Option
         }
     }
 }
-fn still_type_to_diff_without_conflict(type_: &StillType) -> StillTypeDiff {
+fn lily_type_to_diff_without_conflict(type_: &LilyType) -> LilyTypeDiff {
     match type_ {
-        StillType::Variable(name) => StillTypeDiff::Variable(name.clone()),
-        StillType::Function { inputs, output } => StillTypeDiff::Function {
+        LilyType::Variable(name) => LilyTypeDiff::Variable(name.clone()),
+        LilyType::Function { inputs, output } => LilyTypeDiff::Function {
             inputs: inputs
                 .iter()
-                .map(still_type_to_diff_without_conflict)
+                .map(lily_type_to_diff_without_conflict)
                 .collect(),
-            output: Box::new(still_type_to_diff_without_conflict(output)),
+            output: Box::new(lily_type_to_diff_without_conflict(output)),
         },
-        StillType::ChoiceConstruct { name, arguments } => StillTypeDiff::ChoiceConstruct {
+        LilyType::ChoiceConstruct { name, arguments } => LilyTypeDiff::ChoiceConstruct {
             name: name.clone(),
             arguments: arguments
                 .iter()
-                .map(still_type_to_diff_without_conflict)
+                .map(lily_type_to_diff_without_conflict)
                 .collect(),
         },
-        StillType::Record(fields) => StillTypeDiff::Record(
+        LilyType::Record(fields) => LilyTypeDiff::Record(
             fields
                 .iter()
-                .map(|field| StillTypeDiffField {
+                .map(|field| LilyTypeDiffField {
                     name: field.name.clone(),
-                    value: still_type_to_diff_without_conflict(&field.value),
+                    value: lily_type_to_diff_without_conflict(&field.value),
                 })
                 .collect(),
         ),
@@ -12076,11 +12043,11 @@ enum FnRepresentation {
     RcDyn,
     Impl,
 }
-fn still_type_to_rust(fn_representation: FnRepresentation, type_: &StillType) -> syn::Type {
+fn lily_type_to_rust(fn_representation: FnRepresentation, type_: &LilyType) -> syn::Type {
     match type_ {
-        StillType::Variable(variable) => syn_type_variable(&still_type_variable_to_rust(variable)),
-        StillType::Function { inputs, output } => {
-            let output_rust_type: syn::Type = still_type_to_rust(FnRepresentation::RcDyn, output);
+        LilyType::Variable(variable) => syn_type_variable(&lily_type_variable_to_rust(variable)),
+        LilyType::Function { inputs, output } => {
+            let output_rust_type: syn::Type = lily_type_to_rust(FnRepresentation::RcDyn, output);
             let fn_trait_bound: syn::TypeParamBound = syn::TypeParamBound::Trait(syn::TraitBound {
                 paren_token: None,
                 modifier: syn::TraitBoundModifier::None,
@@ -12093,7 +12060,7 @@ fn still_type_to_rust(fn_representation: FnRepresentation, type_: &StillType) ->
                             inputs: inputs
                                 .iter()
                                 .map(|input_type| {
-                                    still_type_to_rust(FnRepresentation::RcDyn, input_type)
+                                    lily_type_to_rust(FnRepresentation::RcDyn, input_type)
                                 })
                                 .collect(),
                             output: syn::ReturnType::Type(
@@ -12144,12 +12111,12 @@ fn still_type_to_rust(fn_representation: FnRepresentation, type_: &StillType) ->
                 }),
             }
         }
-        StillType::ChoiceConstruct { name, arguments } => syn::Type::Path(syn::TypePath {
+        LilyType::ChoiceConstruct { name, arguments } => syn::Type::Path(syn::TypePath {
             qself: None,
             path: syn::Path {
                 leading_colon: None,
                 segments: std::iter::once(syn::PathSegment {
-                    ident: syn_ident(&still_name_to_uppercase_rust(name)),
+                    ident: syn_ident(&lily_name_to_uppercase_rust(name)),
                     arguments: syn::PathArguments::AngleBracketed(
                         syn::AngleBracketedGenericArguments {
                             colon2_token: None,
@@ -12157,7 +12124,7 @@ fn still_type_to_rust(fn_representation: FnRepresentation, type_: &StillType) ->
                             args: arguments
                                 .iter()
                                 .map(|argument_type| {
-                                    syn::GenericArgument::Type(still_type_to_rust(
+                                    syn::GenericArgument::Type(lily_type_to_rust(
                                         fn_representation,
                                         argument_type,
                                     ))
@@ -12170,15 +12137,15 @@ fn still_type_to_rust(fn_representation: FnRepresentation, type_: &StillType) ->
                 .collect(),
             },
         }),
-        StillType::Record(fields) => {
-            let mut fields_sorted: Vec<&StillTypeField> = fields.iter().collect();
+        LilyType::Record(fields) => {
+            let mut fields_sorted: Vec<&LilyTypeField> = fields.iter().collect();
             fields_sorted.sort_unstable_by_key(|a| &a.name);
             syn::Type::Path(syn::TypePath {
                 qself: None,
                 path: syn::Path {
                     leading_colon: None,
                     segments: std::iter::once(syn::PathSegment {
-                        ident: syn_ident(&still_field_names_to_rust_record_struct_name(
+                        ident: syn_ident(&lily_field_names_to_rust_record_struct_name(
                             fields_sorted.iter().map(|field| &field.name),
                         )),
                         arguments: syn::PathArguments::AngleBracketed(
@@ -12189,7 +12156,7 @@ fn still_type_to_rust(fn_representation: FnRepresentation, type_: &StillType) ->
                                 args: fields_sorted
                                     .into_iter()
                                     .map(|field| {
-                                        syn::GenericArgument::Type(still_type_to_rust(
+                                        syn::GenericArgument::Type(lily_type_to_rust(
                                             fn_representation,
                                             &field.value,
                                         ))
@@ -12204,87 +12171,87 @@ fn still_type_to_rust(fn_representation: FnRepresentation, type_: &StillType) ->
         }
     }
 }
-fn still_type_variables_into<'a>(
+fn lily_type_variables_into<'a>(
     variables: &mut std::collections::HashSet<&'a str>,
-    type_: &'a StillType,
+    type_: &'a LilyType,
 ) {
     match type_ {
-        StillType::Variable(variable) => {
+        LilyType::Variable(variable) => {
             variables.insert(variable);
         }
-        StillType::Function { inputs, output } => {
+        LilyType::Function { inputs, output } => {
             for input_type in inputs {
-                still_type_variables_into(variables, input_type);
+                lily_type_variables_into(variables, input_type);
             }
-            still_type_variables_into(variables, output);
+            lily_type_variables_into(variables, output);
         }
-        StillType::ChoiceConstruct { name: _, arguments } => {
+        LilyType::ChoiceConstruct { name: _, arguments } => {
             for argument_type in arguments {
-                still_type_variables_into(variables, argument_type);
+                lily_type_variables_into(variables, argument_type);
             }
         }
-        StillType::Record(fields) => {
+        LilyType::Record(fields) => {
             for field in fields {
-                still_type_variables_into(variables, &field.value);
+                lily_type_variables_into(variables, &field.value);
             }
         }
     }
 }
-fn still_type_variables_and_records_into(
-    type_variables: &mut std::collections::HashSet<StillName>,
-    records_used: &mut std::collections::HashSet<Vec<StillName>>,
-    type_: &StillType,
+fn lily_type_variables_and_records_into(
+    type_variables: &mut std::collections::HashSet<LilyName>,
+    records_used: &mut std::collections::HashSet<Vec<LilyName>>,
+    type_: &LilyType,
 ) {
     match type_ {
-        StillType::Variable(name) => {
+        LilyType::Variable(name) => {
             type_variables.insert(name.clone());
         }
-        StillType::Function { inputs, output } => {
+        LilyType::Function { inputs, output } => {
             for input in inputs {
-                still_type_variables_and_records_into(type_variables, records_used, input);
+                lily_type_variables_and_records_into(type_variables, records_used, input);
             }
-            still_type_variables_and_records_into(type_variables, records_used, output);
+            lily_type_variables_and_records_into(type_variables, records_used, output);
         }
-        StillType::ChoiceConstruct { name: _, arguments } => {
+        LilyType::ChoiceConstruct { name: _, arguments } => {
             for argument in arguments {
-                still_type_variables_and_records_into(type_variables, records_used, argument);
+                lily_type_variables_and_records_into(type_variables, records_used, argument);
             }
         }
-        StillType::Record(fields) => {
+        LilyType::Record(fields) => {
             records_used.insert(sorted_field_names(fields.iter().map(|field| &field.name)));
             for field in fields {
-                still_type_variables_and_records_into(type_variables, records_used, &field.value);
+                lily_type_variables_and_records_into(type_variables, records_used, &field.value);
             }
         }
     }
 }
-struct CompiledStillExpression {
+struct CompiledLilyExpression {
     rust: syn::Expr,
-    type_: Option<StillType>,
+    type_: Option<LilyType>,
 }
-fn maybe_still_syntax_expression_to_rust<'a>(
-    errors: &mut Vec<StillErrorNode>,
-    error_on_none: impl FnOnce() -> StillErrorNode,
-    records_used: &mut std::collections::HashSet<Vec<StillName>>,
-    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
-    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
+fn maybe_lily_syntax_expression_to_rust<'a>(
+    errors: &mut Vec<LilyErrorNode>,
+    error_on_none: impl FnOnce() -> LilyErrorNode,
+    records_used: &mut std::collections::HashSet<Vec<LilyName>>,
+    type_aliases: &std::collections::HashMap<LilyName, TypeAliasInfo>,
+    choice_types: &std::collections::HashMap<LilyName, ChoiceTypeInfo>,
     project_variable_declarations: &std::collections::HashMap<
-        StillName,
+        LilyName,
         CompiledVariableDeclarationInfo,
     >,
-    local_bindings: std::rc::Rc<std::collections::HashMap<&'a str, StillLocalBindingCompileInfo>>,
+    local_bindings: std::rc::Rc<std::collections::HashMap<&'a str, LilyLocalBindingCompileInfo>>,
     closure_representation: FnRepresentation,
-    maybe_expression: Option<StillSyntaxNode<&'a StillSyntaxExpression>>,
-) -> CompiledStillExpression {
+    maybe_expression: Option<LilySyntaxNode<&'a LilySyntaxExpression>>,
+) -> CompiledLilyExpression {
     match maybe_expression {
         None => {
             errors.push(error_on_none());
-            CompiledStillExpression {
+            CompiledLilyExpression {
                 rust: syn_expr_todo(),
                 type_: None,
             }
         }
-        Some(expression_node) => still_syntax_expression_to_rust(
+        Some(expression_node) => lily_syntax_expression_to_rust(
             errors,
             records_used,
             type_aliases,
@@ -12298,32 +12265,32 @@ fn maybe_still_syntax_expression_to_rust<'a>(
 }
 // be aware: `last_uses` contains both variable ranges and closure ranges
 #[derive(Clone, Debug)]
-struct StillLocalBindingCompileInfo {
+struct LilyLocalBindingCompileInfo {
     origin_range: lsp_types::Range,
-    type_: Option<StillType>,
+    type_: Option<LilyType>,
     is_copy: bool,
     overwriting: bool,
     last_uses: Vec<lsp_types::Range>,
     closures_it_is_used_in: Vec<lsp_types::Range>,
 }
-fn still_syntax_expression_to_rust<'a>(
-    errors: &mut Vec<StillErrorNode>,
-    records_used: &mut std::collections::HashSet<Vec<StillName>>,
-    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
-    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
+fn lily_syntax_expression_to_rust<'a>(
+    errors: &mut Vec<LilyErrorNode>,
+    records_used: &mut std::collections::HashSet<Vec<LilyName>>,
+    type_aliases: &std::collections::HashMap<LilyName, TypeAliasInfo>,
+    choice_types: &std::collections::HashMap<LilyName, ChoiceTypeInfo>,
     project_variable_declarations: &std::collections::HashMap<
-        StillName,
+        LilyName,
         CompiledVariableDeclarationInfo,
     >,
-    local_bindings: std::rc::Rc<std::collections::HashMap<&'a str, StillLocalBindingCompileInfo>>,
+    local_bindings: std::rc::Rc<std::collections::HashMap<&'a str, LilyLocalBindingCompileInfo>>,
     closure_representation: FnRepresentation,
-    expression_node: StillSyntaxNode<&'a StillSyntaxExpression>,
-) -> CompiledStillExpression {
+    expression_node: LilySyntaxNode<&'a LilySyntaxExpression>,
+) -> CompiledLilyExpression {
     match expression_node.value {
-        StillSyntaxExpression::String {
+        LilySyntaxExpression::String {
             content,
             quoting_style: _,
-        } => CompiledStillExpression {
+        } => CompiledLilyExpression {
             rust: syn::Expr::Call(syn::ExprCall {
                 attrs: vec![],
                 func: Box::new(syn_expr_reference(["Str", "Slice"])),
@@ -12334,13 +12301,13 @@ fn still_syntax_expression_to_rust<'a>(
                 }))
                 .collect(),
             }),
-            type_: Some(still_type_str),
+            type_: Some(lily_type_str),
         },
-        StillSyntaxExpression::Char(maybe_char) => CompiledStillExpression {
-            type_: Some(still_type_char),
+        LilySyntaxExpression::Char(maybe_char) => CompiledLilyExpression {
+            type_: Some(lily_type_char),
             rust: match *maybe_char {
                 None => {
-                    errors.push(StillErrorNode {
+                    errors.push(LilyErrorNode {
                         range: expression_node.range,
                         message: Box::from("missing character between 'here'"),
                     });
@@ -12352,11 +12319,11 @@ fn still_syntax_expression_to_rust<'a>(
                 }),
             },
         },
-        StillSyntaxExpression::Dec(dec_or_err) => CompiledStillExpression {
-            type_: Some(still_type_dec),
+        LilySyntaxExpression::Dec(dec_or_err) => CompiledLilyExpression {
+            type_: Some(lily_type_dec),
             rust: match dec_or_err.parse::<f64>() {
                 Err(parse_error) => {
-                    errors.push(StillErrorNode {
+                    errors.push(LilyErrorNode {
                         range: expression_node.range,
                         message: Box::from(format!("dec literal cannot be parsed: {parse_error}")),
                     });
@@ -12371,11 +12338,11 @@ fn still_syntax_expression_to_rust<'a>(
                 }),
             },
         },
-        StillSyntaxExpression::Unt(representation) => CompiledStillExpression {
-            type_: Some(still_type_unt),
+        LilySyntaxExpression::Unt(representation) => CompiledLilyExpression {
+            type_: Some(lily_type_unt),
             rust: match representation.parse::<usize>() {
                 Err(parse_error) => {
-                    errors.push(StillErrorNode {
+                    errors.push(LilyErrorNode {
                         range: expression_node.range,
                         message: Box::from(format!(
                             "unt (unsigned integer) literal cannot be parsed: {parse_error}"
@@ -12389,17 +12356,17 @@ fn still_syntax_expression_to_rust<'a>(
                 }),
             },
         },
-        StillSyntaxExpression::Int(representation) => CompiledStillExpression {
-            type_: Some(still_type_int),
+        LilySyntaxExpression::Int(representation) => CompiledLilyExpression {
+            type_: Some(lily_type_int),
             rust: match representation {
-                StillSyntaxInt::Zero => syn::Expr::Lit(syn::ExprLit {
+                LilySyntaxInt::Zero => syn::Expr::Lit(syn::ExprLit {
                     attrs: vec![],
                     lit: syn::Lit::Int(syn::LitInt::new("0isize", syn_span())),
                 }),
-                StillSyntaxInt::Signed(signed_representation) => {
+                LilySyntaxInt::Signed(signed_representation) => {
                     match signed_representation.parse::<isize>() {
                         Err(parse_error) => {
-                            errors.push(StillErrorNode {
+                            errors.push(LilyErrorNode {
                                 range: expression_node.range,
                                 message: Box::from(format!(
                                     "int literal cannot be parsed: {parse_error}"
@@ -12418,13 +12385,13 @@ fn still_syntax_expression_to_rust<'a>(
                 }
             },
         },
-        StillSyntaxExpression::Lambda {
+        LilySyntaxExpression::Lambda {
             parameters,
             arrow_key_symbol_range: maybe_arrow_key_symbol_range,
             result: maybe_lambda_result,
         } => {
             if parameters.is_empty() {
-                errors.push(StillErrorNode {
+                errors.push(LilyErrorNode {
                     range: lsp_types::Range {
                         start: expression_node.range.start,
                         end: maybe_arrow_key_symbol_range
@@ -12436,7 +12403,7 @@ fn still_syntax_expression_to_rust<'a>(
                     ),
                 });
             } else if maybe_arrow_key_symbol_range.is_none() {
-                errors.push(StillErrorNode {
+                errors.push(LilyErrorNode {
                     range: expression_node.range,
                     message: Box::from(
                         "missing > symbol between \\..patterns.. here ..result... If you think you did put a > there, re-check for syntax errors like a missing :type: before pattern variables, _ or variants",
@@ -12445,17 +12412,17 @@ fn still_syntax_expression_to_rust<'a>(
             }
             let mut parameter_introduced_bindings: std::collections::HashMap<
                 &str,
-                StillLocalBindingCompileInfo,
+                LilyLocalBindingCompileInfo,
             > = std::collections::HashMap::with_capacity(1);
             let mut bindings_to_clone: Vec<BindingToClone> = Vec::new();
             let mut has_inexhaustive_pattern: bool = false;
             let (rust_patterns, input_type_maybes): (
                 syn::punctuated::Punctuated<syn::Pat, syn::token::Comma>,
-                Vec<Option<StillType>>,
+                Vec<Option<LilyType>>,
             ) = parameters
                 .iter()
                 .map(|parameter_node| {
-                    let compiled_parameter: CompiledStillPattern = still_syntax_pattern_to_rust(
+                    let compiled_parameter: CompiledLilyPattern = lily_syntax_pattern_to_rust(
                         errors,
                         records_used,
                         &mut Vec::new(),
@@ -12464,13 +12431,13 @@ fn still_syntax_expression_to_rust<'a>(
                         type_aliases,
                         choice_types,
                         false,
-                        still_syntax_node_as_ref(parameter_node),
+                        lily_syntax_node_as_ref(parameter_node),
                     );
                     match compiled_parameter.catch {
-                        None | Some(StillPatternCatch::Exhaustive) => {}
+                        None | Some(LilyPatternCatch::Exhaustive) => {}
                         Some(_) => {
                             has_inexhaustive_pattern = true;
-                            errors.push(StillErrorNode { range: parameter_node.range, message: Box::from("inexhaustive pattern. Lambda parameters must always match any possible incoming value. To match using inexhaustive patterns, use a match expression (thing | pattern > result)") });
+                            errors.push(LilyErrorNode { range: parameter_node.range, message: Box::from("inexhaustive pattern. Lambda parameters must always match any possible incoming value. To match using inexhaustive patterns, use a match expression (thing | pattern > result)") });
                         },
                     }
                     (
@@ -12480,7 +12447,7 @@ fn still_syntax_expression_to_rust<'a>(
                                     attrs: vec![],
                                     pat: Box::new(rust_pat),
                                     colon_token: syn::token::Colon(syn_span()),
-                                    ty: Box::new(still_type_to_rust(closure_representation, type_))
+                                    ty: Box::new(lily_type_to_rust(closure_representation, type_))
                                 })
                             }).unwrap_or_else(syn_pat_wild),
                         compiled_parameter.type_,
@@ -12488,10 +12455,10 @@ fn still_syntax_expression_to_rust<'a>(
                 })
                 .collect();
             if let Some(lambda_result_node) = maybe_lambda_result {
-                still_syntax_expression_uses_of_local_bindings_into(
+                lily_syntax_expression_uses_of_local_bindings_into(
                     &mut parameter_introduced_bindings,
                     None,
-                    still_syntax_node_unbox(lambda_result_node),
+                    lily_syntax_node_unbox(lambda_result_node),
                 );
             }
             for (parameter_introduced_binding_name, parameter_introduced_binding_info) in
@@ -12519,7 +12486,7 @@ fn still_syntax_expression_to_rust<'a>(
                 })
                 .map(|(&local_binding_name, _)| {
                     let introduced_local_binding_rust_name: String =
-                        still_name_to_lowercase_rust(local_binding_name);
+                        lily_name_to_lowercase_rust(local_binding_name);
                     syn::Stmt::Local(syn::Local {
                         attrs: vec![],
                         let_token: syn::token::Let(syn_span()),
@@ -12541,22 +12508,22 @@ fn still_syntax_expression_to_rust<'a>(
                     })
                 })
                 .collect();
-            let mut local_bindings: std::collections::HashMap<&str, StillLocalBindingCompileInfo> =
+            let mut local_bindings: std::collections::HashMap<&str, LilyLocalBindingCompileInfo> =
                 std::rc::Rc::unwrap_or_clone(local_bindings);
             local_bindings.extend(parameter_introduced_bindings);
 
             let mut closure_result_rust_stmts: Vec<syn::Stmt> = Vec::new();
             bindings_to_clone_to_rust_into(&mut closure_result_rust_stmts, bindings_to_clone);
-            let compiled_result: CompiledStillExpression = maybe_still_syntax_expression_to_rust(
+            let compiled_result: CompiledLilyExpression = maybe_lily_syntax_expression_to_rust(
                 errors,
                 || match *maybe_arrow_key_symbol_range {
-                    None => StillErrorNode {
+                    None => LilyErrorNode {
                         range: expression_node.range,
                         message: Box::from(
                             "missing lambda arrow (>) and result after \\..parameters.. here",
                         ),
                     },
-                    Some(arrow_key_symbol_range) => StillErrorNode {
+                    Some(arrow_key_symbol_range) => LilyErrorNode {
                         range: arrow_key_symbol_range,
                         message: Box::from("missing lambda result after \\..parameters.. > here"),
                     },
@@ -12567,13 +12534,13 @@ fn still_syntax_expression_to_rust<'a>(
                 project_variable_declarations,
                 std::rc::Rc::new(local_bindings),
                 FnRepresentation::RcDyn,
-                maybe_lambda_result.as_ref().map(still_syntax_node_unbox),
+                maybe_lambda_result.as_ref().map(lily_syntax_node_unbox),
             );
             if parameters.is_empty()
                 || has_inexhaustive_pattern
                 || rust_patterns.len() < parameters.len()
             {
-                return CompiledStillExpression {
+                return CompiledLilyExpression {
                     rust: syn_expr_todo(),
                     type_: None,
                 };
@@ -12625,25 +12592,25 @@ fn still_syntax_expression_to_rust<'a>(
                     },
                 })
             };
-            CompiledStillExpression {
+            CompiledLilyExpression {
                 type_: input_type_maybes
                     .into_iter()
                     .collect::<Option<Vec<_>>>()
                     .zip(compiled_result.type_)
-                    .map(|(input_types, result_type)| StillType::Function {
+                    .map(|(input_types, result_type)| LilyType::Function {
                         inputs: input_types,
                         output: Box::new(result_type),
                     }),
                 rust: full_rust,
             }
         }
-        StillSyntaxExpression::AfterLocalVariable {
+        LilySyntaxExpression::AfterLocalVariable {
             declaration: maybe_declaration,
             result: maybe_result,
         } => match maybe_declaration {
-            None => maybe_still_syntax_expression_to_rust(
+            None => maybe_lily_syntax_expression_to_rust(
                 errors,
-                || StillErrorNode {
+                || LilyErrorNode {
                     range: expression_node.range,
                     message: Box::from(
                         "missing result expression after local variable declaration = ..name.. here",
@@ -12655,9 +12622,9 @@ fn still_syntax_expression_to_rust<'a>(
                 project_variable_declarations,
                 local_bindings,
                 closure_representation,
-                maybe_result.as_ref().map(still_syntax_node_unbox),
+                maybe_result.as_ref().map(lily_syntax_node_unbox),
             ),
-            Some(declaration_node) => still_syntax_local_variable_declaration_to_rust_into(
+            Some(declaration_node) => lily_syntax_local_variable_declaration_to_rust_into(
                 errors,
                 records_used,
                 type_aliases,
@@ -12665,22 +12632,22 @@ fn still_syntax_expression_to_rust<'a>(
                 project_variable_declarations,
                 local_bindings,
                 closure_representation,
-                still_syntax_node_as_ref(declaration_node),
-                maybe_result.as_ref().map(still_syntax_node_unbox),
+                lily_syntax_node_as_ref(declaration_node),
+                maybe_result.as_ref().map(lily_syntax_node_unbox),
             ),
         },
-        StillSyntaxExpression::Vec(elements) => {
+        LilySyntaxExpression::Vec(elements) => {
             if elements.is_empty() {
-                errors.push(StillErrorNode {
+                errors.push(LilyErrorNode {
                     range: expression_node.range,
                     message: Box::from("an empty vec needs a type :here:[]"),
                 });
             }
-            let mut maybe_vec_element_type_or_conflicting: Option<Result<StillType, ()>> = None;
+            let mut maybe_vec_element_type_or_conflicting: Option<Result<LilyType, ()>> = None;
             let rust_elements: syn::punctuated::Punctuated<syn::Expr, syn::token::Comma> = elements
                 .iter()
                 .map(|element_node| {
-                    let compiled_element: CompiledStillExpression = still_syntax_expression_to_rust(
+                    let compiled_element: CompiledLilyExpression = lily_syntax_expression_to_rust(
                         errors,
                         records_used,
                         type_aliases,
@@ -12688,7 +12655,7 @@ fn still_syntax_expression_to_rust<'a>(
                         project_variable_declarations,
                         local_bindings.clone(),
                         FnRepresentation::RcDyn,
-                        still_syntax_node_as_ref(element_node),
+                        lily_syntax_node_as_ref(element_node),
                     );
                     if let Some(element_type) = compiled_element.type_ {
                         match &maybe_vec_element_type_or_conflicting {
@@ -12698,11 +12665,11 @@ fn still_syntax_expression_to_rust<'a>(
                             Some(Err(())) => {}
                             Some(Ok(vec_element_type)) => {
                                 if let Some(vec_element_element_type_diff) =
-                                    still_type_diff(vec_element_type, &element_type)
+                                    lily_type_diff(vec_element_type, &element_type)
                                 {
-                                    errors.push(StillErrorNode {
+                                    errors.push(LilyErrorNode {
                                         range: element_node.range,
-                                        message: (still_type_diff_error_message(
+                                        message: (lily_type_diff_error_message(
                                             &vec_element_element_type_diff,
                                         ) + "\n\nAll vec elements must have the same type")
                                             .into_boxed_str(),
@@ -12715,19 +12682,19 @@ fn still_syntax_expression_to_rust<'a>(
                     compiled_element.rust
                 })
                 .collect();
-            let maybe_vec_element_type: Option<StillType> =
+            let maybe_vec_element_type: Option<LilyType> =
                 match maybe_vec_element_type_or_conflicting {
                     None => None,
                     Some(Ok(type_)) => Some(type_),
                     Some(Err(())) => {
-                        return CompiledStillExpression {
+                        return CompiledLilyExpression {
                             rust: syn_expr_todo(),
                             type_: None,
                         };
                     }
                 };
-            CompiledStillExpression {
-                type_: maybe_vec_element_type.map(still_type_vec),
+            CompiledLilyExpression {
+                type_: maybe_vec_element_type.map(lily_type_vec),
                 rust: syn::Expr::Call(syn::ExprCall {
                     attrs: vec![],
                     func: Box::new(syn_expr_reference(["Vec", "from_array"])),
@@ -12741,10 +12708,10 @@ fn still_syntax_expression_to_rust<'a>(
                 }),
             }
         }
-        StillSyntaxExpression::Parenthesized(maybe_in_parens) => {
-            maybe_still_syntax_expression_to_rust(
+        LilySyntaxExpression::Parenthesized(maybe_in_parens) => {
+            maybe_lily_syntax_expression_to_rust(
                 errors,
-                || StillErrorNode {
+                || LilyErrorNode {
                     range: expression_node.range,
                     message: Box::from("missing expression in parens between (here)"),
                 },
@@ -12754,20 +12721,20 @@ fn still_syntax_expression_to_rust<'a>(
                 project_variable_declarations,
                 local_bindings.clone(),
                 closure_representation,
-                maybe_in_parens.as_ref().map(still_syntax_node_unbox),
+                maybe_in_parens.as_ref().map(lily_syntax_node_unbox),
             )
         }
-        StillSyntaxExpression::WithComment {
+        LilySyntaxExpression::WithComment {
             comment: comment_node,
             expression: _,
         } => {
-            errors.push(StillErrorNode {
+            errors.push(LilyErrorNode {
                 range: expression_node.range,
                 message: Box::from(
                     "missing expression after linebreak after comment # ...\\n here",
                 ),
             });
-            CompiledStillExpression {
+            CompiledLilyExpression {
                 type_: None,
                 rust: syn::Expr::Macro(syn::ExprMacro {
                     attrs: vec![],
@@ -12782,20 +12749,20 @@ fn still_syntax_expression_to_rust<'a>(
                 }),
             }
         }
-        StillSyntaxExpression::Typed {
+        LilySyntaxExpression::Typed {
             type_: maybe_type_node,
             closing_colon_range: maybe_closing_colon_range,
             expression: maybe_in_typed,
         } => {
-            let maybe_expected_type: Option<StillType> = match maybe_type_node {
-                Some(type_node) => still_syntax_type_to_type(
+            let maybe_expected_type: Option<LilyType> = match maybe_type_node {
+                Some(type_node) => lily_syntax_type_to_type(
                     errors,
                     type_aliases,
                     choice_types,
-                    still_syntax_node_as_ref(type_node),
+                    lily_syntax_node_as_ref(type_node),
                 ),
                 None => {
-                    errors.push(StillErrorNode {
+                    errors.push(LilyErrorNode {
                         range: lsp_types::Range {
                             start: expression_node.range.start,
                             end: maybe_closing_colon_range.map(|r| r.end).unwrap_or_else(|| {
@@ -12808,36 +12775,36 @@ fn still_syntax_expression_to_rust<'a>(
                 }
             };
             let Some(untyped_node) = maybe_in_typed else {
-                errors.push(StillErrorNode {
+                errors.push(LilyErrorNode {
                     range: expression_node.range,
                     message: Box::from("missing expression after type :...: here"),
                 });
-                return CompiledStillExpression {
+                return CompiledLilyExpression {
                     type_: maybe_expected_type,
                     rust: syn_expr_todo(),
                 };
             };
             match &untyped_node.value {
-                StillSyntaxExpressionUntyped::Variant {
+                LilySyntaxExpressionUntyped::Variant {
                     name: name_node,
                     value: maybe_value,
                 } => {
                     let Some(type_) = maybe_expected_type else {
-                        return CompiledStillExpression {
+                        return CompiledLilyExpression {
                             rust: syn_expr_todo(),
                             type_: None,
                         };
                     };
-                    let StillType::ChoiceConstruct {
+                    let LilyType::ChoiceConstruct {
                         name: origin_choice_type_name,
                         arguments: origin_choice_type_arguments,
                     } = type_
                     else {
-                        errors.push(StillErrorNode {
+                        errors.push(LilyErrorNode {
                                 range: maybe_type_node.as_ref().map(|n| n.range).unwrap_or(expression_node.range),
                                 message: Box::from("type in :here: is not a choice type which is necessary for a variant")
                             });
-                        return CompiledStillExpression {
+                        return CompiledLilyExpression {
                             rust: syn_expr_todo(),
                             type_: None,
                         };
@@ -12845,7 +12812,7 @@ fn still_syntax_expression_to_rust<'a>(
                     let Some(origin_choice_type_info) =
                         choice_types.get(origin_choice_type_name.as_str())
                     else {
-                        return CompiledStillExpression {
+                        return CompiledLilyExpression {
                             rust: syn_expr_todo(),
                             type_: None,
                         };
@@ -12857,7 +12824,7 @@ fn still_syntax_expression_to_rust<'a>(
                             origin_choice_type_variant.name == name_node.value
                         })
                     else {
-                        errors.push(StillErrorNode {
+                        errors.push(LilyErrorNode {
                             range: name_node.range,
                             message: format!(
                                 "the type in :here: is a choice type \"{}\" which is does not declare a variant with this name. Valid variant names are: {}. If you expected this variant name to be valid, check the origin choice type for errors",
@@ -12865,14 +12832,14 @@ fn still_syntax_expression_to_rust<'a>(
                                 origin_choice_type_info.type_variants.iter().map(|variant| variant.name.as_str()).collect::<Vec<&str>>().join(", ")
                             ).into_boxed_str()
                         });
-                        return CompiledStillExpression {
+                        return CompiledLilyExpression {
                             rust: syn_expr_todo(),
                             type_: None,
                         };
                     };
                     let rust_variant_reference: syn::Expr = syn_expr_reference([
-                        &still_name_to_uppercase_rust(&origin_choice_type_name),
-                        &still_name_to_uppercase_rust(&name_node.value),
+                        &lily_name_to_uppercase_rust(&origin_choice_type_name),
+                        &lily_name_to_uppercase_rust(&name_node.value),
                     ]);
                     match maybe_value {
                         None => {
@@ -12880,22 +12847,22 @@ fn still_syntax_expression_to_rust<'a>(
                                 let mut error_message: String = String::from(
                                     "this variant is missing its value. In the origin choice declaration, it's type is declared as\n",
                                 );
-                                still_type_info_into(
+                                lily_type_info_into(
                                     &mut error_message,
                                     0,
                                     &declared_variant_value_type.type_,
                                 );
-                                errors.push(StillErrorNode {
+                                errors.push(LilyErrorNode {
                                     range: name_node.range,
                                     message: error_message.into_boxed_str(),
                                 });
-                                return CompiledStillExpression {
+                                return CompiledLilyExpression {
                                     rust: syn_expr_todo(),
                                     type_: None,
                                 };
                             }
-                            CompiledStillExpression {
-                                type_: Some(StillType::ChoiceConstruct {
+                            CompiledLilyExpression {
+                                type_: Some(LilyType::ChoiceConstruct {
                                     name: origin_choice_type_name,
                                     arguments: origin_choice_type_arguments,
                                 }),
@@ -12905,22 +12872,22 @@ fn still_syntax_expression_to_rust<'a>(
                         Some(value_node) => {
                             let Some(declared_variant_value_info) = &origin_variant_info.value
                             else {
-                                errors.push(StillErrorNode {
+                                errors.push(LilyErrorNode {
                                         range: name_node.range,
                                         message: Box::from(
                                             "extraneous variant value. This variant's declaration has no declared value. Remove this extra value or correct its origin choice type declaration",
                                         ),
                                     });
-                                return CompiledStillExpression {
-                                    type_: Some(StillType::ChoiceConstruct {
+                                return CompiledLilyExpression {
+                                    type_: Some(LilyType::ChoiceConstruct {
                                         name: origin_choice_type_name,
                                         arguments: origin_choice_type_arguments,
                                     }),
                                     rust: rust_variant_reference,
                                 };
                             };
-                            let value_compiled: CompiledStillExpression =
-                                still_syntax_expression_to_rust(
+                            let value_compiled: CompiledLilyExpression =
+                                lily_syntax_expression_to_rust(
                                     errors,
                                     records_used,
                                     type_aliases,
@@ -12928,11 +12895,11 @@ fn still_syntax_expression_to_rust<'a>(
                                     project_variable_declarations,
                                     local_bindings,
                                     FnRepresentation::RcDyn,
-                                    still_syntax_node_unbox(value_node),
+                                    lily_syntax_node_unbox(value_node),
                                 );
-                            let mut variant_value_type: StillType =
+                            let mut variant_value_type: LilyType =
                                 declared_variant_value_info.type_.clone();
-                            still_type_replace_variables(
+                            lily_type_replace_variables(
                                 &origin_choice_type_info
                                     .parameters
                                     .iter()
@@ -12945,22 +12912,20 @@ fn still_syntax_expression_to_rust<'a>(
                             );
                             if let Some(actual_value_type) = &value_compiled.type_
                                 && let Some(variant_value_type_diff) =
-                                    still_type_diff(&variant_value_type, actual_value_type)
+                                    lily_type_diff(&variant_value_type, actual_value_type)
                             {
-                                errors.push(StillErrorNode {
+                                errors.push(LilyErrorNode {
                                     range: value_node.range,
-                                    message: still_type_diff_error_message(
-                                        &variant_value_type_diff,
-                                    )
-                                    .into_boxed_str(),
+                                    message: lily_type_diff_error_message(&variant_value_type_diff)
+                                        .into_boxed_str(),
                                 });
-                                return CompiledStillExpression {
+                                return CompiledLilyExpression {
                                     rust: syn_expr_todo(),
                                     type_: None,
                                 };
                             }
-                            CompiledStillExpression {
-                                type_: Some(StillType::ChoiceConstruct {
+                            CompiledLilyExpression {
+                                type_: Some(LilyType::ChoiceConstruct {
                                     name: origin_choice_type_name,
                                     arguments: origin_choice_type_arguments,
                                 }),
@@ -12989,29 +12954,29 @@ fn still_syntax_expression_to_rust<'a>(
                         }
                     }
                 }
-                StillSyntaxExpressionUntyped::Other(other_expression) => {
-                    if let StillSyntaxExpression::Vec(elements) = other_expression.as_ref()
+                LilySyntaxExpressionUntyped::Other(other_expression) => {
+                    if let LilySyntaxExpression::Vec(elements) = other_expression.as_ref()
                         && elements.is_empty()
                     {
                         let type_is_conflicting: bool = match &maybe_expected_type {
                             None => false,
-                            Some(StillType::ChoiceConstruct {
+                            Some(LilyType::ChoiceConstruct {
                                 name: choice_type_name,
                                 arguments: _,
-                            }) => choice_type_name != still_type_vec_name,
+                            }) => choice_type_name != lily_type_vec_name,
                             Some(_) => true,
                         };
                         if type_is_conflicting {
-                            errors.push(StillErrorNode {
+                            errors.push(LilyErrorNode {
                                 range: expression_node.range,
                                 message: Box::from("type of an empty vec ([]) must be vec (or a type alias to vec), not its element type.")
                             });
-                            return CompiledStillExpression {
+                            return CompiledLilyExpression {
                                 rust: syn_expr_todo(),
                                 type_: None,
                             };
                         }
-                        CompiledStillExpression {
+                        CompiledLilyExpression {
                             rust: syn::Expr::Call(syn::ExprCall {
                                 attrs: vec![],
                                 func: Box::new(syn_expr_reference(["Vec", "from_array"])),
@@ -13026,29 +12991,28 @@ fn still_syntax_expression_to_rust<'a>(
                             type_: maybe_expected_type,
                         }
                     } else {
-                        let compiled_other: CompiledStillExpression =
-                            still_syntax_expression_to_rust(
-                                errors,
-                                records_used,
-                                type_aliases,
-                                choice_types,
-                                project_variable_declarations,
-                                local_bindings,
-                                closure_representation,
-                                StillSyntaxNode {
-                                    range: untyped_node.range,
-                                    value: other_expression,
-                                },
-                            );
+                        let compiled_other: CompiledLilyExpression = lily_syntax_expression_to_rust(
+                            errors,
+                            records_used,
+                            type_aliases,
+                            choice_types,
+                            project_variable_declarations,
+                            local_bindings,
+                            closure_representation,
+                            LilySyntaxNode {
+                                range: untyped_node.range,
+                                value: other_expression,
+                            },
+                        );
                         if let Some(expected_type) = &maybe_expected_type
                             && let Some(other_type) = &compiled_other.type_
-                            && let Some(type_diff) = still_type_diff(expected_type, other_type)
+                            && let Some(type_diff) = lily_type_diff(expected_type, other_type)
                         {
-                            errors.push(StillErrorNode {
+                            errors.push(LilyErrorNode {
                                 range: untyped_node.range,
-                                message: still_type_diff_error_message(&type_diff).into_boxed_str(),
+                                message: lily_type_diff_error_message(&type_diff).into_boxed_str(),
                             });
-                            return CompiledStillExpression {
+                            return CompiledLilyExpression {
                                 rust: syn_expr_todo(),
                                 type_: maybe_expected_type,
                             };
@@ -13058,7 +13022,7 @@ fn still_syntax_expression_to_rust<'a>(
                 }
             }
         }
-        StillSyntaxExpression::VariableOrCall {
+        LilySyntaxExpression::VariableOrCall {
             variable: variable_node,
             arguments,
         } => {
@@ -13066,12 +13030,12 @@ fn still_syntax_expression_to_rust<'a>(
                 Some(variable_info) => {
                     let (rust_arguments, argument_maybe_types): (
                         Vec<syn::Expr>,
-                        Vec<Option<StillType>>,
+                        Vec<Option<LilyType>>,
                     ) = arguments
                         .iter()
                         .map(|argument_node| {
-                            let compiled_argument: CompiledStillExpression =
-                                still_syntax_expression_to_rust(
+                            let compiled_argument: CompiledLilyExpression =
+                                lily_syntax_expression_to_rust(
                                     errors,
                                     records_used,
                                     type_aliases,
@@ -13079,31 +13043,31 @@ fn still_syntax_expression_to_rust<'a>(
                                     project_variable_declarations,
                                     local_bindings.clone(),
                                     FnRepresentation::RcDyn,
-                                    still_syntax_node_as_ref(argument_node),
+                                    lily_syntax_node_as_ref(argument_node),
                                 );
                             (compiled_argument.rust, compiled_argument.type_)
                         })
                         .unzip();
                     let rust_reference: syn::Expr =
-                        syn_expr_reference([&still_name_to_lowercase_rust(&variable_node.value)]);
+                        syn_expr_reference([&lily_name_to_lowercase_rust(&variable_node.value)]);
                     let Some(variable_type) = &variable_info.type_ else {
-                        return CompiledStillExpression {
+                        return CompiledLilyExpression {
                             rust: syn_expr_todo(),
                             type_: None,
                         };
                     };
-                    let type_: StillType = if arguments.is_empty() {
+                    let type_: LilyType = if arguments.is_empty() {
                         variable_type.clone()
                     } else {
                         match variable_type {
-                            StillType::Function {
+                            LilyType::Function {
                                 inputs: variable_input_types,
                                 output: variable_output_type,
                             } => {
                                 match variable_input_types.len().cmp(&arguments.len()) {
                                     std::cmp::Ordering::Equal => {}
                                     std::cmp::Ordering::Less => {
-                                        errors.push(StillErrorNode {
+                                        errors.push(LilyErrorNode {
                                             range: variable_node.range,
                                             message: format!(
                                                 "too many arguments. Expected {} less. To call a function that is the result of a function, store it in an intermediate let and call that variable",
@@ -13112,10 +13076,10 @@ fn still_syntax_expression_to_rust<'a>(
                                         });
                                     }
                                     std::cmp::Ordering::Greater => {
-                                        errors.push(StillErrorNode {
+                                        errors.push(LilyErrorNode {
                                             range: variable_node.range,
                                             message: format!(
-                                                "missing arguments. Expected {} more. Note that partial application is not a feature in still. Instead, wrap this call in a lambda that accepts and applies the remaining arguments",
+                                                "missing arguments. Expected {} more. Note that partial application is not a feature in lily. Instead, wrap this call in a lambda that accepts and applies the remaining arguments",
                                                 variable_input_types.len() - arguments.len()
                                             ).into_boxed_str()
                                         });
@@ -13131,11 +13095,11 @@ fn still_syntax_expression_to_rust<'a>(
                                 {
                                     if let Some(argument_type) = maybe_argument_type
                                         && let Some(argument_variable_input_type_diff) =
-                                            still_type_diff(variable_input_type, argument_type)
+                                            lily_type_diff(variable_input_type, argument_type)
                                     {
-                                        errors.push(StillErrorNode {
+                                        errors.push(LilyErrorNode {
                                             range: argument_node.range,
-                                            message: still_type_diff_error_message(
+                                            message: lily_type_diff_error_message(
                                                 &argument_variable_input_type_diff,
                                             )
                                             .into_boxed_str(),
@@ -13146,7 +13110,7 @@ fn still_syntax_expression_to_rust<'a>(
                                 if any_argument_type_conflicts_with_variable_input_type
                                     || variable_input_types.len() > arguments.len()
                                 {
-                                    return CompiledStillExpression {
+                                    return CompiledLilyExpression {
                                         rust: syn_expr_todo(),
                                         type_: None,
                                     };
@@ -13154,8 +13118,8 @@ fn still_syntax_expression_to_rust<'a>(
                                 (**variable_output_type).clone()
                             }
                             _ => {
-                                errors.push(StillErrorNode { range: variable_node.range, message: Box::from("calling a variable whose type is not a function. Maybe you forgot a separating comma or similar?") });
-                                return CompiledStillExpression {
+                                errors.push(LilyErrorNode { range: variable_node.range, message: Box::from("calling a variable whose type is not a function. Maybe you forgot a separating comma or similar?") });
+                                return CompiledLilyExpression {
                                     rust: syn_expr_todo(),
                                     type_: None,
                                 };
@@ -13169,7 +13133,7 @@ fn still_syntax_expression_to_rust<'a>(
                     } else {
                         syn_expr_call_clone_method(rust_reference)
                     };
-                    CompiledStillExpression {
+                    CompiledLilyExpression {
                         rust: if arguments.is_empty() {
                             rust_reference_cloned_if_necessary
                         } else {
@@ -13186,12 +13150,12 @@ fn still_syntax_expression_to_rust<'a>(
                 None => {
                     let (rust_arguments, argument_maybe_types): (
                         syn::punctuated::Punctuated<syn::Expr, _>,
-                        Vec<Option<StillType>>,
+                        Vec<Option<LilyType>>,
                     ) = arguments
                         .iter()
                         .map(|argument_node| {
-                            let compiled_argument: CompiledStillExpression =
-                                still_syntax_expression_to_rust(
+                            let compiled_argument: CompiledLilyExpression =
+                                lily_syntax_expression_to_rust(
                                     errors,
                                     records_used,
                                     type_aliases,
@@ -13199,7 +13163,7 @@ fn still_syntax_expression_to_rust<'a>(
                                     project_variable_declarations,
                                     local_bindings.clone(),
                                     FnRepresentation::Impl,
-                                    still_syntax_node_as_ref(argument_node),
+                                    lily_syntax_node_as_ref(argument_node),
                                 );
                             (compiled_argument.rust, compiled_argument.type_)
                         })
@@ -13207,26 +13171,26 @@ fn still_syntax_expression_to_rust<'a>(
                     let Some(project_variable_info) =
                         project_variable_declarations.get(variable_node.value.as_str())
                     else {
-                        errors.push(StillErrorNode { range: variable_node.range, message: Box::from("unknown variable. No project variable or local variable has this name. Check for typos.") });
-                        return CompiledStillExpression {
+                        errors.push(LilyErrorNode { range: variable_node.range, message: Box::from("unknown variable. No project variable or local variable has this name. Check for typos.") });
+                        return CompiledLilyExpression {
                             rust: syn_expr_todo(),
                             type_: None,
                         };
                     };
                     let Some(project_variable_type) = &project_variable_info.type_ else {
-                        errors.push(StillErrorNode { range: variable_node.range, message: Box::from("this project variable has an incomplete type. Go to that variable's declaration and fix its errors. If there aren't any, these declarations are (mutually) recursive and need an explicit output type! You can add one by prepending :type: before any expression like the result of a lambda.") });
-                        return CompiledStillExpression {
+                        errors.push(LilyErrorNode { range: variable_node.range, message: Box::from("this project variable has an incomplete type. Go to that variable's declaration and fix its errors. If there aren't any, these declarations are (mutually) recursive and need an explicit output type! You can add one by prepending :type: before any expression like the result of a lambda.") });
+                        return CompiledLilyExpression {
                             rust: syn_expr_todo(),
                             type_: None,
                         };
                     };
                     let rust_reference: syn::Expr =
-                        syn_expr_reference([&still_name_to_lowercase_rust(&variable_node.value)]);
-                    let type_: StillType = if arguments.is_empty() {
+                        syn_expr_reference([&lily_name_to_lowercase_rust(&variable_node.value)]);
+                    let type_: LilyType = if arguments.is_empty() {
                         project_variable_type.clone()
                     } else {
                         match project_variable_type {
-                            StillType::Function {
+                            LilyType::Function {
                                 inputs: project_variable_input_types,
                                 output: project_variable_output_type,
                             } => {
@@ -13235,7 +13199,7 @@ fn still_syntax_expression_to_rust<'a>(
                                 match project_variable_input_types.len().cmp(&arguments.len()) {
                                     std::cmp::Ordering::Equal => {}
                                     std::cmp::Ordering::Less => {
-                                        errors.push(StillErrorNode {
+                                        errors.push(LilyErrorNode {
                                             range: variable_node.range,
                                             message: format!(
                                                 "too many arguments. Expected {} less. To call a function that is the result of a function, store it in an intermediate let and call that variable",
@@ -13244,10 +13208,10 @@ fn still_syntax_expression_to_rust<'a>(
                                         });
                                     }
                                     std::cmp::Ordering::Greater => {
-                                        errors.push(StillErrorNode {
+                                        errors.push(LilyErrorNode {
                                             range: variable_node.range,
                                             message: format!(
-                                                "missing arguments. Expected {} more. Note that partial application is not a feature in still. Instead, wrap this call in a lambda that accepts and applies the remaining arguments",
+                                                "missing arguments. Expected {} more. Note that partial application is not a feature in lily. Instead, wrap this call in a lambda that accepts and applies the remaining arguments",
                                                 project_variable_input_types.len() - arguments.len()
                                             ).into_boxed_str()
                                         });
@@ -13255,7 +13219,7 @@ fn still_syntax_expression_to_rust<'a>(
                                 }
                                 let mut type_parameter_replacements: std::collections::HashMap<
                                     &str,
-                                    &StillType,
+                                    &LilyType,
                                 > = std::collections::HashMap::new();
                                 for (parameter_type_node, maybe_argument_type) in
                                     project_variable_input_types
@@ -13263,7 +13227,7 @@ fn still_syntax_expression_to_rust<'a>(
                                         .zip(argument_maybe_types.iter())
                                 {
                                     if let Some(argument_type) = maybe_argument_type {
-                                        still_type_collect_variables_that_are_concrete_into(
+                                        lily_type_collect_variables_that_are_concrete_into(
                                             &mut type_parameter_replacements,
                                             parameter_type_node,
                                             argument_type,
@@ -13281,21 +13245,21 @@ fn still_syntax_expression_to_rust<'a>(
                                     .zip(arguments.iter())
                                 {
                                     if let Some(argument_type) = maybe_argument_type {
-                                        let mut project_variable_input_type: StillType =
+                                        let mut project_variable_input_type: LilyType =
                                             project_variable_input_type.clone();
-                                        still_type_replace_variables(
+                                        lily_type_replace_variables(
                                             &type_parameter_replacements,
                                             &mut project_variable_input_type,
                                         );
                                         if let Some(argument_variable_input_type_diff) =
-                                            still_type_diff(
+                                            lily_type_diff(
                                                 &project_variable_input_type,
                                                 argument_type,
                                             )
                                         {
-                                            errors.push(StillErrorNode {
+                                            errors.push(LilyErrorNode {
                                                 range: argument_node.range,
-                                                message: still_type_diff_error_message(
+                                                message: lily_type_diff_error_message(
                                                     &argument_variable_input_type_diff,
                                                 )
                                                 .into_boxed_str(),
@@ -13308,29 +13272,29 @@ fn still_syntax_expression_to_rust<'a>(
                                 if any_argument_type_conflicts_with_variable_input_type
                                     || project_variable_input_types.len() > arguments.len()
                                 {
-                                    return CompiledStillExpression {
+                                    return CompiledLilyExpression {
                                         rust: syn_expr_todo(),
                                         type_: None,
                                     };
                                 }
-                                let mut variable_output_type: StillType =
+                                let mut variable_output_type: LilyType =
                                     (**project_variable_output_type).clone();
-                                still_type_replace_variables(
+                                lily_type_replace_variables(
                                     &type_parameter_replacements,
                                     &mut variable_output_type,
                                 );
                                 variable_output_type
                             }
                             _ => {
-                                errors.push(StillErrorNode { range: variable_node.range, message: Box::from("calling a variable whose type is not a function. Maybe you forgot a separating comma or similar?") });
-                                return CompiledStillExpression {
+                                errors.push(LilyErrorNode { range: variable_node.range, message: Box::from("calling a variable whose type is not a function. Maybe you forgot a separating comma or similar?") });
+                                return CompiledLilyExpression {
                                     rust: syn_expr_todo(),
                                     type_: None,
                                 };
                             }
                         }
                     };
-                    CompiledStillExpression {
+                    CompiledLilyExpression {
                         rust: syn::Expr::Call(syn::ExprCall {
                             attrs: vec![],
                             func: Box::new(rust_reference),
@@ -13342,11 +13306,11 @@ fn still_syntax_expression_to_rust<'a>(
                 }
             }
         }
-        StillSyntaxExpression::Match {
+        LilySyntaxExpression::Match {
             matched: matched_node,
             cases,
         } => {
-            let compiled_matched: CompiledStillExpression = still_syntax_expression_to_rust(
+            let compiled_matched: CompiledLilyExpression = lily_syntax_expression_to_rust(
                 errors,
                 records_used,
                 type_aliases,
@@ -13354,28 +13318,28 @@ fn still_syntax_expression_to_rust<'a>(
                 project_variable_declarations,
                 local_bindings.clone(),
                 FnRepresentation::RcDyn,
-                still_syntax_node_unbox(matched_node),
+                lily_syntax_node_unbox(matched_node),
             );
             let Some(matched_type) = compiled_matched.type_ else {
-                return CompiledStillExpression {
+                return CompiledLilyExpression {
                     rust: syn_expr_todo(),
                     type_: None,
                 };
             };
-            let mut maybe_match_result_type_or_conflicting: Option<Result<StillType, ()>> = None;
+            let mut maybe_match_result_type_or_conflicting: Option<Result<LilyType, ()>> = None;
             let mut maybe_catch: Option<StilCasePatternsCatch> = None;
             let mut rust_arms: Vec<syn::Arm> = cases
                 .iter()
                 .filter_map(|case| {
                     let Some(case_pattern_node) = &case.pattern else {
-                        errors.push(StillErrorNode {
+                        errors.push(LilyErrorNode {
                             range: case.or_bar_key_symbol_range,
                             message: Box::from("missing case pattern in | here > ..result... If you think you did put patterns there, re-check for syntax errors like a missing :type: before variables, _ or variants"),
                         });
                         return None;
                     };
                     if case.arrow_key_symbol_range.is_none() {
-                        errors.push(StillErrorNode {
+                        errors.push(LilyErrorNode {
                             range: case.or_bar_key_symbol_range,
                             message: Box::from(
                                 "missing > symbol between \\..patterns.. here ..result... If you think you did put a > there, re-check for syntax errors like a missing :type: before pattern variables, _ or variants",
@@ -13385,10 +13349,10 @@ fn still_syntax_expression_to_rust<'a>(
                     let mut introduced_str_bindings_to_match: Vec<(lsp_types::Range, &str)> = Vec::new();
                     let mut case_pattern_introduced_bindings: std::collections::HashMap<
                         &str,
-                        StillLocalBindingCompileInfo,
+                        LilyLocalBindingCompileInfo,
                     > = std::collections::HashMap::with_capacity(1);
                     let mut bindings_to_clone: Vec<BindingToClone> = Vec::new();
-                    let compiled_pattern: CompiledStillPattern = still_syntax_pattern_to_rust(
+                    let compiled_pattern: CompiledLilyPattern = lily_syntax_pattern_to_rust(
                         errors,
                         records_used,
                         &mut introduced_str_bindings_to_match,
@@ -13397,7 +13361,7 @@ fn still_syntax_expression_to_rust<'a>(
                         type_aliases,
                         choice_types,
                         false,
-                        still_syntax_node_as_ref(case_pattern_node),
+                        lily_syntax_node_as_ref(case_pattern_node),
                     );
                     let Some(case_rust_pattern) = compiled_pattern.rust else {
                         // skip case with incomplete pattern
@@ -13408,11 +13372,11 @@ fn still_syntax_expression_to_rust<'a>(
                         return None;
                     };
                     if let Some(matched_pattern_type_diff) =
-                        still_type_diff(&matched_type, &case_pattern_type)
+                        lily_type_diff(&matched_type, &case_pattern_type)
                     {
-                        errors.push(StillErrorNode {
+                        errors.push(LilyErrorNode {
                             range: case_pattern_node.range,
-                            message: (still_type_diff_error_message(&matched_pattern_type_diff)
+                            message: (lily_type_diff_error_message(&matched_pattern_type_diff)
                                 + "\n\nA case pattern must have the same type as the matched expression")
                                     .into_boxed_str(),
                         });
@@ -13423,17 +13387,17 @@ fn still_syntax_expression_to_rust<'a>(
                     };
                     match maybe_catch {
                         None => {
-                            maybe_catch = Some(still_pattern_catch_to_case_patterns_catch(case_pattern_catch));
+                            maybe_catch = Some(lily_pattern_catch_to_case_patterns_catch(case_pattern_catch));
                         }
                         Some(ref mut catch) => {
-                            still_pattern_catch_merge_with(errors,  case_pattern_node.range, catch, case_pattern_catch);
+                            lily_pattern_catch_merge_with(errors,  case_pattern_node.range, catch, case_pattern_catch);
                         }
                     }
                     if let Some(case_result_node) = &case.result {
-                        still_syntax_expression_uses_of_local_bindings_into(
+                        lily_syntax_expression_uses_of_local_bindings_into(
                             &mut case_pattern_introduced_bindings,
                             None,
-                            still_syntax_node_as_ref(case_result_node),
+                            lily_syntax_node_as_ref(case_result_node),
                         );
                     }
                     for (parameter_introduced_binding_name, parameter_introduced_binding_info) in
@@ -13450,13 +13414,13 @@ fn still_syntax_expression_to_rust<'a>(
                     }
                     let mut local_bindings: std::collections::HashMap<
                         &str,
-                        StillLocalBindingCompileInfo,
+                        LilyLocalBindingCompileInfo,
                     > = (*local_bindings).clone();
                     local_bindings.extend(case_pattern_introduced_bindings);
-                    let compiled_case_result: CompiledStillExpression =
-                        maybe_still_syntax_expression_to_rust(
+                    let compiled_case_result: CompiledLilyExpression =
+                        maybe_lily_syntax_expression_to_rust(
                             errors,
-                            || StillErrorNode {
+                            || LilyErrorNode {
                                 range: case
                                     .arrow_key_symbol_range
                                     .unwrap_or(case_pattern_node.range),
@@ -13470,7 +13434,7 @@ fn still_syntax_expression_to_rust<'a>(
                             project_variable_declarations,
                             std::rc::Rc::new(local_bindings),
                             FnRepresentation::RcDyn,
-                            case.result.as_ref().map(still_syntax_node_as_ref),
+                            case.result.as_ref().map(lily_syntax_node_as_ref),
                         );
                     let mut rust_stmts: Vec<syn::Stmt> = Vec::with_capacity(1);
                     bindings_to_clone_to_rust_into(&mut rust_stmts, bindings_to_clone);
@@ -13485,11 +13449,11 @@ fn still_syntax_expression_to_rust<'a>(
                             Some(Err(())) => {}
                             Some(Ok(match_result_type)) => {
                                 if let Some(match_result_case_result_type_diff) =
-                                    still_type_diff(match_result_type, &case_result_type)
+                                    lily_type_diff(match_result_type, &case_result_type)
                                 {
-                                    errors.push(StillErrorNode {
+                                    errors.push(LilyErrorNode {
                                         range: case_result_node.range,
-                                        message: (still_type_diff_error_message(
+                                        message: (lily_type_diff_error_message(
                                             &match_result_case_result_type_diff,
                                         ) + "\n\nAll case results must have the same type")
                                             .into_boxed_str(),
@@ -13501,7 +13465,7 @@ fn still_syntax_expression_to_rust<'a>(
                     }
                     let mut introduced_str_bindings_to_match_iterator = introduced_str_bindings_to_match.into_iter();
                     fn syn_expr_binding_eq_str((binding_range, str):(lsp_types::Range, &str)) -> syn::Expr {
-                        syn::Expr::Binary(syn::ExprBinary { attrs: vec![], left: Box::new(syn_expr_reference([&still_str_binding_name(binding_range)])), op: syn::BinOp::Eq(syn::token::EqEq(syn_span())), right: Box::new(syn::Expr::Lit(syn::ExprLit {attrs:vec![], lit: syn::Lit::Str(syn::LitStr::new(str, syn_span()))})) })
+                        syn::Expr::Binary(syn::ExprBinary { attrs: vec![], left: Box::new(syn_expr_reference([&lily_str_binding_name(binding_range)])), op: syn::BinOp::Eq(syn::token::EqEq(syn_span())), right: Box::new(syn::Expr::Lit(syn::ExprLit {attrs:vec![], lit: syn::Lit::Str(syn::LitStr::new(str, syn_span()))})) })
                     }
                     Some(syn::Arm {
                         attrs: vec![],
@@ -13530,12 +13494,12 @@ fn still_syntax_expression_to_rust<'a>(
                     })
                 })
                 .collect();
-            let maybe_match_result_type: Option<StillType> =
+            let maybe_match_result_type: Option<LilyType> =
                 match maybe_match_result_type_or_conflicting {
                     None => None,
                     Some(Ok(type_)) => Some(type_),
                     Some(Err(())) => {
-                        return CompiledStillExpression {
+                        return CompiledLilyExpression {
                             rust: syn_expr_todo(),
                             type_: None,
                         };
@@ -13545,14 +13509,14 @@ fn still_syntax_expression_to_rust<'a>(
                 None => {}
                 Some(StilCasePatternsCatch::Exhaustive) => {}
                 Some(_catch_not_exhaustive) => {
-                    errors.push(StillErrorNode {
+                    errors.push(LilyErrorNode {
                         range: cases
                             .last()
                             .map(|case| case.or_bar_key_symbol_range)
                             .unwrap_or(matched_node.range),
                         message: Box::from("inexhaustive pattern match. A pattern match must cover all possible cases, otherwise the program would need to crash if such a value was matched on."),
                     });
-                    // _ => todo!() is appended to still make inexhaustive matching compile
+                    // _ => todo!() is appended to lily make inexhaustive matching compile
                     // and be able to be run, rust will emit a warning
                     rust_arms.push(syn::Arm {
                         attrs: vec![],
@@ -13567,7 +13531,7 @@ fn still_syntax_expression_to_rust<'a>(
                     });
                 }
             }
-            CompiledStillExpression {
+            CompiledLilyExpression {
                 rust: syn::Expr::Match(syn::ExprMatch {
                     attrs: vec![],
                     match_token: syn::token::Match(syn_span()),
@@ -13578,17 +13542,17 @@ fn still_syntax_expression_to_rust<'a>(
                 type_: maybe_match_result_type,
             }
         }
-        StillSyntaxExpression::Record(fields) => {
+        LilySyntaxExpression::Record(fields) => {
             let (rust_fields, field_maybe_types): (
                 syn::punctuated::Punctuated<syn::FieldValue, syn::token::Comma>,
-                Vec<(StillName, Option<StillType>)>,
+                Vec<(LilyName, Option<LilyType>)>,
             ) = fields
                 .iter()
                 .map(|field| {
-                    let compiled_field_value: CompiledStillExpression =
-                        maybe_still_syntax_expression_to_rust(
+                    let compiled_field_value: CompiledLilyExpression =
+                        maybe_lily_syntax_expression_to_rust(
                             errors,
-                            || StillErrorNode {
+                            || LilyErrorNode {
                                 range: field.name.range,
                                 message: Box::from(
                                     "missing field value expression after this field name",
@@ -13600,12 +13564,12 @@ fn still_syntax_expression_to_rust<'a>(
                             project_variable_declarations,
                             local_bindings.clone(),
                             closure_representation,
-                            field.value.as_ref().map(still_syntax_node_as_ref),
+                            field.value.as_ref().map(lily_syntax_node_as_ref),
                         );
                     (
                         syn::FieldValue {
                             attrs: vec![],
-                            member: syn::Member::Named(syn_ident(&still_name_to_lowercase_rust(
+                            member: syn::Member::Named(syn_ident(&lily_name_to_lowercase_rust(
                                 &field.name.value,
                             ))),
                             colon_token: Some(syn::token::Colon(syn_span())),
@@ -13615,12 +13579,12 @@ fn still_syntax_expression_to_rust<'a>(
                     )
                 })
                 .unzip();
-            let field_names: Vec<StillName> =
+            let field_names: Vec<LilyName> =
                 sorted_field_names(field_maybe_types.iter().map(|(field_name, _)| field_name));
             let rust_struct_name: String =
-                still_field_names_to_rust_record_struct_name(field_names.iter());
+                lily_field_names_to_rust_record_struct_name(field_names.iter());
             records_used.insert(field_names);
-            CompiledStillExpression {
+            CompiledLilyExpression {
                 rust: syn::Expr::Struct(syn::ExprStruct {
                     attrs: vec![],
                     qself: None,
@@ -13633,45 +13597,44 @@ fn still_syntax_expression_to_rust<'a>(
                 type_: field_maybe_types
                     .into_iter()
                     .map(|(name, maybe_value_type)| {
-                        maybe_value_type.map(|value_type| StillTypeField {
+                        maybe_value_type.map(|value_type| LilyTypeField {
                             name: name,
                             value: value_type,
                         })
                     })
-                    .collect::<Option<Vec<StillTypeField>>>()
-                    .map(StillType::Record),
+                    .collect::<Option<Vec<LilyTypeField>>>()
+                    .map(LilyType::Record),
             }
         }
-        StillSyntaxExpression::RecordUpdate {
+        LilySyntaxExpression::RecordUpdate {
             record: maybe_record_to_update,
             spread_key_symbol_range: _,
             fields,
         } => {
             let Some(record_to_update_node) = maybe_record_to_update else {
-                errors.push(StillErrorNode {
+                errors.push(LilyErrorNode {
                     range: expression_node.range,
                     message: Box::from(
                         "missing record expression to update in { ..here, ... ... }",
                     ),
                 });
-                return CompiledStillExpression {
+                return CompiledLilyExpression {
                     rust: syn_expr_todo(),
                     type_: None,
                 };
             };
-            let compiled_record_to_update: CompiledStillExpression =
-                still_syntax_expression_to_rust(
-                    errors,
-                    records_used,
-                    type_aliases,
-                    choice_types,
-                    project_variable_declarations,
-                    local_bindings.clone(),
-                    FnRepresentation::RcDyn,
-                    still_syntax_node_unbox(record_to_update_node),
-                );
+            let compiled_record_to_update: CompiledLilyExpression = lily_syntax_expression_to_rust(
+                errors,
+                records_used,
+                type_aliases,
+                choice_types,
+                project_variable_declarations,
+                local_bindings.clone(),
+                FnRepresentation::RcDyn,
+                lily_syntax_node_unbox(record_to_update_node),
+            );
             if fields.is_empty() {
-                errors.push(StillErrorNode {
+                errors.push(LilyErrorNode {
                     range: expression_node.range,
                     message: Box::from(
                         "missing fields after the record expression to update in { ..record to update.., ..here a field name.. ..here a field value.. }",
@@ -13682,16 +13645,16 @@ fn still_syntax_expression_to_rust<'a>(
             let Some(record_to_update_type) = compiled_record_to_update.type_ else {
                 return compiled_record_to_update;
             };
-            let StillType::Record(record_to_update_fields) = &record_to_update_type else {
+            let LilyType::Record(record_to_update_fields) = &record_to_update_type else {
                 let mut error_message: String = String::from(
                     "type of this record to update { ..here, ... ... } is not a record but\n",
                 );
-                still_type_info_into(&mut error_message, 0, &record_to_update_type);
-                errors.push(StillErrorNode {
+                lily_type_info_into(&mut error_message, 0, &record_to_update_type);
+                errors.push(LilyErrorNode {
                     range: record_to_update_node.range,
                     message: error_message.into_boxed_str(),
                 });
-                return CompiledStillExpression {
+                return CompiledLilyExpression {
                     rust: compiled_record_to_update.rust,
                     type_: Some(record_to_update_type),
                 };
@@ -13700,14 +13663,14 @@ fn still_syntax_expression_to_rust<'a>(
                 .iter()
                 .filter_map(|field| {
                     let Some(field_value) = &field.value else {
-                        errors.push(StillErrorNode {
+                        errors.push(LilyErrorNode {
                             range: field.name.range,
                             message: Box::from("missing field value after this field name"),
                         });
                         return None;
                     };
-                    let compiled_field_value: CompiledStillExpression =
-                        still_syntax_expression_to_rust(
+                    let compiled_field_value: CompiledLilyExpression =
+                        lily_syntax_expression_to_rust(
                             errors,
                             records_used,
                             type_aliases,
@@ -13715,7 +13678,7 @@ fn still_syntax_expression_to_rust<'a>(
                             project_variable_declarations,
                             local_bindings.clone(),
                             closure_representation,
-                            still_syntax_node_as_ref(field_value),
+                            lily_syntax_node_as_ref(field_value),
                         );
                     let Some(compiled_field_value_type) = compiled_field_value.type_ else {
                         return None;
@@ -13726,14 +13689,14 @@ fn still_syntax_expression_to_rust<'a>(
                             .find(|record_to_update_field| {
                                 record_to_update_field.name == field.name.value
                             })
-                        && let Some(field_type_diff) = still_type_diff(
+                        && let Some(field_type_diff) = lily_type_diff(
                             &record_to_update_field.value,
                             &compiled_field_value_type,
                         )
                     {
-                        errors.push(StillErrorNode {
+                        errors.push(LilyErrorNode {
                             range: field_value.range,
-                            message: (still_type_diff_error_message(&field_type_diff)
+                            message: (lily_type_diff_error_message(&field_type_diff)
                                 + "\nThe updated field value must have the same type as the field value of the updated record (mostly to prevent confusion)")
                                 .into_boxed_str(),
                         });
@@ -13741,7 +13704,7 @@ fn still_syntax_expression_to_rust<'a>(
                     }
                     Some(syn::FieldValue {
                         attrs: vec![],
-                        member: syn::Member::Named(syn_ident(&still_name_to_lowercase_rust(
+                        member: syn::Member::Named(syn_ident(&lily_name_to_lowercase_rust(
                             &field.name.value,
                         ))),
                         colon_token: Some(syn::token::Colon(syn_span())),
@@ -13750,16 +13713,16 @@ fn still_syntax_expression_to_rust<'a>(
                 })
                 .collect();
             if syn::punctuated::Punctuated::is_empty(&rust_fields) {
-                return CompiledStillExpression {
+                return CompiledLilyExpression {
                     rust: compiled_record_to_update.rust,
                     type_: Some(record_to_update_type),
                 };
             }
-            CompiledStillExpression {
+            CompiledLilyExpression {
                 rust: syn::Expr::Struct(syn::ExprStruct {
                     attrs: vec![],
                     qself: None,
-                    path: syn_path_reference([&still_field_names_to_rust_record_struct_name(
+                    path: syn_path_reference([&lily_field_names_to_rust_record_struct_name(
                         record_to_update_fields.iter().map(|field| &field.name),
                     )]),
                     brace_token: syn::token::Brace(syn_span()),
@@ -13773,62 +13736,62 @@ fn still_syntax_expression_to_rust<'a>(
     }
 }
 /// If called from outside itself, set `in_closures` to `None`
-fn still_syntax_expression_uses_of_local_bindings_into<'a>(
-    local_binding_infos: &mut std::collections::HashMap<&'a str, StillLocalBindingCompileInfo>,
+fn lily_syntax_expression_uses_of_local_bindings_into<'a>(
+    local_binding_infos: &mut std::collections::HashMap<&'a str, LilyLocalBindingCompileInfo>,
     maybe_in_closure: Option<lsp_types::Range>,
-    expression_node: StillSyntaxNode<&'a StillSyntaxExpression>,
+    expression_node: LilySyntaxNode<&'a LilySyntaxExpression>,
 ) {
     match expression_node.value {
-        StillSyntaxExpression::Char(_) => {}
-        StillSyntaxExpression::Dec(_) => {}
-        StillSyntaxExpression::Unt(_) => {}
-        StillSyntaxExpression::Int(_) => {}
-        StillSyntaxExpression::String { .. } => {}
-        StillSyntaxExpression::Parenthesized(maybe_in_parens) => {
+        LilySyntaxExpression::Char(_) => {}
+        LilySyntaxExpression::Dec(_) => {}
+        LilySyntaxExpression::Unt(_) => {}
+        LilySyntaxExpression::Int(_) => {}
+        LilySyntaxExpression::String { .. } => {}
+        LilySyntaxExpression::Parenthesized(maybe_in_parens) => {
             if let Some(in_parens_node) = maybe_in_parens {
-                still_syntax_expression_uses_of_local_bindings_into(
+                lily_syntax_expression_uses_of_local_bindings_into(
                     local_binding_infos,
                     maybe_in_closure,
-                    still_syntax_node_unbox(in_parens_node),
+                    lily_syntax_node_unbox(in_parens_node),
                 );
             }
         }
-        StillSyntaxExpression::WithComment {
+        LilySyntaxExpression::WithComment {
             comment: _,
             expression: maybe_after_comment,
         } => {
             if let Some(after_comment_node) = maybe_after_comment {
-                still_syntax_expression_uses_of_local_bindings_into(
+                lily_syntax_expression_uses_of_local_bindings_into(
                     local_binding_infos,
                     maybe_in_closure,
-                    still_syntax_node_unbox(after_comment_node),
+                    lily_syntax_node_unbox(after_comment_node),
                 );
             }
         }
-        StillSyntaxExpression::Typed {
+        LilySyntaxExpression::Typed {
             type_: _,
             closing_colon_range: _,
             expression: maybe_untyped,
         } => {
             if let Some(untyped_node) = maybe_untyped {
                 match &untyped_node.value {
-                    StillSyntaxExpressionUntyped::Variant {
+                    LilySyntaxExpressionUntyped::Variant {
                         name: _,
                         value: maybe_value,
                     } => {
                         if let Some(value_node) = maybe_value {
-                            still_syntax_expression_uses_of_local_bindings_into(
+                            lily_syntax_expression_uses_of_local_bindings_into(
                                 local_binding_infos,
                                 maybe_in_closure,
-                                still_syntax_node_unbox(value_node),
+                                lily_syntax_node_unbox(value_node),
                             );
                         }
                     }
-                    StillSyntaxExpressionUntyped::Other(other_node) => {
-                        still_syntax_expression_uses_of_local_bindings_into(
+                    LilySyntaxExpressionUntyped::Other(other_node) => {
+                        lily_syntax_expression_uses_of_local_bindings_into(
                             local_binding_infos,
                             maybe_in_closure,
-                            StillSyntaxNode {
+                            LilySyntaxNode {
                                 range: untyped_node.range,
                                 value: other_node,
                             },
@@ -13837,7 +13800,7 @@ fn still_syntax_expression_uses_of_local_bindings_into<'a>(
                 }
             }
         }
-        StillSyntaxExpression::VariableOrCall {
+        LilySyntaxExpression::VariableOrCall {
             variable: variable_node,
             arguments,
         } => {
@@ -13858,48 +13821,48 @@ fn still_syntax_expression_uses_of_local_bindings_into<'a>(
                 }
             }
             for argument_node in arguments {
-                still_syntax_expression_uses_of_local_bindings_into(
+                lily_syntax_expression_uses_of_local_bindings_into(
                     local_binding_infos,
                     maybe_in_closure,
-                    still_syntax_node_as_ref(argument_node),
+                    lily_syntax_node_as_ref(argument_node),
                 );
             }
         }
-        StillSyntaxExpression::Match {
+        LilySyntaxExpression::Match {
             matched: matched_node,
             cases,
         } => {
-            still_syntax_expression_uses_of_local_bindings_into(
+            lily_syntax_expression_uses_of_local_bindings_into(
                 local_binding_infos,
                 maybe_in_closure,
-                still_syntax_node_unbox(matched_node),
+                lily_syntax_node_unbox(matched_node),
             );
             if let Some((last_case, cases_before_last)) = cases.split_last() {
                 if let Some(last_case_result) = &last_case.result {
-                    still_syntax_expression_uses_of_local_bindings_into(
+                    lily_syntax_expression_uses_of_local_bindings_into(
                         local_binding_infos,
                         maybe_in_closure,
-                        still_syntax_node_as_ref(last_case_result),
+                        lily_syntax_node_as_ref(last_case_result),
                     );
                 }
                 // we collect last uses separately for each case because
                 // cases are not run in sequence but exclusively one of them
                 let mut local_bindings_last_uses_in_branch: std::collections::HashMap<
                     &str,
-                    StillLocalBindingCompileInfo,
+                    LilyLocalBindingCompileInfo,
                 > = std::collections::HashMap::new();
                 for case_result in cases_before_last
                     .iter()
                     .filter_map(|case| case.result.as_ref())
                 {
                     // cloning all local binding types can maybe be optimized,
-                    // e.g. by duplicating still_syntax_expression_uses_of_local_bindings_into
+                    // e.g. by duplicating lily_syntax_expression_uses_of_local_bindings_into
                     // with only the relevant info
                     local_bindings_last_uses_in_branch.extend(local_binding_infos.iter().map(
                         |(&local_binding, local_binding_info)| {
                             (
                                 local_binding,
-                                StillLocalBindingCompileInfo {
+                                LilyLocalBindingCompileInfo {
                                     type_: local_binding_info.type_.clone(),
                                     origin_range: local_binding_info.origin_range,
                                     is_copy: local_binding_info.is_copy,
@@ -13910,10 +13873,10 @@ fn still_syntax_expression_uses_of_local_bindings_into<'a>(
                             )
                         },
                     ));
-                    still_syntax_expression_uses_of_local_bindings_into(
+                    lily_syntax_expression_uses_of_local_bindings_into(
                         &mut local_bindings_last_uses_in_branch,
                         maybe_in_closure,
-                        still_syntax_node_as_ref(case_result),
+                        lily_syntax_node_as_ref(case_result),
                     );
                     for (local_binding_name, local_binding_info_in_branch) in
                         local_bindings_last_uses_in_branch.drain()
@@ -13930,100 +13893,100 @@ fn still_syntax_expression_uses_of_local_bindings_into<'a>(
                 }
             }
         }
-        StillSyntaxExpression::Lambda {
+        LilySyntaxExpression::Lambda {
             parameters: _,
             arrow_key_symbol_range: _,
             result: maybe_result,
         } => {
             if let Some(result_node) = maybe_result {
-                still_syntax_expression_uses_of_local_bindings_into(
+                lily_syntax_expression_uses_of_local_bindings_into(
                     local_binding_infos,
                     Some(maybe_in_closure.unwrap_or(expression_node.range)),
-                    still_syntax_node_unbox(result_node),
+                    lily_syntax_node_unbox(result_node),
                 );
             }
         }
-        StillSyntaxExpression::AfterLocalVariable {
+        LilySyntaxExpression::AfterLocalVariable {
             declaration: maybe_declaration,
             result: maybe_result,
         } => {
             if let Some(declaration_node) = maybe_declaration
                 && let Some(declaration_result_node) = &declaration_node.value.result
             {
-                still_syntax_expression_uses_of_local_bindings_into(
+                lily_syntax_expression_uses_of_local_bindings_into(
                     local_binding_infos,
                     maybe_in_closure,
-                    still_syntax_node_unbox(declaration_result_node),
+                    lily_syntax_node_unbox(declaration_result_node),
                 );
             }
             if let Some(result_node) = maybe_result {
-                still_syntax_expression_uses_of_local_bindings_into(
+                lily_syntax_expression_uses_of_local_bindings_into(
                     local_binding_infos,
                     maybe_in_closure,
-                    still_syntax_node_unbox(result_node),
+                    lily_syntax_node_unbox(result_node),
                 );
             }
         }
-        StillSyntaxExpression::Vec(elements) => {
+        LilySyntaxExpression::Vec(elements) => {
             for element_node in elements {
-                still_syntax_expression_uses_of_local_bindings_into(
+                lily_syntax_expression_uses_of_local_bindings_into(
                     local_binding_infos,
                     maybe_in_closure,
-                    still_syntax_node_as_ref(element_node),
+                    lily_syntax_node_as_ref(element_node),
                 );
             }
         }
-        StillSyntaxExpression::Record(fields) => {
+        LilySyntaxExpression::Record(fields) => {
             for field_vale_node in fields.iter().filter_map(|field| field.value.as_ref()) {
-                still_syntax_expression_uses_of_local_bindings_into(
+                lily_syntax_expression_uses_of_local_bindings_into(
                     local_binding_infos,
                     maybe_in_closure,
-                    still_syntax_node_as_ref(field_vale_node),
+                    lily_syntax_node_as_ref(field_vale_node),
                 );
             }
         }
-        StillSyntaxExpression::RecordUpdate {
+        LilySyntaxExpression::RecordUpdate {
             record: maybe_record,
             spread_key_symbol_range: _,
             fields,
         } => {
             for field_vale_node in fields.iter().filter_map(|field| field.value.as_ref()) {
-                still_syntax_expression_uses_of_local_bindings_into(
+                lily_syntax_expression_uses_of_local_bindings_into(
                     local_binding_infos,
                     maybe_in_closure,
-                    still_syntax_node_as_ref(field_vale_node),
+                    lily_syntax_node_as_ref(field_vale_node),
                 );
             }
             // because in rust the record to update comes after the fields
             if let Some(record_node) = maybe_record {
-                still_syntax_expression_uses_of_local_bindings_into(
+                lily_syntax_expression_uses_of_local_bindings_into(
                     local_binding_infos,
                     maybe_in_closure,
-                    still_syntax_node_unbox(record_node),
+                    lily_syntax_node_unbox(record_node),
                 );
             }
         }
     }
 }
 fn push_error_if_introduced_local_binding_collides_or_is_unused(
-    errors: &mut Vec<StillErrorNode>,
+    errors: &mut Vec<LilyErrorNode>,
     project_variable_declarations: &std::collections::HashMap<
-        StillName,
+        LilyName,
         CompiledVariableDeclarationInfo,
     >,
-    local_bindings: &std::rc::Rc<std::collections::HashMap<&str, StillLocalBindingCompileInfo>>,
+    local_bindings: &std::rc::Rc<std::collections::HashMap<&str, LilyLocalBindingCompileInfo>>,
     remove_message: &'static str,
     binding_name: &str,
-    binding_info: &StillLocalBindingCompileInfo,
+    binding_info: &LilyLocalBindingCompileInfo,
 ) {
     if project_variable_declarations.contains_key(binding_name) {
         if core_choice_type_infos.contains_key(binding_name) {
-            errors.push(StillErrorNode {
+            errors.push(LilyErrorNode {
                 range: binding_info.origin_range,
                 message: Box::from("a variable with this name is already part of core (core variables are for example int-to-str or dec-add). Rename this variable")
             });
         } else {
-            errors.push(StillErrorNode {
+            errors.push(LilyErrorNode {
                 range: binding_info.origin_range,
                 message: Box::from(
                     "a variable with this name is already declared in this project. Rename one of them",
@@ -14031,14 +13994,14 @@ fn push_error_if_introduced_local_binding_collides_or_is_unused(
             });
         }
     } else if !binding_info.overwriting && local_bindings.contains_key(binding_name) {
-        errors.push(StillErrorNode {
+        errors.push(LilyErrorNode {
             range: binding_info.origin_range,
             message: Box::from(
                 "a variable with this name is already declared locally. If this was not intended, rename one of them. If reusing an existing name and thus making that earlier variable not accessible is intended, append a ^ to the end of the variable name to explicitly shadow it.",
             ),
         });
     } else if binding_info.last_uses.is_empty() {
-        errors.push(StillErrorNode {
+        errors.push(LilyErrorNode {
             range: binding_info.origin_range,
             message: format!(
                 "variable not used in the resulting expression. Use it or {}",
@@ -14048,43 +14011,42 @@ fn push_error_if_introduced_local_binding_collides_or_is_unused(
         });
     }
 }
-fn still_syntax_local_variable_declaration_to_rust_into(
-    errors: &mut Vec<StillErrorNode>,
-    records_used: &mut std::collections::HashSet<Vec<StillName>>,
-    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
-    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
+fn lily_syntax_local_variable_declaration_to_rust_into(
+    errors: &mut Vec<LilyErrorNode>,
+    records_used: &mut std::collections::HashSet<Vec<LilyName>>,
+    type_aliases: &std::collections::HashMap<LilyName, TypeAliasInfo>,
+    choice_types: &std::collections::HashMap<LilyName, ChoiceTypeInfo>,
     project_variable_declarations: &std::collections::HashMap<
-        StillName,
+        LilyName,
         CompiledVariableDeclarationInfo,
     >,
-    local_bindings: std::rc::Rc<std::collections::HashMap<&str, StillLocalBindingCompileInfo>>,
+    local_bindings: std::rc::Rc<std::collections::HashMap<&str, LilyLocalBindingCompileInfo>>,
     closure_representation: FnRepresentation,
-    declaration_node: StillSyntaxNode<&StillSyntaxLocalVariableDeclaration>,
-    maybe_result: Option<StillSyntaxNode<&StillSyntaxExpression>>,
-) -> CompiledStillExpression {
-    let compiled_declaration_result: CompiledStillExpression =
-        maybe_still_syntax_expression_to_rust(
-            errors,
-            || StillErrorNode {
-                range: declaration_node.range,
-                message: Box::from(
-                    "missing assigned local variable declaration expression in = ..name.. here. The assigned expression might not be indented enough; it must be indented as least as much as the =",
-                ),
-            },
-            records_used,
-            type_aliases,
-            choice_types,
-            project_variable_declarations,
-            local_bindings.clone(),
-            // could be ::Impl when all uses are allocated if necessary,
-            // too much analysis with little gain I think
-            FnRepresentation::RcDyn,
-            declaration_node
-                .value
-                .result
-                .as_ref()
-                .map(still_syntax_node_unbox),
-        );
+    declaration_node: LilySyntaxNode<&LilySyntaxLocalVariableDeclaration>,
+    maybe_result: Option<LilySyntaxNode<&LilySyntaxExpression>>,
+) -> CompiledLilyExpression {
+    let compiled_declaration_result: CompiledLilyExpression = maybe_lily_syntax_expression_to_rust(
+        errors,
+        || LilyErrorNode {
+            range: declaration_node.range,
+            message: Box::from(
+                "missing assigned local variable declaration expression in = ..name.. here. The assigned expression might not be indented enough; it must be indented as least as much as the =",
+            ),
+        },
+        records_used,
+        type_aliases,
+        choice_types,
+        project_variable_declarations,
+        local_bindings.clone(),
+        // could be ::Impl when all uses are allocated if necessary,
+        // too much analysis with little gain I think
+        FnRepresentation::RcDyn,
+        declaration_node
+            .value
+            .result
+            .as_ref()
+            .map(lily_syntax_node_unbox),
+    );
     let mut rust_stmts: Vec<syn::Stmt> = Vec::with_capacity(2);
     rust_stmts.push(syn::Stmt::Local(syn::Local {
         attrs: vec![],
@@ -14097,27 +14059,25 @@ fn still_syntax_local_variable_declaration_to_rust_into(
         }),
         semi_token: syn::token::Semi(syn_span()),
     }));
-    let mut introduced_binding_infos: std::collections::HashMap<
-        &str,
-        StillLocalBindingCompileInfo,
-    > = std::collections::HashMap::from([(
-        declaration_node.value.name.value.as_str(),
-        StillLocalBindingCompileInfo {
-            origin_range: declaration_node.value.name.range,
-            is_copy: compiled_declaration_result
-                .type_
-                .as_ref()
-                .is_some_and(|result_type| {
-                    still_type_is_copy(false, type_aliases, choice_types, result_type)
-                }),
-            type_: compiled_declaration_result.type_,
-            last_uses: vec![],
-            closures_it_is_used_in: vec![],
-            overwriting: declaration_node.value.overwriting.is_some(),
-        },
-    )]);
+    let mut introduced_binding_infos: std::collections::HashMap<&str, LilyLocalBindingCompileInfo> =
+        std::collections::HashMap::from([(
+            declaration_node.value.name.value.as_str(),
+            LilyLocalBindingCompileInfo {
+                origin_range: declaration_node.value.name.range,
+                is_copy: compiled_declaration_result
+                    .type_
+                    .as_ref()
+                    .is_some_and(|result_type| {
+                        lily_type_is_copy(false, type_aliases, choice_types, result_type)
+                    }),
+                type_: compiled_declaration_result.type_,
+                last_uses: vec![],
+                closures_it_is_used_in: vec![],
+                overwriting: declaration_node.value.overwriting.is_some(),
+            },
+        )]);
     if let Some(result_node) = maybe_result {
-        still_syntax_expression_uses_of_local_bindings_into(
+        lily_syntax_expression_uses_of_local_bindings_into(
             &mut introduced_binding_infos,
             None,
             result_node,
@@ -14133,12 +14093,12 @@ fn still_syntax_local_variable_declaration_to_rust_into(
             introduced_binding_info,
         );
     }
-    let mut local_bindings: std::collections::HashMap<&str, StillLocalBindingCompileInfo> =
+    let mut local_bindings: std::collections::HashMap<&str, LilyLocalBindingCompileInfo> =
         std::rc::Rc::unwrap_or_clone(local_bindings);
     local_bindings.extend(introduced_binding_infos);
-    let maybe_result_compiled: CompiledStillExpression = maybe_still_syntax_expression_to_rust(
+    let maybe_result_compiled: CompiledLilyExpression = maybe_lily_syntax_expression_to_rust(
         errors,
-        || StillErrorNode {
+        || LilyErrorNode {
             range: declaration_node.value.name.range,
             message: Box::from(
                 "missing result expression after local variable declaration = ..name.. here",
@@ -14152,7 +14112,7 @@ fn still_syntax_local_variable_declaration_to_rust_into(
         closure_representation,
         maybe_result,
     );
-    CompiledStillExpression {
+    CompiledLilyExpression {
         type_: maybe_result_compiled.type_,
         rust: match maybe_result_compiled.rust {
             syn::Expr::Block(rust_let_result_block) => {
@@ -14181,7 +14141,7 @@ fn still_syntax_local_variable_declaration_to_rust_into(
     }
 }
 #[derive(PartialEq, Eq, Debug)]
-enum StillPatternCatch {
+enum LilyPatternCatch {
     Exhaustive,
     Unt(usize),
     Int(isize),
@@ -14190,10 +14150,10 @@ enum StillPatternCatch {
     /// invariant: all variants are never exhaustive
     // and len is >= 2
     // and only a single variant value is VariantCatch::Caught
-    Variant(std::collections::HashMap<StillName, VariantCatch<StillPatternCatch>>),
+    Variant(std::collections::HashMap<LilyName, VariantCatch<LilyPatternCatch>>),
     /// invariant: all fields are never exhaustive
     // and field count is >= 2
-    Record(std::collections::HashMap<StillName, StillPatternCatch>),
+    Record(std::collections::HashMap<LilyName, LilyPatternCatch>),
 }
 #[derive(PartialEq, Eq, Debug)]
 enum VariantCatch<Catch> {
@@ -14209,21 +14169,21 @@ enum StilCasePatternsCatch {
     Strings(Vec<String>),
     /// invariant: all variants are never exhaustive
     // and choice_type_variant_count is >= 2
-    Variants(std::collections::HashMap<StillName, VariantCatch<StilCasePatternsCatch>>),
+    Variants(std::collections::HashMap<LilyName, VariantCatch<StilCasePatternsCatch>>),
     /// invariant: all fields are never exhaustive
     // and field count is >= 2
-    Record(Vec<std::collections::HashMap<StillName, StillPatternCatch>>),
+    Record(Vec<std::collections::HashMap<LilyName, LilyPatternCatch>>),
 }
-fn still_pattern_catch_to_case_patterns_catch(
-    pattern_catch: StillPatternCatch,
+fn lily_pattern_catch_to_case_patterns_catch(
+    pattern_catch: LilyPatternCatch,
 ) -> StilCasePatternsCatch {
     match pattern_catch {
-        StillPatternCatch::Exhaustive => StilCasePatternsCatch::Exhaustive,
-        StillPatternCatch::Unt(unt) => StilCasePatternsCatch::Unts(vec![unt]),
-        StillPatternCatch::Int(int) => StilCasePatternsCatch::Ints(vec![int]),
-        StillPatternCatch::Char(char) => StilCasePatternsCatch::Chars(vec![char]),
-        StillPatternCatch::String(string) => StilCasePatternsCatch::Strings(vec![string]),
-        StillPatternCatch::Variant(variants) => StilCasePatternsCatch::Variants(
+        LilyPatternCatch::Exhaustive => StilCasePatternsCatch::Exhaustive,
+        LilyPatternCatch::Unt(unt) => StilCasePatternsCatch::Unts(vec![unt]),
+        LilyPatternCatch::Int(int) => StilCasePatternsCatch::Ints(vec![int]),
+        LilyPatternCatch::Char(char) => StilCasePatternsCatch::Chars(vec![char]),
+        LilyPatternCatch::String(string) => StilCasePatternsCatch::Strings(vec![string]),
+        LilyPatternCatch::Variant(variants) => StilCasePatternsCatch::Variants(
             variants
                 .into_iter()
                 .map(|(name, variant_catch)| {
@@ -14234,33 +14194,33 @@ fn still_pattern_catch_to_case_patterns_catch(
                                 has_value: has_value,
                             },
                             VariantCatch::Caught(value_catch) => VariantCatch::Caught(
-                                still_pattern_catch_to_case_patterns_catch(value_catch),
+                                lily_pattern_catch_to_case_patterns_catch(value_catch),
                             ),
                         },
                     )
                 })
                 .collect(),
         ),
-        StillPatternCatch::Record(fields) => StilCasePatternsCatch::Record(vec![fields]),
+        LilyPatternCatch::Record(fields) => StilCasePatternsCatch::Record(vec![fields]),
     }
 }
-fn still_pattern_catch_merge_with(
-    errors: &mut Vec<StillErrorNode>,
+fn lily_pattern_catch_merge_with(
+    errors: &mut Vec<LilyErrorNode>,
     pattern_range: lsp_types::Range,
     catch: &mut StilCasePatternsCatch,
-    new_catch: StillPatternCatch,
+    new_catch: LilyPatternCatch,
 ) {
     match catch {
         StilCasePatternsCatch::Exhaustive => {
-            errors.push(StillErrorNode { range: pattern_range, message: Box::from("unreachable pattern. All previous case patterns already exhaustively match any possible value") });
+            errors.push(LilyErrorNode { range: pattern_range, message: Box::from("unreachable pattern. All previous case patterns already exhaustively match any possible value") });
         }
         StilCasePatternsCatch::Unts(unts) => match new_catch {
-            StillPatternCatch::Exhaustive => {
+            LilyPatternCatch::Exhaustive => {
                 *catch = StilCasePatternsCatch::Exhaustive;
             }
-            StillPatternCatch::Unt(new_unt) => {
+            LilyPatternCatch::Unt(new_unt) => {
                 if unts.contains(&new_unt) {
-                    errors.push(StillErrorNode {
+                    errors.push(LilyErrorNode {
                         range: pattern_range,
                         message: Box::from("unreachable pattern. This unt is already matched by a previous case pattern"),
                     });
@@ -14271,12 +14231,12 @@ fn still_pattern_catch_merge_with(
             _ => {}
         },
         StilCasePatternsCatch::Ints(ints) => match new_catch {
-            StillPatternCatch::Exhaustive => {
+            LilyPatternCatch::Exhaustive => {
                 *catch = StilCasePatternsCatch::Exhaustive;
             }
-            StillPatternCatch::Int(new_int) => {
+            LilyPatternCatch::Int(new_int) => {
                 if ints.contains(&new_int) {
-                    errors.push(StillErrorNode {
+                    errors.push(LilyErrorNode {
                         range: pattern_range,
                         message: Box::from("unreachable pattern. This int is already matched by a previous case pattern"),
                     });
@@ -14287,12 +14247,12 @@ fn still_pattern_catch_merge_with(
             _ => {}
         },
         StilCasePatternsCatch::Chars(chars) => match new_catch {
-            StillPatternCatch::Exhaustive => {
+            LilyPatternCatch::Exhaustive => {
                 *catch = StilCasePatternsCatch::Exhaustive;
             }
-            StillPatternCatch::Char(new_char) => {
+            LilyPatternCatch::Char(new_char) => {
                 if chars.contains(&new_char) {
-                    errors.push(StillErrorNode {
+                    errors.push(LilyErrorNode {
                         range: pattern_range,
                         message: Box::from("unreachable pattern. This char is already matched by a previous case pattern"),
                     });
@@ -14303,12 +14263,12 @@ fn still_pattern_catch_merge_with(
             _ => {}
         },
         StilCasePatternsCatch::Strings(strings) => match new_catch {
-            StillPatternCatch::Exhaustive => {
+            LilyPatternCatch::Exhaustive => {
                 *catch = StilCasePatternsCatch::Exhaustive;
             }
-            StillPatternCatch::String(new_string) => {
+            LilyPatternCatch::String(new_string) => {
                 if strings.contains(&new_string) {
-                    errors.push(StillErrorNode {
+                    errors.push(LilyErrorNode {
                         range: pattern_range,
                         message: Box::from("unreachable pattern. This string is already matched by a previous case pattern"),
                     });
@@ -14319,10 +14279,10 @@ fn still_pattern_catch_merge_with(
             _ => {}
         },
         StilCasePatternsCatch::Variants(variants) => match new_catch {
-            StillPatternCatch::Exhaustive => {
+            LilyPatternCatch::Exhaustive => {
                 *catch = StilCasePatternsCatch::Exhaustive;
             }
-            StillPatternCatch::Variant(new_variants) => {
+            LilyPatternCatch::Variant(new_variants) => {
                 if let Some((new_variant_name, new_variant_caught)) = new_variants
                     .into_iter()
                     .find_map(
@@ -14337,13 +14297,13 @@ fn still_pattern_catch_merge_with(
                 {
                     match previous_catch_of_new_variant {
                         VariantCatch::Caught(StilCasePatternsCatch::Exhaustive) => {
-                            errors.push(StillErrorNode {
+                            errors.push(LilyErrorNode {
                             range: pattern_range,
                             message: Box::from("this pattern is unreachable as it's already matched by a previous case pattern"),
                         });
                         }
                         VariantCatch::Caught(previous_caught_of_new_variant) => {
-                            still_pattern_catch_merge_with(
+                            lily_pattern_catch_merge_with(
                                 errors,
                                 pattern_range,
                                 previous_caught_of_new_variant,
@@ -14358,7 +14318,7 @@ fn still_pattern_catch_merge_with(
                         }
                         VariantCatch::Uncaught { .. } => {
                             *previous_catch_of_new_variant = VariantCatch::Caught(
-                                still_pattern_catch_to_case_patterns_catch(new_variant_caught),
+                                lily_pattern_catch_to_case_patterns_catch(new_variant_caught),
                             );
                             if variants.values().all(|variant_catch| {
                                 variant_catch
@@ -14373,28 +14333,28 @@ fn still_pattern_catch_merge_with(
             _ => {}
         },
         StilCasePatternsCatch::Record(possibilities) => match new_catch {
-            StillPatternCatch::Exhaustive => {
+            LilyPatternCatch::Exhaustive => {
                 *catch = StilCasePatternsCatch::Exhaustive;
             }
-            StillPatternCatch::Record(new_possibility) => {
+            LilyPatternCatch::Record(new_possibility) => {
                 if possibilities.iter().any(|record_possibility| {
                     record_possibility
                         .values()
                         .zip(new_possibility.values())
                         .all(|(possibility_field_value, new_possibility_field_value)| {
-                            still_pattern_catch_catches_all_of_still_pattern_catch(
+                            lily_pattern_catch_catches_all_of_lily_pattern_catch(
                                 possibility_field_value,
                                 new_possibility_field_value,
                             )
                         })
                 }) {
-                    errors.push(StillErrorNode {
+                    errors.push(LilyErrorNode {
                         range: pattern_range,
                         message: Box::from("this pattern is unreachable as it's already matched by a previous case pattern"),
                     });
                 } else {
                     possibilities.push(new_possibility);
-                    if still_case_patterns_catch_record_is_exhaustive(possibilities) {
+                    if lily_case_patterns_catch_record_is_exhaustive(possibilities) {
                         *catch = StilCasePatternsCatch::Exhaustive;
                     }
                 }
@@ -14403,24 +14363,24 @@ fn still_pattern_catch_merge_with(
         },
     }
 }
-fn still_pattern_catch_catches_all_of_still_pattern_catch(
-    catch: &StillPatternCatch,
-    to_check: &StillPatternCatch,
+fn lily_pattern_catch_catches_all_of_lily_pattern_catch(
+    catch: &LilyPatternCatch,
+    to_check: &LilyPatternCatch,
 ) -> bool {
     match catch {
-        StillPatternCatch::Exhaustive => true,
-        StillPatternCatch::Unt(unt) => to_check == &StillPatternCatch::Unt(*unt),
-        StillPatternCatch::Int(int) => to_check == &StillPatternCatch::Int(*int),
-        StillPatternCatch::Char(char) => to_check == &StillPatternCatch::Char(*char),
-        StillPatternCatch::String(string) => {
-            if let StillPatternCatch::String(string_to_check) = to_check {
+        LilyPatternCatch::Exhaustive => true,
+        LilyPatternCatch::Unt(unt) => to_check == &LilyPatternCatch::Unt(*unt),
+        LilyPatternCatch::Int(int) => to_check == &LilyPatternCatch::Int(*int),
+        LilyPatternCatch::Char(char) => to_check == &LilyPatternCatch::Char(*char),
+        LilyPatternCatch::String(string) => {
+            if let LilyPatternCatch::String(string_to_check) = to_check {
                 string_to_check == string
             } else {
                 false
             }
         }
-        StillPatternCatch::Variant(variants) => {
-            if let StillPatternCatch::Variant(variants_to_check) = to_check {
+        LilyPatternCatch::Variant(variants) => {
+            if let LilyPatternCatch::Variant(variants_to_check) = to_check {
                 variants.values().zip(variants_to_check.values()).all(
                     |(variant_catch, variant_catch_to_check)| match (
                         variant_catch,
@@ -14432,7 +14392,7 @@ fn still_pattern_catch_catches_all_of_still_pattern_catch(
                         (
                             VariantCatch::Caught(variant_value),
                             VariantCatch::Caught(variant_value_to_check),
-                        ) => still_pattern_catch_catches_all_of_still_pattern_catch(
+                        ) => lily_pattern_catch_catches_all_of_lily_pattern_catch(
                             variant_value,
                             variant_value_to_check,
                         ),
@@ -14442,11 +14402,11 @@ fn still_pattern_catch_catches_all_of_still_pattern_catch(
                 false
             }
         }
-        StillPatternCatch::Record(fields) => {
-            if let StillPatternCatch::Record(fields_to_check) = to_check {
+        LilyPatternCatch::Record(fields) => {
+            if let LilyPatternCatch::Record(fields_to_check) = to_check {
                 fields.values().zip(fields_to_check.values()).all(
                     |(field_value, field_value_to_check)| {
-                        still_pattern_catch_catches_all_of_still_pattern_catch(
+                        lily_pattern_catch_catches_all_of_lily_pattern_catch(
                             field_value,
                             field_value_to_check,
                         )
@@ -14459,20 +14419,20 @@ fn still_pattern_catch_catches_all_of_still_pattern_catch(
     }
 }
 
-enum StillPatternCatchPossibilitiesSplit<'a> {
+enum LilyPatternCatchPossibilitiesSplit<'a> {
     Infinite,
     // consider adding example pattern
-    ByVariant(std::collections::HashMap<StillName, Vec<Vec<&'a StillPatternCatch>>>),
+    ByVariant(std::collections::HashMap<LilyName, Vec<Vec<&'a LilyPatternCatch>>>),
     WithAdditionalFieldValues {
         field_count: usize,
-        possibilities: Vec<Vec<&'a StillPatternCatch>>,
+        possibilities: Vec<Vec<&'a LilyPatternCatch>>,
     },
-    AllExhaustive(Vec<Vec<&'a StillPatternCatch>>),
+    AllExhaustive(Vec<Vec<&'a LilyPatternCatch>>),
 }
-fn still_case_patterns_catch_record_is_exhaustive(
-    record_possibilities: &[std::collections::HashMap<StillName, StillPatternCatch>],
+fn lily_case_patterns_catch_record_is_exhaustive(
+    record_possibilities: &[std::collections::HashMap<LilyName, LilyPatternCatch>],
 ) -> bool {
-    still_possibilities_of_pattern_catches_are_exhaustive(
+    lily_possibilities_of_pattern_catches_are_exhaustive(
         // it's unfortunate that we need to allocate here,
         // since rust runs into an "reached the recursion limit while instantiating"
         // error when instantiating Iterators (recursively)
@@ -14508,46 +14468,46 @@ fn still_case_patterns_catch_record_is_exhaustive(
 /// when all patterns on index 0 are variable or ignore patterns
 /// repeat until the patterns on index 0 together aren't exhaustive (return false) or
 /// all remaining cases are exhaustive (return true)
-fn still_possibilities_of_pattern_catches_are_exhaustive<'a>(
-    possibilities_of_pattern_catches: &'a [Vec<&'a StillPatternCatch>],
+fn lily_possibilities_of_pattern_catches_are_exhaustive<'a>(
+    possibilities_of_pattern_catches: &'a [Vec<&'a LilyPatternCatch>],
 ) -> bool {
-    let maybe_split: Option<StillPatternCatchPossibilitiesSplit> = possibilities_of_pattern_catches.iter()
+    let maybe_split: Option<LilyPatternCatchPossibilitiesSplit> = possibilities_of_pattern_catches.iter()
         .fold(None, |mut maybe_so_far, possibility_values| {
             match possibility_values.split_first() {
                 None => maybe_so_far,
                 Some((first_value_catch, remaining_value_catches)) => {
                     match first_value_catch {
-                        StillPatternCatch::Exhaustive => {
+                        LilyPatternCatch::Exhaustive => {
                             match &mut maybe_so_far {
-                                None | Some(StillPatternCatchPossibilitiesSplit::Infinite) => {
-                                    Some(StillPatternCatchPossibilitiesSplit::AllExhaustive(vec![remaining_value_catches.to_vec()]))
+                                None | Some(LilyPatternCatchPossibilitiesSplit::Infinite) => {
+                                    Some(LilyPatternCatchPossibilitiesSplit::AllExhaustive(vec![remaining_value_catches.to_vec()]))
                                 }
-                                Some(StillPatternCatchPossibilitiesSplit::AllExhaustive(possibilities)) => {
+                                Some(LilyPatternCatchPossibilitiesSplit::AllExhaustive(possibilities)) => {
                                     possibilities.push(remaining_value_catches.to_vec());
                                     maybe_so_far
                                 }
-                                Some(StillPatternCatchPossibilitiesSplit::WithAdditionalFieldValues { field_count, possibilities }) => {
-                                    possibilities.push(std::iter::repeat_n(&StillPatternCatch::Exhaustive, *field_count).chain(remaining_value_catches.iter().copied()).collect());
+                                Some(LilyPatternCatchPossibilitiesSplit::WithAdditionalFieldValues { field_count, possibilities }) => {
+                                    possibilities.push(std::iter::repeat_n(&LilyPatternCatch::Exhaustive, *field_count).chain(remaining_value_catches.iter().copied()).collect());
                                     maybe_so_far
                                 }
-                                Some(StillPatternCatchPossibilitiesSplit::ByVariant(possibilities_by_variant)) => {
+                                Some(LilyPatternCatchPossibilitiesSplit::ByVariant(possibilities_by_variant)) => {
                                     for possibilities_for_variant in possibilities_by_variant.values_mut() {
-                                        possibilities_for_variant.push(std::iter::once(&StillPatternCatch::Exhaustive).chain(remaining_value_catches.iter().copied()).collect());
+                                        possibilities_for_variant.push(std::iter::once(&LilyPatternCatch::Exhaustive).chain(remaining_value_catches.iter().copied()).collect());
                                     }
                                     maybe_so_far
                                 }
                             }
                         }
-                        StillPatternCatch::Unt(_)
-                        | StillPatternCatch::Int(_)
-                        | StillPatternCatch::Char(_)
-                        | StillPatternCatch::String(_) => {
+                        LilyPatternCatch::Unt(_)
+                        | LilyPatternCatch::Int(_)
+                        | LilyPatternCatch::Char(_)
+                        | LilyPatternCatch::String(_) => {
                             // discard any possibilities where first is in Infinite,
                             // as only possibilities which matche all of the Infinite possible values
                             // is relevant one for exhaustiveness checking
-                            Some(StillPatternCatchPossibilitiesSplit::Infinite)
+                            Some(LilyPatternCatchPossibilitiesSplit::Infinite)
                         }
-                        StillPatternCatch::Variant(first_field_value_variants) => {
+                        LilyPatternCatch::Variant(first_field_value_variants) => {
                             let Some((
                                 first_field_value_variant_name,
                                 first_field_value_variant_value_catch,
@@ -14567,15 +14527,15 @@ fn still_possibilities_of_pattern_catches_are_exhaustive<'a>(
                             else {
                                 return maybe_so_far;
                             };
-                            let new_possibility_for_variant: Vec<&StillPatternCatch> =
+                            let new_possibility_for_variant: Vec<&LilyPatternCatch> =
                                 std::iter::once(first_field_value_variant_value_catch)
                                     .chain(remaining_value_catches.iter().copied())
                                     .collect();
                             match &mut maybe_so_far {
                                 None => {
                                     let mut by_variant_empty: std::collections::HashMap<
-                                        StillName,
-                                        Vec<Vec<&StillPatternCatch>>,
+                                        LilyName,
+                                        Vec<Vec<&LilyPatternCatch>>,
                                     > = first_field_value_variants
                                         .keys()
                                         .map(|variant_name| (variant_name.clone(), vec![]))
@@ -14586,11 +14546,11 @@ fn still_possibilities_of_pattern_catches_are_exhaustive<'a>(
                                         first_field_value_variant_possibilities
                                             .push(new_possibility_for_variant);
                                     }
-                                    Some(StillPatternCatchPossibilitiesSplit::ByVariant(
+                                    Some(LilyPatternCatchPossibilitiesSplit::ByVariant(
                                         by_variant_empty,
                                     ))
                                 }
-                                Some(StillPatternCatchPossibilitiesSplit::ByVariant(
+                                Some(LilyPatternCatchPossibilitiesSplit::ByVariant(
                                     so_far_by_variant,
                                 )) => {
                                     if let Some(variant_possibilities_so_far) =
@@ -14601,17 +14561,17 @@ fn still_possibilities_of_pattern_catches_are_exhaustive<'a>(
                                     }
                                     maybe_so_far
                                 }
-                                Some(StillPatternCatchPossibilitiesSplit::AllExhaustive(possibilities)) => {
-                                    let possibilities_for_each_variant: Vec<Vec<&StillPatternCatch>> =
+                                Some(LilyPatternCatchPossibilitiesSplit::AllExhaustive(possibilities)) => {
+                                    let possibilities_for_each_variant: Vec<Vec<&LilyPatternCatch>> =
                                         possibilities.iter().map(|possibility|
-                                            std::iter::once(&StillPatternCatch::Exhaustive)
+                                            std::iter::once(&LilyPatternCatch::Exhaustive)
                                                 .chain(possibility.iter().copied())
                                                 .collect()
                                         )
                                         .collect();
                                     let mut by_variant_empty: std::collections::HashMap<
-                                        StillName,
-                                        Vec<Vec<&StillPatternCatch>>,
+                                        LilyName,
+                                        Vec<Vec<&LilyPatternCatch>>,
                                     > = first_field_value_variants
                                         .keys()
                                         .map(|variant_name| (variant_name.clone(), possibilities_for_each_variant.clone()))
@@ -14622,40 +14582,40 @@ fn still_possibilities_of_pattern_catches_are_exhaustive<'a>(
                                         first_field_value_variant_possibilities
                                             .push(new_possibility_for_variant);
                                     }
-                                    Some(StillPatternCatchPossibilitiesSplit::ByVariant(
+                                    Some(LilyPatternCatchPossibilitiesSplit::ByVariant(
                                         by_variant_empty,
                                     ))
                                 }
                                 // type error
-                                Some(StillPatternCatchPossibilitiesSplit::WithAdditionalFieldValues {..}) => maybe_so_far,
-                                Some(StillPatternCatchPossibilitiesSplit::Infinite) => maybe_so_far,
+                                Some(LilyPatternCatchPossibilitiesSplit::WithAdditionalFieldValues {..}) => maybe_so_far,
+                                Some(LilyPatternCatchPossibilitiesSplit::Infinite) => maybe_so_far,
                             }
                         }
-                        StillPatternCatch::Record(first_field_value_fields) => {
-                            let new_possibility_for_record: Vec<&StillPatternCatch> =
+                        LilyPatternCatch::Record(first_field_value_fields) => {
+                            let new_possibility_for_record: Vec<&LilyPatternCatch> =
                                 first_field_value_fields.values()
                                     .chain(remaining_value_catches.iter().copied())
                                     .collect();
                             match &mut maybe_so_far {
                                 None => {
-                                    Some(StillPatternCatchPossibilitiesSplit::WithAdditionalFieldValues {
+                                    Some(LilyPatternCatchPossibilitiesSplit::WithAdditionalFieldValues {
                                         field_count: first_field_value_fields.len(),
                                         possibilities: vec![new_possibility_for_record],
                                     })
                                 }
-                                Some(StillPatternCatchPossibilitiesSplit::WithAdditionalFieldValues
+                                Some(LilyPatternCatchPossibilitiesSplit::WithAdditionalFieldValues
                                     {possibilities: with_record_field_values_possibilities_so_far, field_count:_},
                                 ) => {
                                     with_record_field_values_possibilities_so_far
                                         .push(new_possibility_for_record);
                                     maybe_so_far
                                 }
-                                Some(StillPatternCatchPossibilitiesSplit::AllExhaustive(possibilities)) => {
-                                    Some(StillPatternCatchPossibilitiesSplit::WithAdditionalFieldValues {
+                                Some(LilyPatternCatchPossibilitiesSplit::AllExhaustive(possibilities)) => {
+                                    Some(LilyPatternCatchPossibilitiesSplit::WithAdditionalFieldValues {
                                         field_count: first_field_value_fields.len(),
                                         possibilities: std::iter::once(new_possibility_for_record)
                                             .chain(possibilities.iter().map(|possibility|
-                                                std::iter::repeat_n(&StillPatternCatch::Exhaustive, first_field_value_fields.len())
+                                                std::iter::repeat_n(&LilyPatternCatch::Exhaustive, first_field_value_fields.len())
                                                     .chain(possibility.iter().copied())
                                                     .collect()
                                             ))
@@ -14663,8 +14623,8 @@ fn still_possibilities_of_pattern_catches_are_exhaustive<'a>(
                                     })
                                 }
                                 // type error
-                                Some(StillPatternCatchPossibilitiesSplit::ByVariant(_)) => maybe_so_far,
-                                Some(StillPatternCatchPossibilitiesSplit::Infinite) => maybe_so_far,
+                                Some(LilyPatternCatchPossibilitiesSplit::ByVariant(_)) => maybe_so_far,
+                                Some(LilyPatternCatchPossibilitiesSplit::Infinite) => maybe_so_far,
                             }
                         }
                     }
@@ -14677,54 +14637,54 @@ fn still_possibilities_of_pattern_catches_are_exhaustive<'a>(
             false
         }
         Some(split) => match split {
-            StillPatternCatchPossibilitiesSplit::Infinite => false,
-            StillPatternCatchPossibilitiesSplit::ByVariant(possibilities_by_variant) => {
+            LilyPatternCatchPossibilitiesSplit::Infinite => false,
+            LilyPatternCatchPossibilitiesSplit::ByVariant(possibilities_by_variant) => {
                 possibilities_by_variant
                     .values()
                     .all(|possibilities_for_variant| {
-                        still_possibilities_of_pattern_catches_are_exhaustive(
+                        lily_possibilities_of_pattern_catches_are_exhaustive(
                             possibilities_for_variant,
                         )
                     })
             }
-            StillPatternCatchPossibilitiesSplit::AllExhaustive(possibilities) => {
+            LilyPatternCatchPossibilitiesSplit::AllExhaustive(possibilities) => {
                 // a more performant way to check this
                 // would be setting an "input was empty" bool
                 if possibilities.iter().all(Vec::is_empty) {
                     return true;
                 }
-                still_possibilities_of_pattern_catches_are_exhaustive(&possibilities)
+                lily_possibilities_of_pattern_catches_are_exhaustive(&possibilities)
             }
-            StillPatternCatchPossibilitiesSplit::WithAdditionalFieldValues {
+            LilyPatternCatchPossibilitiesSplit::WithAdditionalFieldValues {
                 field_count: _,
                 possibilities,
-            } => still_possibilities_of_pattern_catches_are_exhaustive(&possibilities),
+            } => lily_possibilities_of_pattern_catches_are_exhaustive(&possibilities),
         },
     }
 }
 
-fn maybe_still_syntax_pattern_to_rust<'a>(
-    errors: &mut Vec<StillErrorNode>,
-    error_on_none: impl FnOnce() -> StillErrorNode,
-    records_used: &mut std::collections::HashSet<Vec<StillName>>,
+fn maybe_lily_syntax_pattern_to_rust<'a>(
+    errors: &mut Vec<LilyErrorNode>,
+    error_on_none: impl FnOnce() -> LilyErrorNode,
+    records_used: &mut std::collections::HashSet<Vec<LilyName>>,
     introduced_str_bindings_to_match: &mut Vec<(lsp_types::Range, &'a str)>,
-    introduced_bindings: &mut std::collections::HashMap<&'a str, StillLocalBindingCompileInfo>,
+    introduced_bindings: &mut std::collections::HashMap<&'a str, LilyLocalBindingCompileInfo>,
     bindings_to_clone: &mut Vec<BindingToClone<'a>>,
-    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
-    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
+    type_aliases: &std::collections::HashMap<LilyName, TypeAliasInfo>,
+    choice_types: &std::collections::HashMap<LilyName, ChoiceTypeInfo>,
     is_reference: bool,
-    maybe_pattern_node: Option<StillSyntaxNode<&'a StillSyntaxPattern>>,
-) -> CompiledStillPattern {
+    maybe_pattern_node: Option<LilySyntaxNode<&'a LilySyntaxPattern>>,
+) -> CompiledLilyPattern {
     match maybe_pattern_node {
         None => {
             errors.push(error_on_none());
-            CompiledStillPattern {
+            CompiledLilyPattern {
                 rust: None,
                 type_: None,
                 catch: None,
             }
         }
-        Some(pattern_node) => still_syntax_pattern_to_rust(
+        Some(pattern_node) => lily_syntax_pattern_to_rust(
             errors,
             records_used,
             introduced_str_bindings_to_match,
@@ -14737,54 +14697,54 @@ fn maybe_still_syntax_pattern_to_rust<'a>(
         ),
     }
 }
-fn still_syntax_type_to_type(
-    errors: &mut Vec<StillErrorNode>,
-    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
-    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
-    type_node: StillSyntaxNode<&StillSyntaxType>,
-) -> Option<StillType> {
+fn lily_syntax_type_to_type(
+    errors: &mut Vec<LilyErrorNode>,
+    type_aliases: &std::collections::HashMap<LilyName, TypeAliasInfo>,
+    choice_types: &std::collections::HashMap<LilyName, ChoiceTypeInfo>,
+    type_node: LilySyntaxNode<&LilySyntaxType>,
+) -> Option<LilyType> {
     match type_node.value {
-        StillSyntaxType::Variable(name) => Some(StillType::Variable(name.clone())),
-        StillSyntaxType::Parenthesized(maybe_in_parens) => match maybe_in_parens {
+        LilySyntaxType::Variable(name) => Some(LilyType::Variable(name.clone())),
+        LilySyntaxType::Parenthesized(maybe_in_parens) => match maybe_in_parens {
             None => {
-                errors.push(StillErrorNode {
+                errors.push(LilyErrorNode {
                     range: type_node.range,
                     message: Box::from("missing type inside these parens (here)"),
                 });
                 None
             }
-            Some(in_parens_node) => still_syntax_type_to_type(
+            Some(in_parens_node) => lily_syntax_type_to_type(
                 errors,
                 type_aliases,
                 choice_types,
-                still_syntax_node_unbox(in_parens_node),
+                lily_syntax_node_unbox(in_parens_node),
             ),
         },
-        StillSyntaxType::WithComment {
+        LilySyntaxType::WithComment {
             comment: _,
             type_: maybe_after_comment,
         } => match maybe_after_comment {
             None => {
-                errors.push(StillErrorNode {
+                errors.push(LilyErrorNode {
                     range: type_node.range,
                     message: Box::from("missing type after this comment # ... \\n here"),
                 });
                 None
             }
-            Some(after_comment_node) => still_syntax_type_to_type(
+            Some(after_comment_node) => lily_syntax_type_to_type(
                 errors,
                 type_aliases,
                 choice_types,
-                still_syntax_node_unbox(after_comment_node),
+                lily_syntax_node_unbox(after_comment_node),
             ),
         },
-        StillSyntaxType::Function {
+        LilySyntaxType::Function {
             inputs,
             arrow_key_symbol_range: _,
             output: maybe_output,
         } => {
             let Some(output_node) = maybe_output else {
-                errors.push(StillErrorNode {
+                errors.push(LilyErrorNode {
                     range: type_node.range,
                     message: Box::from(
                         "missing output type after these inputs and arrow \\..inputs.. > here",
@@ -14793,46 +14753,46 @@ fn still_syntax_type_to_type(
                 return None;
             };
             if inputs.is_empty() {
-                errors.push(StillErrorNode {
+                errors.push(LilyErrorNode {
                     range: type_node.range,
                     message: Box::from("missing input types \\here > ..output.."),
                 });
                 return None;
             }
-            let input_types: Vec<StillType> = inputs
+            let input_types: Vec<LilyType> = inputs
                 .iter()
                 .map(|input_node| {
-                    still_syntax_type_to_type(
+                    lily_syntax_type_to_type(
                         errors,
                         type_aliases,
                         choice_types,
-                        still_syntax_node_as_ref(input_node),
+                        lily_syntax_node_as_ref(input_node),
                     )
                 })
                 .collect::<Option<Vec<_>>>()?;
-            let output_type: StillType = still_syntax_type_to_type(
+            let output_type: LilyType = lily_syntax_type_to_type(
                 errors,
                 type_aliases,
                 choice_types,
-                still_syntax_node_unbox(output_node),
+                lily_syntax_node_unbox(output_node),
             )?;
-            Some(StillType::Function {
+            Some(LilyType::Function {
                 inputs: input_types,
                 output: Box::new(output_type),
             })
         }
-        StillSyntaxType::Construct {
+        LilySyntaxType::Construct {
             name: name_node,
             arguments,
         } => {
-            let argument_types: Vec<StillType> = arguments
+            let argument_types: Vec<LilyType> = arguments
                 .iter()
                 .map(|argument_node| {
-                    still_syntax_type_to_type(
+                    lily_syntax_type_to_type(
                         errors,
                         type_aliases,
                         choice_types,
-                        still_syntax_node_as_ref(argument_node),
+                        lily_syntax_node_as_ref(argument_node),
                     )
                 })
                 .collect::<Option<Vec<_>>>()?;
@@ -14840,7 +14800,7 @@ fn still_syntax_type_to_type(
                 match origin_type_alias.parameters.len().cmp(&arguments.len()) {
                     std::cmp::Ordering::Equal => {}
                     std::cmp::Ordering::Less => {
-                        errors.push(StillErrorNode {
+                        errors.push(LilyErrorNode {
                             range: name_node.range,
                             message: format!(
                                 "this type alias has {} less parameters than arguments are provided here.",
@@ -14850,7 +14810,7 @@ fn still_syntax_type_to_type(
                         return None;
                     }
                     std::cmp::Ordering::Greater => {
-                        errors.push(StillErrorNode {
+                        errors.push(LilyErrorNode {
                             range: name_node.range,
                             message: format!(
                                 "this type alias has {} more parameters than arguments are provided here. The additional parameters are called {}",
@@ -14861,10 +14821,10 @@ fn still_syntax_type_to_type(
                         // later arguments will be ignored
                     }
                 }
-                return still_type_construct_resolve_type_alias(origin_type_alias, &argument_types);
+                return lily_type_construct_resolve_type_alias(origin_type_alias, &argument_types);
             }
             let Some(origin_choice_type) = choice_types.get(&name_node.value) else {
-                errors.push(StillErrorNode {
+                errors.push(LilyErrorNode {
                     range: name_node.range,
                     message: Box::from("no type alias or choice type is declared with this name"),
                 });
@@ -14873,7 +14833,7 @@ fn still_syntax_type_to_type(
             match origin_choice_type.parameters.len().cmp(&arguments.len()) {
                 std::cmp::Ordering::Equal => {}
                 std::cmp::Ordering::Less => {
-                    errors.push(StillErrorNode {
+                    errors.push(LilyErrorNode {
                         range: name_node.range,
                         message: format!(
                             "this choice type has {} less parameters than arguments are provided here.",
@@ -14883,7 +14843,7 @@ fn still_syntax_type_to_type(
                     return None;
                 }
                 std::cmp::Ordering::Greater => {
-                    errors.push(StillErrorNode {
+                    errors.push(LilyErrorNode {
                         range: name_node.range,
                         message: format!(
                             "this choice type has {} more parameters than arguments are provided here. The additional parameters are called {}",
@@ -14894,20 +14854,20 @@ fn still_syntax_type_to_type(
                     // later arguments will be ignored
                 }
             }
-            Some(StillType::ChoiceConstruct {
+            Some(LilyType::ChoiceConstruct {
                 name: name_node.value.clone(),
                 arguments: argument_types,
             })
         }
-        StillSyntaxType::Record(fields) => {
-            let mut field_types: Vec<StillTypeField> = Vec::with_capacity(fields.capacity());
+        LilySyntaxType::Record(fields) => {
+            let mut field_types: Vec<LilyTypeField> = Vec::with_capacity(fields.capacity());
             let mut any_field_value_has_error: bool = false;
             for field in fields {
                 if field_types
                     .iter()
                     .any(|type_field| type_field.name == field.name.value)
                 {
-                    errors.push(StillErrorNode {
+                    errors.push(LilyErrorNode {
                         range: field.name.range,
                         message: Box::from(
                             "a field with this name already exists in the record type",
@@ -14916,7 +14876,7 @@ fn still_syntax_type_to_type(
                     return None;
                 }
                 let Some(field_value_node) = &field.value else {
-                    errors.push(StillErrorNode {
+                    errors.push(LilyErrorNode {
                         range: field.name.range,
                         message: Box::from(
                             "missing field value after this name ..field-name.. here",
@@ -14924,17 +14884,17 @@ fn still_syntax_type_to_type(
                     });
                     return None;
                 };
-                match still_syntax_type_to_type(
+                match lily_syntax_type_to_type(
                     errors,
                     type_aliases,
                     choice_types,
-                    still_syntax_node_as_ref(field_value_node),
+                    lily_syntax_node_as_ref(field_value_node),
                 ) {
                     None => {
                         any_field_value_has_error = true;
                     }
                     Some(field_value_type) => {
-                        field_types.push(StillTypeField {
+                        field_types.push(LilyTypeField {
                             name: field.name.value.clone(),
                             value: field_value_type,
                         });
@@ -14944,7 +14904,7 @@ fn still_syntax_type_to_type(
             if any_field_value_has_error {
                 return None;
             }
-            Some(StillType::Record(field_types))
+            Some(LilyType::Record(field_types))
         }
     }
 }
@@ -14952,31 +14912,31 @@ struct BindingToClone<'a> {
     name: &'a str,
     is_copy: bool,
 }
-/// TODO should be `Option<{ type_: StillSype, catch: StillPatternCatch, rust: Option<syn::Pat> (or not option) }>`
+/// TODO should be `Option<{ type_: LilySype, catch: LilyPatternCatch, rust: Option<syn::Pat> (or not option) }>`
 /// as an untyped pattern should never exist
-struct CompiledStillPattern {
+struct CompiledLilyPattern {
     // None means it should be ignored (e.g. in a case of that case should be removed)
     rust: Option<syn::Pat>,
-    type_: Option<StillType>,
-    catch: Option<StillPatternCatch>,
+    type_: Option<LilyType>,
+    catch: Option<LilyPatternCatch>,
 }
-fn still_syntax_pattern_to_rust<'a>(
-    errors: &mut Vec<StillErrorNode>,
-    records_used: &mut std::collections::HashSet<Vec<StillName>>,
+fn lily_syntax_pattern_to_rust<'a>(
+    errors: &mut Vec<LilyErrorNode>,
+    records_used: &mut std::collections::HashSet<Vec<LilyName>>,
     introduced_str_bindings_to_match: &mut Vec<(lsp_types::Range, &'a str)>,
-    introduced_bindings: &mut std::collections::HashMap<&'a str, StillLocalBindingCompileInfo>,
+    introduced_bindings: &mut std::collections::HashMap<&'a str, LilyLocalBindingCompileInfo>,
     bindings_to_clone: &mut Vec<BindingToClone<'a>>,
-    type_aliases: &std::collections::HashMap<StillName, TypeAliasInfo>,
-    choice_types: &std::collections::HashMap<StillName, ChoiceTypeInfo>,
+    type_aliases: &std::collections::HashMap<LilyName, TypeAliasInfo>,
+    choice_types: &std::collections::HashMap<LilyName, ChoiceTypeInfo>,
     is_reference: bool,
-    pattern_node: StillSyntaxNode<&'a StillSyntaxPattern>,
-) -> CompiledStillPattern {
+    pattern_node: LilySyntaxNode<&'a LilySyntaxPattern>,
+) -> CompiledLilyPattern {
     match &pattern_node.value {
-        StillSyntaxPattern::Char(maybe_char) => CompiledStillPattern {
-            type_: Some(still_type_char),
+        LilySyntaxPattern::Char(maybe_char) => CompiledLilyPattern {
+            type_: Some(lily_type_char),
             rust: match *maybe_char {
                 None => {
-                    errors.push(StillErrorNode {
+                    errors.push(LilyErrorNode {
                         range: pattern_node.range,
                         message: Box::from("missing character between 'here'"),
                     });
@@ -14987,17 +14947,17 @@ fn still_syntax_pattern_to_rust<'a>(
                     lit: syn::Lit::Char(syn::LitChar::new(char_value, syn_span())),
                 })),
             },
-            catch: maybe_char.map(StillPatternCatch::Char),
+            catch: maybe_char.map(LilyPatternCatch::Char),
         },
-        StillSyntaxPattern::Unt(representation) => CompiledStillPattern {
-            type_: Some(still_type_unt),
+        LilySyntaxPattern::Unt(representation) => CompiledLilyPattern {
+            type_: Some(lily_type_unt),
             rust: match representation.parse::<usize>() {
                 Ok(int) => Some(syn::Pat::Lit(syn::ExprLit {
                     attrs: vec![],
                     lit: syn::Lit::Int(syn::LitInt::new(&int.to_string(), syn_span())),
                 })),
                 Err(parse_error) => {
-                    errors.push(StillErrorNode {
+                    errors.push(LilyErrorNode {
                         range: pattern_node.range,
                         message: format!(
                             "invalid int format. Expected base 10 whole number like -123 or 0: {parse_error}"
@@ -15009,23 +14969,23 @@ fn still_syntax_pattern_to_rust<'a>(
             catch: representation
                 .parse::<usize>()
                 .ok()
-                .map(StillPatternCatch::Unt),
+                .map(LilyPatternCatch::Unt),
         },
-        StillSyntaxPattern::Int(int_syntax) => CompiledStillPattern {
-            type_: Some(still_type_int),
+        LilySyntaxPattern::Int(int_syntax) => CompiledLilyPattern {
+            type_: Some(lily_type_int),
             rust: match int_syntax {
-                StillSyntaxInt::Zero => Some(syn::Pat::Lit(syn::ExprLit {
+                LilySyntaxInt::Zero => Some(syn::Pat::Lit(syn::ExprLit {
                     attrs: vec![],
                     lit: syn::Lit::Int(syn::LitInt::new("0isize", syn_span())),
                 })),
-                StillSyntaxInt::Signed(signed_representation) => {
+                LilySyntaxInt::Signed(signed_representation) => {
                     match signed_representation.parse::<isize>() {
                         Ok(int) => Some(syn::Pat::Lit(syn::ExprLit {
                             attrs: vec![],
                             lit: syn::Lit::Int(syn::LitInt::new(&int.to_string(), syn_span())),
                         })),
                         Err(parse_error) => {
-                            errors.push(StillErrorNode {
+                            errors.push(LilyErrorNode {
                         range: pattern_node.range,
                         message: format!(
                             "invalid int format. Expected base 10 whole number like -123 or 0: {parse_error}"
@@ -15037,36 +14997,36 @@ fn still_syntax_pattern_to_rust<'a>(
                 }
             },
             catch: match int_syntax {
-                StillSyntaxInt::Zero => Some(StillPatternCatch::Int(0)),
-                StillSyntaxInt::Signed(signed_representation) => signed_representation
+                LilySyntaxInt::Zero => Some(LilyPatternCatch::Int(0)),
+                LilySyntaxInt::Signed(signed_representation) => signed_representation
                     .parse::<isize>()
                     .ok()
-                    .map(StillPatternCatch::Int),
+                    .map(LilyPatternCatch::Int),
             },
         },
-        StillSyntaxPattern::String {
+        LilySyntaxPattern::String {
             content,
             quoting_style: _,
         } => {
             introduced_str_bindings_to_match.push((pattern_node.range, content));
-            CompiledStillPattern {
-                type_: Some(still_type_str),
+            CompiledLilyPattern {
+                type_: Some(lily_type_str),
                 rust: Some(syn::Pat::Ident(syn::PatIdent {
                     attrs: vec![],
                     by_ref: Some(syn::token::Ref(syn_span())),
                     mutability: None,
-                    ident: syn_ident(&still_str_binding_name(pattern_node.range)),
+                    ident: syn_ident(&lily_str_binding_name(pattern_node.range)),
                     subpat: None,
                 })),
-                catch: Some(StillPatternCatch::String(content.clone())),
+                catch: Some(LilyPatternCatch::String(content.clone())),
             }
         }
-        StillSyntaxPattern::WithComment {
+        LilySyntaxPattern::WithComment {
             comment: _,
             pattern: maybe_after_comment,
-        } => maybe_still_syntax_pattern_to_rust(
+        } => maybe_lily_syntax_pattern_to_rust(
             errors,
-            || StillErrorNode {
+            || LilyErrorNode {
                 range: pattern_node.range,
                 message: Box::from("missing pattern after comment # ...\\n here"),
             },
@@ -15077,16 +15037,16 @@ fn still_syntax_pattern_to_rust<'a>(
             type_aliases,
             choice_types,
             is_reference,
-            maybe_after_comment.as_ref().map(still_syntax_node_unbox),
+            maybe_after_comment.as_ref().map(lily_syntax_node_unbox),
         ),
-        StillSyntaxPattern::Typed {
+        LilySyntaxPattern::Typed {
             type_: maybe_type_node,
             closing_colon_range: maybe_closing_colon_range,
             pattern: maybe_in_typed,
         } => {
-            let maybe_type: Option<StillType> = match maybe_type_node {
+            let maybe_type: Option<LilyType> = match maybe_type_node {
                 None => {
-                    errors.push(StillErrorNode {
+                    errors.push(LilyErrorNode {
                         range: lsp_types::Range {
                             start: pattern_node.range.start,
                             end: maybe_closing_colon_range.map(|r| r.end).unwrap_or_else(|| {
@@ -15097,35 +15057,35 @@ fn still_syntax_pattern_to_rust<'a>(
                     });
                     None
                 }
-                Some(type_node) => still_syntax_type_to_type(
+                Some(type_node) => lily_syntax_type_to_type(
                     errors,
                     type_aliases,
                     choice_types,
-                    still_syntax_node_as_ref(type_node),
+                    lily_syntax_node_as_ref(type_node),
                 ),
             };
             let Some(untyped_pattern_node) = maybe_in_typed else {
-                errors.push(StillErrorNode {
+                errors.push(LilyErrorNode {
                     range: (*maybe_closing_colon_range).or_else(|| maybe_type_node.as_ref().map(|n| n.range)).unwrap_or(pattern_node.range),
                     message: Box::from("missing pattern after type :...: here. To ignore he incoming value, use _, otherwise give it a lowercase name or specify a variant. Any other patterns are not allowed"),
                 });
-                return CompiledStillPattern {
+                return CompiledLilyPattern {
                     rust: Some(syn_pat_wild()),
                     type_: maybe_type,
                     catch: None,
                 };
             };
             match &untyped_pattern_node.value {
-                StillSyntaxPatternUntyped::Variable { overwriting, name } => {
+                LilySyntaxPatternUntyped::Variable { overwriting, name } => {
                     let maybe_existing_pattern_variable_with_same_name_info: Option<
-                        StillLocalBindingCompileInfo,
+                        LilyLocalBindingCompileInfo,
                     > = introduced_bindings.insert(
                         name,
-                        StillLocalBindingCompileInfo {
+                        LilyLocalBindingCompileInfo {
                             origin_range: untyped_pattern_node.range,
                             overwriting: *overwriting,
                             is_copy: maybe_type.as_ref().is_some_and(|type_| {
-                                still_type_is_copy(false, type_aliases, choice_types, type_)
+                                lily_type_is_copy(false, type_aliases, choice_types, type_)
                             }),
                             type_: maybe_type.clone(),
                             last_uses: vec![],
@@ -15133,14 +15093,14 @@ fn still_syntax_pattern_to_rust<'a>(
                         },
                     );
                     if maybe_existing_pattern_variable_with_same_name_info.is_some() {
-                        errors.push(StillErrorNode {
+                        errors.push(LilyErrorNode {
                             range: untyped_pattern_node.range,
                             message: Box::from("a variable with this name is already used in another part of the patterns. Rename one of them")
                         });
                     }
                     let is_not_reference_or_copy: bool = !is_reference
                         || maybe_type.as_ref().is_some_and(|type_| {
-                            still_type_is_copy(false, type_aliases, choice_types, type_)
+                            lily_type_is_copy(false, type_aliases, choice_types, type_)
                         });
                     if is_reference {
                         bindings_to_clone.push(BindingToClone {
@@ -15148,7 +15108,7 @@ fn still_syntax_pattern_to_rust<'a>(
                             is_copy: is_not_reference_or_copy,
                         });
                     }
-                    CompiledStillPattern {
+                    CompiledLilyPattern {
                         rust: Some(syn::Pat::Ident(syn::PatIdent {
                             attrs: vec![],
                             by_ref: if is_not_reference_or_copy {
@@ -15157,39 +15117,39 @@ fn still_syntax_pattern_to_rust<'a>(
                                 Some(syn::token::Ref(syn_span()))
                             },
                             mutability: None,
-                            ident: syn_ident(&still_name_to_lowercase_rust(name)),
+                            ident: syn_ident(&lily_name_to_lowercase_rust(name)),
                             subpat: None,
                         })),
                         type_: maybe_type,
-                        catch: Some(StillPatternCatch::Exhaustive),
+                        catch: Some(LilyPatternCatch::Exhaustive),
                     }
                 }
-                StillSyntaxPatternUntyped::Ignored => CompiledStillPattern {
+                LilySyntaxPatternUntyped::Ignored => CompiledLilyPattern {
                     rust: Some(syn_pat_wild()),
                     type_: maybe_type,
-                    catch: Some(StillPatternCatch::Exhaustive),
+                    catch: Some(LilyPatternCatch::Exhaustive),
                 },
-                StillSyntaxPatternUntyped::Variant {
+                LilySyntaxPatternUntyped::Variant {
                     name: name_node,
                     value: maybe_value,
                 } => {
                     let Some(type_) = maybe_type else {
-                        return CompiledStillPattern {
+                        return CompiledLilyPattern {
                             rust: None,
                             type_: None,
                             catch: None,
                         };
                     };
-                    let StillType::ChoiceConstruct {
+                    let LilyType::ChoiceConstruct {
                         name: origin_choice_type_name,
                         arguments: origin_choice_type_arguments,
                     } = &type_
                     else {
-                        errors.push(StillErrorNode {
+                        errors.push(LilyErrorNode {
                             range: maybe_type_node.as_ref().map(|n| n.range).unwrap_or(pattern_node.range),
                             message: Box::from("type in :here: is not a choice type which is necessary for a variant pattern"),
                         });
-                        return CompiledStillPattern {
+                        return CompiledLilyPattern {
                             rust: None,
                             type_: None,
                             catch: None,
@@ -15198,7 +15158,7 @@ fn still_syntax_pattern_to_rust<'a>(
                     let Some(origin_choice_type_info) =
                         choice_types.get(origin_choice_type_name.as_str())
                     else {
-                        return CompiledStillPattern {
+                        return CompiledLilyPattern {
                             rust: None,
                             type_: None,
                             catch: None,
@@ -15211,7 +15171,7 @@ fn still_syntax_pattern_to_rust<'a>(
                             origin_choice_type_variant.name == name_node.value
                         })
                     else {
-                        errors.push(StillErrorNode {
+                        errors.push(LilyErrorNode {
                             range: name_node.range,
                             message: format!(
                                 "the type in :here: is a choice type \"{}\" which is does not declare a variant with this name. Valid variant names are: {}. If you expected this variant name to be valid, check the origin choice type for errors",
@@ -15219,15 +15179,15 @@ fn still_syntax_pattern_to_rust<'a>(
                                 origin_choice_type_info.type_variants.iter().map(|variant| variant.name.as_str()).collect::<Vec<&str>>().join(", ")
                             ).into_boxed_str()
                         });
-                        return CompiledStillPattern {
+                        return CompiledLilyPattern {
                             rust: None,
                             type_: None,
                             catch: None,
                         };
                     };
                     let rust_variant_path: syn::Path = syn_path_reference([
-                        &still_name_to_uppercase_rust(origin_choice_type_name),
-                        &still_name_to_uppercase_rust(&name_node.value),
+                        &lily_name_to_uppercase_rust(origin_choice_type_name),
+                        &lily_name_to_uppercase_rust(&name_node.value),
                     ]);
                     match maybe_value.as_ref() {
                         None => {
@@ -15235,22 +15195,22 @@ fn still_syntax_pattern_to_rust<'a>(
                                 let mut error_message: String = String::from(
                                     "this variant is missing its value. In the origin choice declaration, it's type is declared as\n",
                                 );
-                                still_type_info_into(
+                                lily_type_info_into(
                                     &mut error_message,
                                     0,
                                     &declared_variant_value_type.type_,
                                 );
-                                errors.push(StillErrorNode {
+                                errors.push(LilyErrorNode {
                                     range: name_node.range,
                                     message: error_message.into_boxed_str(),
                                 });
-                                return CompiledStillPattern {
+                                return CompiledLilyPattern {
                                     rust: None,
                                     type_: None,
                                     catch: None,
                                 };
                             }
-                            CompiledStillPattern {
+                            CompiledLilyPattern {
                                 rust: Some(syn::Pat::Path(syn::ExprPath {
                                     attrs: vec![],
                                     qself: None,
@@ -15258,9 +15218,9 @@ fn still_syntax_pattern_to_rust<'a>(
                                 })),
                                 type_: Some(type_),
                                 catch: Some(if origin_choice_type_info.type_variants.len() == 1 {
-                                    StillPatternCatch::Exhaustive
+                                    LilyPatternCatch::Exhaustive
                                 } else {
-                                    StillPatternCatch::Variant(
+                                    LilyPatternCatch::Variant(
                                         origin_choice_type_info
                                             .type_variants
                                             .iter()
@@ -15269,7 +15229,7 @@ fn still_syntax_pattern_to_rust<'a>(
                                                     variant_info.name.clone(),
                                                     if variant_info.name == name_node.value {
                                                         VariantCatch::Caught(
-                                                            StillPatternCatch::Exhaustive,
+                                                            LilyPatternCatch::Exhaustive,
                                                         )
                                                     } else {
                                                         VariantCatch::Uncaught {
@@ -15286,13 +15246,13 @@ fn still_syntax_pattern_to_rust<'a>(
                         Some(value_node) => {
                             let Some(declared_variant_value_info) = &origin_variant_info.value
                             else {
-                                errors.push(StillErrorNode {
+                                errors.push(LilyErrorNode {
                                     range: name_node.range,
                                     message: Box::from(
                                         "extraneous variant value. This variant's declaration has no declared value. Remove this extra value or correct its origin choice type declaration",
                                     ),
                                 });
-                                return CompiledStillPattern {
+                                return CompiledLilyPattern {
                                     type_: Some(type_),
                                     rust: Some(syn::Pat::Path(syn::ExprPath {
                                         attrs: vec![],
@@ -15301,9 +15261,9 @@ fn still_syntax_pattern_to_rust<'a>(
                                     })),
                                     catch: Some(
                                         if origin_choice_type_info.type_variants.len() == 1 {
-                                            StillPatternCatch::Exhaustive
+                                            LilyPatternCatch::Exhaustive
                                         } else {
-                                            StillPatternCatch::Variant(
+                                            LilyPatternCatch::Variant(
                                                 origin_choice_type_info
                                                     .type_variants
                                                     .iter()
@@ -15313,7 +15273,7 @@ fn still_syntax_pattern_to_rust<'a>(
                                                             if variant_info.name == name_node.value
                                                             {
                                                                 VariantCatch::Caught(
-                                                                    StillPatternCatch::Exhaustive,
+                                                                    LilyPatternCatch::Exhaustive,
                                                                 )
                                                             } else {
                                                                 VariantCatch::Uncaught {
@@ -15330,7 +15290,7 @@ fn still_syntax_pattern_to_rust<'a>(
                                     ),
                                 };
                             };
-                            let compiled_value: CompiledStillPattern = still_syntax_pattern_to_rust(
+                            let compiled_value: CompiledLilyPattern = lily_syntax_pattern_to_rust(
                                 errors,
                                 records_used,
                                 introduced_str_bindings_to_match,
@@ -15340,12 +15300,12 @@ fn still_syntax_pattern_to_rust<'a>(
                                 choice_types,
                                 is_reference
                                     || declared_variant_value_info.constructs_recursive_type,
-                                still_syntax_node_unbox(value_node),
+                                lily_syntax_node_unbox(value_node),
                             );
                             if let Some(actual_value_type) = &compiled_value.type_ {
-                                let mut variant_value_type: StillType =
+                                let mut variant_value_type: LilyType =
                                     declared_variant_value_info.type_.clone();
-                                still_type_replace_variables(
+                                lily_type_replace_variables(
                                     &origin_choice_type_info
                                         .parameters
                                         .iter()
@@ -15357,16 +15317,16 @@ fn still_syntax_pattern_to_rust<'a>(
                                     &mut variant_value_type,
                                 );
                                 if let Some(variant_value_type_diff) =
-                                    still_type_diff(&variant_value_type, actual_value_type)
+                                    lily_type_diff(&variant_value_type, actual_value_type)
                                 {
-                                    errors.push(StillErrorNode {
+                                    errors.push(LilyErrorNode {
                                         range: value_node.range,
-                                        message: still_type_diff_error_message(
+                                        message: lily_type_diff_error_message(
                                             &variant_value_type_diff,
                                         )
                                         .into_boxed_str(),
                                     });
-                                    return CompiledStillPattern {
+                                    return CompiledLilyPattern {
                                         rust: None,
                                         type_: None,
                                         catch: None,
@@ -15374,13 +15334,13 @@ fn still_syntax_pattern_to_rust<'a>(
                                 }
                             }
                             let Some(value_rust_pattern) = compiled_value.rust else {
-                                return CompiledStillPattern {
+                                return CompiledLilyPattern {
                                     rust: None,
                                     type_: Some(type_),
                                     catch: None,
                                 };
                             };
-                            CompiledStillPattern {
+                            CompiledLilyPattern {
                                 rust: Some(syn::Pat::TupleStruct(syn::PatTupleStruct {
                                     attrs: vec![],
                                     qself: None,
@@ -15418,8 +15378,8 @@ fn still_syntax_pattern_to_rust<'a>(
                                         value_catch
                                     } else {
                                         let mut variants: std::collections::HashMap<
-                                            StillName,
-                                            VariantCatch<StillPatternCatch>,
+                                            LilyName,
+                                            VariantCatch<LilyPatternCatch>,
                                         > = origin_choice_type_info
                                             .type_variants
                                             .iter()
@@ -15437,14 +15397,14 @@ fn still_syntax_pattern_to_rust<'a>(
                                         {
                                             *variant_catch = VariantCatch::Caught(value_catch);
                                         }
-                                        StillPatternCatch::Variant(variants)
+                                        LilyPatternCatch::Variant(variants)
                                     }
                                 }),
                             }
                         }
                     }
                 }
-                StillSyntaxPatternUntyped::Other(other_in_typed) => still_syntax_pattern_to_rust(
+                LilySyntaxPatternUntyped::Other(other_in_typed) => lily_syntax_pattern_to_rust(
                     errors,
                     records_used,
                     introduced_str_bindings_to_match,
@@ -15453,18 +15413,18 @@ fn still_syntax_pattern_to_rust<'a>(
                     type_aliases,
                     choice_types,
                     is_reference,
-                    StillSyntaxNode {
+                    LilySyntaxNode {
                         range: untyped_pattern_node.range,
                         value: other_in_typed,
                     },
                 ),
             }
         }
-        StillSyntaxPattern::Record(fields) => {
-            let mut maybe_type_fields: Option<Vec<StillTypeField>> =
+        LilySyntaxPattern::Record(fields) => {
+            let mut maybe_type_fields: Option<Vec<LilyTypeField>> =
                 Some(Vec::with_capacity(fields.len()));
             let mut maybe_field_catches: Option<
-                std::collections::HashMap<StillName, StillPatternCatch>,
+                std::collections::HashMap<LilyName, LilyPatternCatch>,
             > = Some(std::collections::HashMap::with_capacity(fields.len()));
             let mut maybe_rust_fields: Option<
                 syn::punctuated::Punctuated<syn::FieldPat, syn::token::Comma>,
@@ -15475,7 +15435,7 @@ fn still_syntax_pattern_to_rust<'a>(
                         .iter()
                         .any(|type_field| type_field.name == field.name.value)
                 }) {
-                    errors.push(StillErrorNode {
+                    errors.push(LilyErrorNode {
                         range: field.name.range,
                         message: Box::from(
                             "a field with this name already exists in the record pattern",
@@ -15483,9 +15443,9 @@ fn still_syntax_pattern_to_rust<'a>(
                     });
                     continue 'converting_fields;
                 }
-                let compiled_field_value: CompiledStillPattern = maybe_still_syntax_pattern_to_rust(
+                let compiled_field_value: CompiledLilyPattern = maybe_lily_syntax_pattern_to_rust(
                     errors,
-                    || StillErrorNode {
+                    || LilyErrorNode {
                         range: field.name.range,
                         message: Box::from("missing field value after this name"),
                     },
@@ -15496,7 +15456,7 @@ fn still_syntax_pattern_to_rust<'a>(
                     type_aliases,
                     choice_types,
                     is_reference,
-                    field.value.as_ref().map(still_syntax_node_as_ref),
+                    field.value.as_ref().map(lily_syntax_node_as_ref),
                 );
                 if let Some(ref mut type_fields) = maybe_type_fields {
                     match compiled_field_value.type_ {
@@ -15504,7 +15464,7 @@ fn still_syntax_pattern_to_rust<'a>(
                             maybe_type_fields = None;
                         }
                         Some(field_value_type) => {
-                            type_fields.push(StillTypeField {
+                            type_fields.push(LilyTypeField {
                                 name: field.name.value.clone(),
                                 value: field_value_type,
                             });
@@ -15530,7 +15490,7 @@ fn still_syntax_pattern_to_rust<'a>(
                             rust_fields.push(syn::FieldPat {
                                 attrs: vec![],
                                 member: syn::Member::Named(syn_ident(
-                                    &still_name_to_lowercase_rust(&field.name.value),
+                                    &lily_name_to_lowercase_rust(&field.name.value),
                                 )),
                                 colon_token: Some(syn::token::Colon(syn_span())),
                                 pat: Box::new(field_value_rust),
@@ -15544,13 +15504,13 @@ fn still_syntax_pattern_to_rust<'a>(
                     type_fields.iter().map(|field| &field.name),
                 ));
             }
-            CompiledStillPattern {
-                type_: maybe_type_fields.map(|type_fields| StillType::Record(type_fields)),
+            CompiledLilyPattern {
+                type_: maybe_type_fields.map(|type_fields| LilyType::Record(type_fields)),
                 rust: maybe_rust_fields.map(|field_values_rust| {
                     syn::Pat::Struct(syn::PatStruct {
                         attrs: vec![],
                         qself: None,
-                        path: syn_path_reference([&still_field_names_to_rust_record_struct_name(
+                        path: syn_path_reference([&lily_field_names_to_rust_record_struct_name(
                             fields.iter().map(|field| &field.name.value),
                         )]),
                         brace_token: syn::token::Brace(syn_span()),
@@ -15560,18 +15520,18 @@ fn still_syntax_pattern_to_rust<'a>(
                 }),
                 catch: maybe_field_catches.map(|field_catches| {
                     if field_catches.iter().all(|(_, field_value_catch)| {
-                        field_value_catch == &StillPatternCatch::Exhaustive
+                        field_value_catch == &LilyPatternCatch::Exhaustive
                     }) {
-                        StillPatternCatch::Exhaustive
+                        LilyPatternCatch::Exhaustive
                     } else {
-                        StillPatternCatch::Record(field_catches)
+                        LilyPatternCatch::Record(field_catches)
                     }
                 }),
             }
         }
     }
 }
-fn still_str_binding_name(range: lsp_types::Range) -> String {
+fn lily_str_binding_name(range: lsp_types::Range) -> String {
     format!("strø_{}_{}", range.start.line, range.start.character)
 }
 fn bindings_to_clone_to_rust_into(
@@ -15601,7 +15561,7 @@ fn bindings_to_clone_to_rust_into(
         })
     }));
 }
-fn still_name_to_uppercase_rust(name: &str) -> String {
+fn lily_name_to_uppercase_rust(name: &str) -> String {
     let mut sanitized: String = name.replace("-", "_");
     if let Some(first) = sanitized.get_mut(0..=0) {
         first.make_ascii_uppercase();
@@ -15633,7 +15593,7 @@ fn still_name_to_uppercase_rust(name: &str) -> String {
         sanitized
     }
 }
-fn still_name_to_lowercase_rust(name: &str) -> String {
+fn lily_name_to_lowercase_rust(name: &str) -> String {
     let mut sanitized: String = name.replace("-", "_");
     if let Some(first) = sanitized.get_mut(0..=0) {
         first.make_ascii_lowercase();
@@ -15703,20 +15663,20 @@ const rust_lowercase_keywords: [&str; 55] = [
     "safe",
     "union",
 ];
-fn still_type_variable_to_rust(name: &str) -> String {
+fn lily_type_variable_to_rust(name: &str) -> String {
     // to disambiguate from choice type and type alias names
-    still_name_to_uppercase_rust(name) + "ø"
+    lily_name_to_uppercase_rust(name) + "ø"
 }
-fn still_field_names_to_rust_record_struct_name<'a>(
-    field_names: impl Iterator<Item = &'a StillName>,
+fn lily_field_names_to_rust_record_struct_name<'a>(
+    field_names: impl Iterator<Item = &'a LilyName>,
 ) -> String {
     let mut rust_field_names_vec: Vec<String> = field_names
-        .map(|field_name| still_name_to_lowercase_rust(field_name))
+        .map(|field_name| lily_name_to_lowercase_rust(field_name))
         .collect::<Vec<_>>();
     rust_field_names_vec.sort_unstable();
     /*
     field names in the final type can
-    not just separated by _ or __ because still identifiers are
+    not just separated by _ or __ because lily identifiers are
     allowed to contain multiple consecutive -s.
 
     Below solution would work without harder to type
@@ -15803,7 +15763,7 @@ fn syn_pat_variable(name: &str) -> syn::Pat {
         attrs: vec![],
         by_ref: None,
         mutability: None,
-        ident: syn_ident(&still_name_to_lowercase_rust(name)),
+        ident: syn_ident(&lily_name_to_lowercase_rust(name)),
         subpat: None,
     })
 }
