@@ -1,5 +1,5 @@
 very small, explicitly boring, purely functional programming language that compiles to rust, inspired by [elm](https://elm-lang.org/).
-> ⚠️ Experimental, subject to change, use with caution.
+> ready for small projects, not for production
 
 ### hello world
 ```lily
