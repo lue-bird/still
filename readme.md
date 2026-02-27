@@ -48,7 +48,7 @@ Then point your editor to `lily lsp`, see also [specific setups](#editor-setups)
 
   → faster type checking, clear errors, a few less bugs, easy compilation to almost any language
 
-- no blocking compile errors. You can always build, even if your record is lily missing a field value, your matching is lily inexhaustive, some parens are empty, etc.
+- no blocking compile errors. You can always build, even if your record is still missing a field value, your matching is still inexhaustive, some parens are empty, etc.
   You will lily see all the errors, though.
 
 - no features that obfuscate ("shiny, cool features" that ruin languages in my opinion): infix operators, currying, traits/type classes/overloading, objects, task/async, hidden mutation, macros & reflection, lifetime tracking, hidden side effects, modules, hidden context values, exceptions, undefined
@@ -178,7 +178,7 @@ Regular types are passed by value, copying if necessary.
 `vec`, `str`, recursive variant values and closures however can be reference-counted,
 so passing structures containing them will clone if necessary.
 Reference-counting some `vec`s and `str`s enables a very important "trick":
-Mutating the underlying owned vector or string if only one instance is lily alive.
+Mutating the underlying owned vector or string if only one instance is still alive.
 
 ### why rust
 Massive piggyback: great stdlib, fast output, good ecosystem, much easier to compile to: native enum support, native pattern matching support, extensive compile-time checks, all that is gold.
