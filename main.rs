@@ -722,9 +722,7 @@ fn respond_to_hover(
             name: hovered_name,
             local_bindings,
         } => {
-            if let Some(hovered_local_binding_info) =
-                local_bindings.get(hovered_name.as_str())
-            {
+            if let Some(hovered_local_binding_info) = local_bindings.get(hovered_name.as_str()) {
                 return Some(lsp_types::Hover {
                     contents: lsp_types::HoverContents::Markup(lsp_types::MarkupContent {
                         kind: lsp_types::MarkupKind::Markdown,
@@ -1013,9 +1011,7 @@ fn respond_to_goto_definition(
             name: goto_name,
             local_bindings,
         } => {
-            if let Some(goto_local_binding_info) =
-                local_bindings.get(goto_name.as_str())
-            {
+            if let Some(goto_local_binding_info) = local_bindings.get(goto_name.as_str()) {
                 return Some(lsp_types::GotoDefinitionResponse::Scalar(
                     lsp_types::Location {
                         uri: goto_definition_arguments
@@ -1340,27 +1336,29 @@ fn respond_to_rename(
         LilySyntaxSymbol::LocalVariableDeclarationName {
             name: to_rename_name,
             type_: _,
-            scope_expression,
+            scope_expression: maybe_scope_expression,
         } => {
             let mut all_uses_of_local_variable_declaration_to_rename: Vec<lsp_types::Range> =
-                Vec::with_capacity(2);
-            lily_syntax_expression_uses_of_symbol_into(
-                &mut all_uses_of_local_variable_declaration_to_rename,
-                &to_prepare_for_rename_project_state.type_aliases,
-                &[to_rename_name],
-                scope_expression,
-                LilySymbolToReference::LocalBinding {
-                    name: to_rename_name,
-                    including_local_declaration_name: true,
-                },
-            );
+                Vec::with_capacity(1);
+            if let Some(scope_expression) = maybe_scope_expression {
+                lily_syntax_expression_uses_of_symbol_into(
+                    &mut all_uses_of_local_variable_declaration_to_rename,
+                    &to_prepare_for_rename_project_state.type_aliases,
+                    &[to_rename_name],
+                    scope_expression,
+                    LilySymbolToReference::LocalBinding {
+                        name: to_rename_name,
+                        including_local_declaration_name: true,
+                    },
+                );
+            }
             Some(vec![lsp_types::TextDocumentEdit {
                 text_document: lsp_types::OptionalVersionedTextDocumentIdentifier {
                     uri: rename_arguments.text_document_position.text_document.uri,
                     version: None,
                 },
-                edits: all_uses_of_local_variable_declaration_to_rename
-                    .into_iter()
+                edits: std::iter::once(symbol_to_rename_node.range)
+                    .chain(all_uses_of_local_variable_declaration_to_rename.into_iter())
                     .map(|use_range_of_renamed_project| {
                         lsp_types::OneOf::Left(lsp_types::TextEdit {
                             range: use_range_of_renamed_project,
@@ -1374,43 +1372,39 @@ fn respond_to_rename(
             name: to_rename_name,
             local_bindings,
         } => {
-            if let Some(to_rename_local_binding_info) =
-                local_bindings.get(to_rename_name.as_str())
+            if let Some(to_rename_local_binding_info) = local_bindings.get(to_rename_name.as_str())
             {
                 let mut all_uses_of_local_binding_to_rename: Vec<lsp_types::Range> =
-                    Vec::with_capacity(3);
-                match to_rename_local_binding_info.origin {
-                    LocalBindingOrigin::PatternVariable(range) => {
-                        all_uses_of_local_binding_to_rename.push(range);
-                    }
-                    LocalBindingOrigin::LocalDeclaredVariable { .. } => {
-                        // already included in scope expression
-                    }
+                    Vec::with_capacity(2);
+                if let Some(scope_expression) = to_rename_local_binding_info.scope_expression {
+                    lily_syntax_expression_uses_of_symbol_into(
+                        &mut all_uses_of_local_binding_to_rename,
+                        &to_prepare_for_rename_project_state.type_aliases,
+                        &[to_rename_name],
+                        scope_expression,
+                        LilySymbolToReference::LocalBinding {
+                            name: to_rename_name,
+                            including_local_declaration_name: true,
+                        },
+                    );
                 }
-                lily_syntax_expression_uses_of_symbol_into(
-                    &mut all_uses_of_local_binding_to_rename,
-                    &to_prepare_for_rename_project_state.type_aliases,
-                    &[to_rename_name],
-                    to_rename_local_binding_info.scope_expression,
-                    LilySymbolToReference::LocalBinding {
-                        name: to_rename_name,
-                        including_local_declaration_name: true,
-                    },
-                );
                 Some(vec![lsp_types::TextDocumentEdit {
                     text_document: lsp_types::OptionalVersionedTextDocumentIdentifier {
                         uri: rename_arguments.text_document_position.text_document.uri,
                         version: None,
                     },
-                    edits: all_uses_of_local_binding_to_rename
-                        .into_iter()
-                        .map(|use_range_of_renamed_project| {
-                            lsp_types::OneOf::Left(lsp_types::TextEdit {
-                                range: use_range_of_renamed_project,
-                                new_text: rename_arguments.new_name.clone(),
-                            })
+                    edits: std::iter::once(match to_rename_local_binding_info.origin {
+                        LocalBindingOrigin::PatternVariable(range) => range,
+                        LocalBindingOrigin::LocalDeclaredVariable { name_range } => name_range,
+                    })
+                    .chain(all_uses_of_local_binding_to_rename.into_iter())
+                    .map(|use_range_of_renamed_project| {
+                        lsp_types::OneOf::Left(lsp_types::TextEdit {
+                            range: use_range_of_renamed_project,
+                            new_text: rename_arguments.new_name.clone(),
                         })
-                        .collect::<Vec<_>>(),
+                    })
+                    .collect::<Vec<_>>(),
                 }])
             } else {
                 let symbol_to_find: LilySymbolToReference = LilySymbolToReference::Variable {
@@ -1629,22 +1623,27 @@ fn respond_to_references(
         LilySyntaxSymbol::LocalVariableDeclarationName {
             name: to_find_name,
             type_: _,
-            scope_expression,
+            scope_expression: maybe_scope_expression,
         } => {
             let mut all_uses_of_found_local_variable_declaration: Vec<lsp_types::Range> =
                 Vec::with_capacity(2);
-            lily_syntax_expression_uses_of_symbol_into(
-                &mut all_uses_of_found_local_variable_declaration,
-                &to_find_project_state.type_aliases,
-                &[to_find_name],
-                scope_expression,
-                LilySymbolToReference::LocalBinding {
-                    name: to_find_name,
-                    including_local_declaration_name: references_arguments
-                        .context
-                        .include_declaration,
-                },
-            );
+            if references_arguments.context.include_declaration {
+                all_uses_of_found_local_variable_declaration.push(symbol_to_find_node.range);
+            }
+            if let Some(scope_expression) = maybe_scope_expression {
+                lily_syntax_expression_uses_of_symbol_into(
+                    &mut all_uses_of_found_local_variable_declaration,
+                    &to_find_project_state.type_aliases,
+                    &[to_find_name],
+                    scope_expression,
+                    LilySymbolToReference::LocalBinding {
+                        name: to_find_name,
+                        including_local_declaration_name: references_arguments
+                            .context
+                            .include_declaration,
+                    },
+                );
+            }
             Some(
                 all_uses_of_found_local_variable_declaration
                     .into_iter()
@@ -1663,33 +1662,29 @@ fn respond_to_references(
             name: to_find_name,
             local_bindings,
         } => {
-            if let Some(to_find_local_binding_info) =
-                local_bindings.get(to_find_name.as_str())
-            {
+            if let Some(to_find_local_binding_info) = local_bindings.get(to_find_name.as_str()) {
                 let mut all_uses_of_found_local_binding: Vec<lsp_types::Range> =
                     Vec::with_capacity(2);
                 if references_arguments.context.include_declaration {
-                    match to_find_local_binding_info.origin {
-                        LocalBindingOrigin::PatternVariable(range) => {
-                            all_uses_of_found_local_binding.push(range);
-                        }
-                        LocalBindingOrigin::LocalDeclaredVariable { .. } => {
-                            // already included in scope
-                        }
-                    }
+                    all_uses_of_found_local_binding.push(match to_find_local_binding_info.origin {
+                        LocalBindingOrigin::PatternVariable(range) => range,
+                        LocalBindingOrigin::LocalDeclaredVariable { name_range } => name_range,
+                    });
                 }
-                lily_syntax_expression_uses_of_symbol_into(
-                    &mut all_uses_of_found_local_binding,
-                    &to_find_project_state.type_aliases,
-                    &[to_find_name],
-                    to_find_local_binding_info.scope_expression,
-                    LilySymbolToReference::LocalBinding {
-                        name: to_find_name,
-                        including_local_declaration_name: references_arguments
-                            .context
-                            .include_declaration,
-                    },
-                );
+                if let Some(scope_expression) = to_find_local_binding_info.scope_expression {
+                    lily_syntax_expression_uses_of_symbol_into(
+                        &mut all_uses_of_found_local_binding,
+                        &to_find_project_state.type_aliases,
+                        &[to_find_name],
+                        scope_expression,
+                        LilySymbolToReference::LocalBinding {
+                            name: to_find_name,
+                            including_local_declaration_name: references_arguments
+                                .context
+                                .include_declaration,
+                        },
+                    );
+                }
                 Some(
                     all_uses_of_found_local_binding
                         .into_iter()
@@ -4591,7 +4586,7 @@ enum LilySyntaxSymbol<'a> {
     LocalVariableDeclarationName {
         name: &'a LilyName,
         type_: Option<LilyType>,
-        scope_expression: LilySyntaxNode<&'a LilySyntaxExpression>,
+        scope_expression: Option<LilySyntaxNode<&'a LilySyntaxExpression>>,
     },
     Variable {
         name: &'a LilyName,
@@ -4617,7 +4612,7 @@ enum LilySyntaxSymbol<'a> {
 struct LilyLocalBindingInfo<'a> {
     type_: Option<LilyType>,
     origin: LocalBindingOrigin,
-    scope_expression: LilySyntaxNode<&'a LilySyntaxExpression>,
+    scope_expression: Option<LilySyntaxNode<&'a LilySyntaxExpression>>,
 }
 
 fn lily_syntax_project_find_symbol_at_position<'a>(
@@ -4840,39 +4835,29 @@ fn lily_syntax_pattern_find_symbol_at_position<'a>(
                     LilySyntaxPatternUntyped::Variable {
                         overwriting: _,
                         name,
-                    } => {
-                        Some(LilySyntaxNode {
-                            range: pattern_node_in_typed.range,
-                            value: LilySyntaxSymbol::Variable {
-                                name: name,
-                                local_bindings: std::collections::HashMap::from(
-                                    [(
-                                        name.as_str(),
-                                        LilyLocalBindingInfo {
-                                            type_: maybe_type_node.as_ref().and_then(|type_node| {
-                                                lily_syntax_type_to_type(
-                                                    &mut Vec::new(),
-                                                    type_aliases,
-                                                    choice_types,
-                                                    lily_syntax_node_as_ref(type_node),
-                                                )
-                                            }),
-                                            origin: LocalBindingOrigin::PatternVariable(
-                                                pattern_node_in_typed.range,
-                                            ),
-                                            scope_expression: 
-                                                // this is a bit silly but works for now
-                                                scope_expression.unwrap_or_else(|| {
-                                                    lily_syntax_node_empty(
-                                                        &LilySyntaxExpression::Parenthesized(None),
-                                                    )
-                                                })
-                                        }
-                                    )],
-                                ),
-                            },
-                        })
-                    }
+                    } => Some(LilySyntaxNode {
+                        range: pattern_node_in_typed.range,
+                        value: LilySyntaxSymbol::Variable {
+                            name: name,
+                            local_bindings: std::collections::HashMap::from([(
+                                name.as_str(),
+                                LilyLocalBindingInfo {
+                                    type_: maybe_type_node.as_ref().and_then(|type_node| {
+                                        lily_syntax_type_to_type(
+                                            &mut Vec::new(),
+                                            type_aliases,
+                                            choice_types,
+                                            lily_syntax_node_as_ref(type_node),
+                                        )
+                                    }),
+                                    origin: LocalBindingOrigin::PatternVariable(
+                                        pattern_node_in_typed.range,
+                                    ),
+                                    scope_expression: scope_expression,
+                                },
+                            )]),
+                        },
+                    }),
                     LilySyntaxPatternUntyped::Variant {
                         name: variable,
                         value: maybe_value,
@@ -5094,7 +5079,10 @@ fn lily_syntax_expression_find_symbol_at_position<'a>(
     mut local_bindings: std::collections::HashMap<&'a str, LilyLocalBindingInfo<'a>>,
     expression_node: LilySyntaxNode<&'a LilySyntaxExpression>,
     position: lsp_types::Position,
-) -> std::ops::ControlFlow<LilySyntaxNode<LilySyntaxSymbol<'a>>, std::collections::HashMap<&'a str, LilyLocalBindingInfo<'a>>> {
+) -> std::ops::ControlFlow<
+    LilySyntaxNode<LilySyntaxSymbol<'a>>,
+    std::collections::HashMap<&'a str, LilyLocalBindingInfo<'a>>,
+> {
     if !lsp_range_includes_position(expression_node.range, position) {
         return std::ops::ControlFlow::Continue(local_bindings);
     }
@@ -5232,40 +5220,42 @@ fn lily_syntax_expression_find_symbol_at_position<'a>(
             result: maybe_result,
         } => {
             if let Some(local_declaration_node) = maybe_declaration {
-                local_bindings =
-                    lily_syntax_local_declaration_find_symbol_at_position(
-                        type_aliases,
-                        choice_types,
-                        variable_declarations,
-                        local_bindings,
-                        scope_declaration,
-                        expression_node,
-                        lily_syntax_node_as_ref(local_declaration_node),
-                        position,
-                    )?;
-                local_bindings.insert(
-                    &local_declaration_node.value.name.value,
-                    lily_syntax_local_declaration_introduced_bindings_into(
-                        &local_bindings,
-                        type_aliases,
-                        choice_types,
-                        variable_declarations,
-                        // TODO change to only result and change at use site accordingly
-                        expression_node,
-                        &local_declaration_node.value,
-                    )
-                );
-            }
-            match maybe_result {
-                Some(result_node) => lily_syntax_expression_find_symbol_at_position(
+                local_bindings = lily_syntax_local_declaration_find_symbol_at_position(
                     type_aliases,
                     choice_types,
                     variable_declarations,
-                    scope_declaration,
                     local_bindings,
-                    lily_syntax_node_unbox(result_node),
+                    scope_declaration,
+                    maybe_result.as_ref().map(lily_syntax_node_unbox),
+                    lily_syntax_node_as_ref(local_declaration_node),
                     position,
-                ),
+                )?;
+            }
+            match maybe_result {
+                Some(result_node) => {
+                    if let Some(local_declaration_node) = maybe_declaration {
+                        local_bindings.insert(
+                            &local_declaration_node.value.name.value,
+                            lily_syntax_local_declaration_introduced_bindings_into(
+                                &local_bindings,
+                                type_aliases,
+                                choice_types,
+                                variable_declarations,
+                                lily_syntax_node_unbox(result_node),
+                                &local_declaration_node.value,
+                            ),
+                        );
+                    }
+                    lily_syntax_expression_find_symbol_at_position(
+                        type_aliases,
+                        choice_types,
+                        variable_declarations,
+                        scope_declaration,
+                        local_bindings,
+                        lily_syntax_node_unbox(result_node),
+                        position,
+                    )
+                }
                 None => std::ops::ControlFlow::Continue(local_bindings),
             }
         }
@@ -5435,7 +5425,10 @@ fn lily_syntax_expression_field_find_symbol_at_position<'a>(
     fields: &[LilySyntaxExpressionField],
     field: &'a LilySyntaxExpressionField,
     position: lsp_types::Position,
-) -> std::ops::ControlFlow<LilySyntaxNode<LilySyntaxSymbol<'a>>, std::collections::HashMap<&'a str, LilyLocalBindingInfo<'a>>> {
+) -> std::ops::ControlFlow<
+    LilySyntaxNode<LilySyntaxSymbol<'a>>,
+    std::collections::HashMap<&'a str, LilyLocalBindingInfo<'a>>,
+> {
     if lsp_range_includes_position(field.name.range, position) {
         return std::ops::ControlFlow::Break(LilySyntaxNode {
             value: LilySyntaxSymbol::Field {
@@ -5448,7 +5441,9 @@ fn lily_syntax_expression_field_find_symbol_at_position<'a>(
                         std::rc::Rc::new(
                             local_bindings
                                 .iter()
-                                .map(|(&binding_name, binding_info)| (binding_name, binding_info.type_.clone()))
+                                .map(|(&binding_name, binding_info)| {
+                                    (binding_name, binding_info.type_.clone())
+                                })
                                 .collect::<std::collections::HashMap<_, _>>(),
                         ),
                         lily_syntax_node_as_ref(field_value_node),
@@ -5481,10 +5476,13 @@ fn lily_syntax_local_declaration_find_symbol_at_position<'a>(
     variable_declarations: &std::collections::HashMap<LilyName, CompiledVariableDeclarationInfo>,
     local_bindings: std::collections::HashMap<&'a str, LilyLocalBindingInfo<'a>>,
     scope_declaration: &'a LilySyntaxDeclaration,
-    scope_expression: LilySyntaxNode<&'a LilySyntaxExpression>,
+    scope_expression: Option<LilySyntaxNode<&'a LilySyntaxExpression>>,
     lily_syntax_local_declaration_node: LilySyntaxNode<&'a LilySyntaxLocalVariableDeclaration>,
     position: lsp_types::Position,
-) -> std::ops::ControlFlow<LilySyntaxNode<LilySyntaxSymbol<'a>>, std::collections::HashMap<&'a str, LilyLocalBindingInfo<'a>>> {
+) -> std::ops::ControlFlow<
+    LilySyntaxNode<LilySyntaxSymbol<'a>>,
+    std::collections::HashMap<&'a str, LilyLocalBindingInfo<'a>>,
+> {
     if !lsp_range_includes_position(lily_syntax_local_declaration_node.range, position) {
         return std::ops::ControlFlow::Continue(local_bindings);
     }
@@ -5507,7 +5505,9 @@ fn lily_syntax_local_declaration_find_symbol_at_position<'a>(
                             std::rc::Rc::new(
                                 local_bindings
                                     .iter()
-                                    .map(|(&binding_name, binding_info)| (binding_name, binding_info.type_.clone()))
+                                    .map(|(&binding_name, binding_info)| {
+                                        (binding_name, binding_info.type_.clone())
+                                    })
                                     .collect::<std::collections::HashMap<_, _>>(),
                             ),
                             lily_syntax_node_unbox(result_node),
@@ -6271,7 +6271,7 @@ fn lily_syntax_local_declaration_introduced_bindings_into<'a>(
     local_declaration: &'a LilySyntaxLocalVariableDeclaration,
 ) -> LilyLocalBindingInfo<'a> {
     LilyLocalBindingInfo {
-        scope_expression: scope_expression,
+        scope_expression: Some(scope_expression),
         origin: LocalBindingOrigin::LocalDeclaredVariable {
             name_range: local_declaration.name.range,
         },
@@ -6284,7 +6284,9 @@ fn lily_syntax_local_declaration_introduced_bindings_into<'a>(
                 std::rc::Rc::new(
                     bindings_so_far
                         .iter()
-                        .map(|(&binding_name, binding_info)| (binding_name, binding_info.type_.clone()))
+                        .map(|(&binding_name, binding_info)| {
+                            (binding_name, binding_info.type_.clone())
+                        })
                         .collect::<std::collections::HashMap<_, _>>(),
                 ),
                 lily_syntax_node_unbox(result_node),
@@ -6317,20 +6319,23 @@ fn lily_syntax_pattern_bindings_into<'a>(
                         overwriting: _,
                         name: variable_name,
                     } => {
-                        bindings_so_far.insert(variable_name, LilyLocalBindingInfo {
-                            origin: LocalBindingOrigin::PatternVariable(
-                                pattern_node_in_typed.range,
-                            ),
-                            scope_expression: scope_expression,
-                            type_: maybe_type.as_ref().and_then(|type_node| {
-                                lily_syntax_type_to_type(
-                                    &mut Vec::new(),
-                                    type_aliases,
-                                    choice_types,
-                                    lily_syntax_node_as_ref(type_node),
-                                )
-                            }),
-                        });
+                        bindings_so_far.insert(
+                            variable_name,
+                            LilyLocalBindingInfo {
+                                origin: LocalBindingOrigin::PatternVariable(
+                                    pattern_node_in_typed.range,
+                                ),
+                                scope_expression: Some(scope_expression),
+                                type_: maybe_type.as_ref().and_then(|type_node| {
+                                    lily_syntax_type_to_type(
+                                        &mut Vec::new(),
+                                        type_aliases,
+                                        choice_types,
+                                        lily_syntax_node_as_ref(type_node),
+                                    )
+                                }),
+                            },
+                        );
                     }
                     LilySyntaxPatternUntyped::Variant {
                         name: _,
@@ -14725,6 +14730,7 @@ fn maybe_lily_syntax_pattern_to_rust<'a>(
         ),
     }
 }
+/// TODO create and use a version of this without errors since ignoring them is very common
 fn lily_syntax_type_to_type(
     errors: &mut Vec<LilyErrorNode>,
     type_aliases: &std::collections::HashMap<LilyName, TypeAliasInfo>,
