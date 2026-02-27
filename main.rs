@@ -29,13 +29,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("{command_help}");
                 Ok(())
             }
-            "build" | "make" | "compile" | "transpile" => {
+            "build" | "make" | "compile" | "transpile" | "b" | "m" | "c" => {
                 let maybe_input_file_path: Option<String> = full_command.next();
                 let maybe_output_file_path: Option<String> = full_command.next();
                 build_main(
                     maybe_input_file_path.as_ref().map(std::path::Path::new),
                     maybe_output_file_path.as_ref().map(std::path::Path::new),
                 );
+                Ok(())
+            }
+            "doc" | "docs" | "documentation" | "core" | "stdlib" | "core-doc" | "core-docs"
+            | "core-documentation" | "core-types" | "d" => {
+                println!("Here are all core declarations:\n");
+                print_core_lily_docs();
                 Ok(())
             }
             "init" | "initialize" | "new" | "create" | "setup" | "boilerplate" | "template"
@@ -49,20 +55,87 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     );
                     return Ok(());
                 }
-                try_generate_file(
-                    "lily.lily",
-                    "this is where all your lily code goes",
-                    r#"
+                initialize_new_lily_hello_world_project();
+                Ok(())
+            }
+            _ => {
+                println!("Unknown command name.\n{command_help}");
+                Ok(())
+            }
+        },
+    }
+}
+const command_help: &str = r"\
+To compile to a rust file: lily build [input-file.lily [output-file.rs]]
+To start the language server: lily lsp
+To copy the hello-world project setup into the current directory: lily init
+To print all core declaration types: lily core-docs
+To print this help message: lily help
+See the source code, report bugs or leave any kind of feedback at https://codeberg.org/lue-bird/lily";
+
+fn print_core_lily_docs() {
+    for (core_choice_type_name, core_choice_type_info) in core_choice_type_infos.iter() {
+        let mut declaration_string: String = String::new();
+        lily_syntax_choice_type_declaration_into(
+            &mut declaration_string,
+            Some(core_choice_type_name),
+            &core_choice_type_info.parameters,
+            &core_choice_type_info.variants,
+        );
+        println!("{}", declaration_string);
+        if let Some(documentation) = &core_choice_type_info.documentation {
+            println!(
+                "{}",
+                documentation_comment_to_markdown(documentation)
+                    .lines()
+                    .fold(String::new(), |so_far, line| so_far + "    " + line + "\n")
+            );
+        }
+    }
+    for (core_variable_name, core_variable_info) in core_variable_declaration_infos.iter() {
+        match &core_variable_info.type_ {
+            Some(variable_type) => {
+                let mut type_string: String = String::new();
+                lily_type_info_into(&mut type_string, 5, variable_type);
+                print!(
+                    "{core_variable_name}
+    :{type_string}{}:",
+                    if type_string.contains('\n') {
+                        "\n    "
+                    } else {
+                        ""
+                    },
+                );
+            }
+            None => {
+                print!("{core_variable_name}");
+            }
+        }
+        if let Some(documentation) = &core_variable_info.documentation {
+            println!(
+                "\n{}",
+                documentation_comment_to_markdown(documentation)
+                    .lines()
+                    .fold(String::new(), |so_far, line| so_far + "    " + line + "\n")
+            );
+        }
+    }
+}
+fn initialize_new_lily_hello_world_project() {
+    try_generate_file(
+        "lily.lily",
+        "this is where all your lily code goes",
+        r#"
 
 greet \:str:name >
     strs-flatten [ "Hello, ", name, "\n" ]
 
 "#,
-                );
-                try_generate_file(
-                    "main.rs",
-                    "the actual program entrypoint, written in rust.",
-                    r#"// enabling deref_patterns is sadly required for matching recursive choice types
+    );
+    try_generate_file(
+        "main.rs",
+        "the actual program entrypoint, written in rust.",
+        r#"// enabling deref_patterns is sadly required for matching recursive choice types
 #![feature(deref_patterns)]
 #![allow(incomplete_features)]
 
@@ -72,61 +145,47 @@ fn main() {
     print!("{}", lily::greet(lily::Str::Slice("insert your name here")));
 }
 "#,
-                );
-                try_generate_file(
-                    "cargo.toml",
-                    "this tells cargo (the rust package manager) how to build the project",
-                    r#"[package]
+    );
+    try_generate_file(
+        "cargo.toml",
+        "this tells cargo (the rust package manager) how to build the project",
+        r#"[package]
 name = "example"
 edition = "2024"
 [[bin]]
 name = "example"
 path = "main.rs"
 "#,
-                );
-                try_generate_file(
-                    ".gitignore",
-                    "this tells git to not track the generated rust code",
-                    r"# Generated rust code
+    );
+    try_generate_file(
+        ".gitignore",
+        "this tells git to not track the generated rust code",
+        r"# Generated rust code
 lily/
 ",
-                );
-                match std::fs::exists("lily") {
-                    Ok(true) => {
-                        println!("lily/ directory already exists, skipping generating it.");
-                    }
-                    Ok(false) => {
-                        let write_result: Result<(), std::io::Error> = std::fs::create_dir("lily");
-                        match write_result {
-                            Ok(()) => {
-                                println!(
-                                    "generated lily/ directory, this will contain the generated rust file lily/mod.rs."
-                                );
-                            }
-                            Err(error) => {
-                                println!("failed to generate lily/ directory: {error}");
-                            }
-                        }
-                    }
-                    Err(error) => {
-                        println!("failed to check if lily/ directory already exists: {error}");
-                    }
+    );
+    match std::fs::exists("lily") {
+        Ok(true) => {
+            println!("lily/ directory already exists, skipping generating it.");
+        }
+        Ok(false) => {
+            let write_result: Result<(), std::io::Error> = std::fs::create_dir("lily");
+            match write_result {
+                Ok(()) => {
+                    println!(
+                        "generated lily/ directory, this will contain the generated rust file lily/mod.rs."
+                    );
                 }
-                Ok(())
+                Err(error) => {
+                    println!("failed to generate lily/ directory: {error}");
+                }
             }
-            _ => {
-                println!("Not a valid command. {command_help}");
-                Ok(())
-            }
-        },
+        }
+        Err(error) => {
+            println!("failed to check if lily/ directory already exists: {error}");
+        }
     }
 }
-const command_help: &str = r"try
-  - compile to a rust file: lily build [input-file.lily [output-file.rs]]
-  - start the language server: lily lsp
-  - copy the hello-world project setup into the current directory: lily init
-  - print this command help message: lily help";
-
 fn try_generate_file(path: &str, purpose: &str, content: &str) {
     match std::fs::exists(path) {
         Ok(true) => {
