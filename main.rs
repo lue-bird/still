@@ -10027,10 +10027,21 @@ Read if interested: [swift's grapheme cluster docs](https://docs.swift.org/swift
                     r#"Text like `"abc"` or `"\"hello 👀 \\\r\n world \u{2665}\""` (`\u{2665}` represents the hex code for ♥, `\"` represents ", `\\` represents \\, `\n` represents line break, `\r` represents carriage return).
 Internally, a string is compactly represented as UTF-8 bytes and can be accessed as such.
 ```lily
-strs-flatten [ "My name is ", "Jenna", " and I'm ", int-to-str 60, " years old." ]
+strs-flatten [ "My name is ", "Jenna", " and I'm ", unt-to-str 60, " years old." ]
 # = "My name is Jenna and I'm 60 years old."
 ```
-When building large strings, prefer `str-attach` and `str-attach-char`.
+When building large strings, prefer `str-attach`, `str-attach-char`, `str-attach-unt`, ...
+
+Raw strings (that contain no escaped characters)
+are created by putting ` at the start of each line:
+```lily
+`This text
+`spans multiple lines.
+`    Indentation is not stripped,
+`    and neither is æn\y character "escaped"'\u{
+`To end with a linebreak, add a blank ` line:
+`
+```
 "#
                 )),
                 parameters: vec![],
