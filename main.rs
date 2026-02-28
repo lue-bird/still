@@ -1,4 +1,4 @@
-// lsp lily reports this specific error even when it is allowed in the cargo.toml
+// lsp lily reports this specific error even when it is allowed in the Cargo.toml
 #![allow(non_upper_case_globals)]
 // just to get analysis on lily_core, not actually used here
 mod lily_core;
@@ -147,7 +147,7 @@ fn main() {
 "#,
     );
     try_generate_file(
-        "cargo.toml",
+        "Cargo.toml",
         "this tells cargo (the rust package manager) how to build the project",
         r#"[package]
 name = "example"
@@ -173,7 +173,7 @@ lily/
             match write_result {
                 Ok(()) => {
                     println!(
-                        "generated lily/ directory, this will contain the generated rust file lily/mod.rs."
+                        "created lily/ directory, this will contain the generated rust file lily/mod.rs."
                     );
                 }
                 Err(error) => {
@@ -195,7 +195,7 @@ fn try_generate_file(path: &str, purpose: &str, content: &str) {
             let write_result: Result<(), std::io::Error> = std::fs::write(path, content);
             match write_result {
                 Ok(()) => {
-                    println!("generated {path}, {purpose}.");
+                    println!("created {path}, {purpose}.");
                 }
                 Err(error) => {
                     println!("failed to generate {path}: {error}");
