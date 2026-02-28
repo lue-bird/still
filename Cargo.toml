@@ -27,7 +27,7 @@ codegen-backend = "cranelift"
 # speeds up build
 debug = "none"
 # >= 1 required to enable tail-call-elimination.
-# Without, the language server stack can overflows on bigger files.
+# Without, the language server stack can overflow on bigger files.
 # Here, I chose to do 2 to get a more realistic feel for the release performance
 # but please do switch to 1 locally if you need faster compile times
 opt-level = 2
