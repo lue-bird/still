@@ -158,6 +158,13 @@ path = "main.rs"
 "#,
     );
     try_generate_file(
+        "rust-toolchain.toml",
+        "this allows rust tooling to build the project with nightly features",
+        r#"[toolchain]
+channel = "nightly"
+"#,
+    );
+    try_generate_file(
         ".gitignore",
         "this tells git to not track the generated rust code",
         r"# Generated rust code
