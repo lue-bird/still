@@ -144,7 +144,7 @@ greet \:str:name >
 mod lily;
 
 fn main() {
-    print!("{}", lily::greet(lily::Str::Slice("insert your name here")));
+    print!("{}", lily::greet(lily::Str::Slice("world")));
 }
 "#,
     );
