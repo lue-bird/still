@@ -14800,7 +14800,6 @@ fn maybe_lily_syntax_pattern_to_rust<'a>(
         ),
     }
 }
-/// TODO create and use a version of this without errors since ignoring them is very common
 fn lily_syntax_type_to_type(
     errors: &mut Vec<LilyErrorNode>,
     type_aliases: &std::collections::HashMap<LilyName, TypeAliasInfo>,
