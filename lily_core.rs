@@ -7,7 +7,8 @@
     clippy::wrong_self_convention,
     clippy::redundant_field_names,
     clippy::type_complexity,
-    clippy::match_single_binding
+    clippy::match_single_binding,
+    clippy::needless_update
 )]
 extern crate std;
 use std::clone::Clone;
