@@ -15176,6 +15176,11 @@ fn lily_syntax_pattern_to_rust<'a>(
                 };
             };
             match &untyped_pattern_node.value {
+                LilySyntaxPatternUntyped::Ignored => CompiledLilyPattern {
+                    rust: Some(syn_pat_wild()),
+                    type_: maybe_type,
+                    catch: Some(LilyPatternCatch::Exhaustive),
+                },
                 LilySyntaxPatternUntyped::Variable { overwriting, name } => {
                     let maybe_existing_pattern_variable_with_same_name_info: Option<
                         LilyLocalBindingCompileInfo,
@@ -15224,11 +15229,38 @@ fn lily_syntax_pattern_to_rust<'a>(
                         catch: Some(LilyPatternCatch::Exhaustive),
                     }
                 }
-                LilySyntaxPatternUntyped::Ignored => CompiledLilyPattern {
-                    rust: Some(syn_pat_wild()),
-                    type_: maybe_type,
-                    catch: Some(LilyPatternCatch::Exhaustive),
-                },
+                LilySyntaxPatternUntyped::Other(other_in_typed) => {
+                    let compiled_other_pattern: CompiledLilyPattern = lily_syntax_pattern_to_rust(
+                        errors,
+                        records_used,
+                        introduced_str_bindings_to_match,
+                        introduced_bindings,
+                        bindings_to_clone,
+                        type_aliases,
+                        choice_types,
+                        is_reference,
+                        LilySyntaxNode {
+                            range: untyped_pattern_node.range,
+                            value: other_in_typed,
+                        },
+                    );
+                    if let Some(expected_type) = &maybe_type
+                        && let Some(actual_type) = &compiled_other_pattern.type_
+                        && let Some(type_diff) = lily_type_diff(expected_type, actual_type)
+                    {
+                        errors.push(LilyErrorNode {
+                            range: untyped_pattern_node.range,
+                            message: lily_type_diff_error_message(&type_diff).into_boxed_str(),
+                        });
+                        // proceed as if the expected type does not exist
+                        return compiled_other_pattern;
+                    }
+                    CompiledLilyPattern {
+                        rust: compiled_other_pattern.rust,
+                        type_: maybe_type.or(compiled_other_pattern.type_),
+                        catch: compiled_other_pattern.catch,
+                    }
+                }
                 LilySyntaxPatternUntyped::Variant {
                     name: name_node,
                     value: maybe_value,
@@ -15504,20 +15536,6 @@ fn lily_syntax_pattern_to_rust<'a>(
                         }
                     }
                 }
-                LilySyntaxPatternUntyped::Other(other_in_typed) => lily_syntax_pattern_to_rust(
-                    errors,
-                    records_used,
-                    introduced_str_bindings_to_match,
-                    introduced_bindings,
-                    bindings_to_clone,
-                    type_aliases,
-                    choice_types,
-                    is_reference,
-                    LilySyntaxNode {
-                        range: untyped_pattern_node.range,
-                        value: other_in_typed,
-                    },
-                ),
             }
         }
         LilySyntaxPattern::Record(fields) => {
