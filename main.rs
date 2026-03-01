@@ -12507,7 +12507,10 @@ fn lily_syntax_expression_to_rust<'a>(
                 });
             } else if maybe_arrow_key_symbol_range.is_none() {
                 errors.push(LilyErrorNode {
-                    range: expression_node.range,
+                    range: lsp_types::Range {
+                        start: expression_node.range.start,
+                        end: lsp_position_add_characters(expression_node.range.start, 1),
+                    },
                     message: Box::from(
                         "missing > symbol between \\..patterns.. here ..result... If you think you did put a > there, re-check for syntax errors like a missing :type: before pattern variables, _ or variants",
                     ),
@@ -12619,17 +12622,12 @@ fn lily_syntax_expression_to_rust<'a>(
             bindings_to_clone_to_rust_into(&mut closure_result_rust_stmts, bindings_to_clone);
             let compiled_result: CompiledLilyExpression = maybe_lily_syntax_expression_to_rust(
                 errors,
-                || match *maybe_arrow_key_symbol_range {
-                    None => LilyErrorNode {
-                        range: expression_node.range,
-                        message: Box::from(
-                            "missing lambda arrow (>) and result after \\..parameters.. here",
-                        ),
-                    },
-                    Some(arrow_key_symbol_range) => LilyErrorNode {
-                        range: arrow_key_symbol_range,
-                        message: Box::from("missing lambda result after \\..parameters.. > here"),
-                    },
+                || LilyErrorNode {
+                    range: maybe_arrow_key_symbol_range.unwrap_or(lsp_types::Range {
+                        start: expression_node.range.start,
+                        end: lsp_position_add_characters(expression_node.range.start, 1),
+                    }),
+                    message: Box::from("missing lambda result after \\..parameters.. > here"),
                 },
                 records_used,
                 type_aliases,
@@ -13423,12 +13421,6 @@ fn lily_syntax_expression_to_rust<'a>(
                 FnRepresentation::RcDyn,
                 lily_syntax_node_unbox(matched_node),
             );
-            let Some(matched_type) = compiled_matched.type_ else {
-                return CompiledLilyExpression {
-                    rust: syn_expr_todo(),
-                    type_: None,
-                };
-            };
             let mut maybe_match_result_type_or_conflicting: Option<Result<LilyType, ()>> = None;
             let mut maybe_catch: Option<StilCasePatternsCatch> = None;
             let mut rust_arms: Vec<syn::Arm> = cases
@@ -13466,36 +13458,6 @@ fn lily_syntax_expression_to_rust<'a>(
                         false,
                         lily_syntax_node_as_ref(case_pattern_node),
                     );
-                    let Some(case_rust_pattern) = compiled_pattern.rust else {
-                        // skip case with incomplete pattern
-                        return None;
-                    };
-                    let Some(case_pattern_type) = compiled_pattern.type_ else {
-                        // skip case with incomplete pattern
-                        return None;
-                    };
-                    if let Some(matched_pattern_type_diff) =
-                        lily_type_diff(&matched_type, &case_pattern_type)
-                    {
-                        errors.push(LilyErrorNode {
-                            range: case_pattern_node.range,
-                            message: (lily_type_diff_error_message(&matched_pattern_type_diff)
-                                + "\n\nA case pattern must have the same type as the matched expression")
-                                    .into_boxed_str(),
-                        });
-                        return None;
-                    }
-                    let Some(case_pattern_catch) = compiled_pattern.catch else {
-                        return None;
-                    };
-                    match maybe_catch {
-                        None => {
-                            maybe_catch = Some(lily_pattern_catch_to_case_patterns_catch(case_pattern_catch));
-                        }
-                        Some(ref mut catch) => {
-                            lily_pattern_catch_merge_with(errors,  case_pattern_node.range, catch, case_pattern_catch);
-                        }
-                    }
                     if let Some(case_result_node) = &case.result {
                         lily_syntax_expression_uses_of_local_bindings_into(
                             &mut case_pattern_introduced_bindings,
@@ -13566,6 +13528,35 @@ fn lily_syntax_expression_to_rust<'a>(
                             }
                         }
                     }
+                    if let Some(matched_type) = &compiled_matched.type_
+                    && let Some(case_pattern_type) = &compiled_pattern.type_
+                    && let Some(matched_pattern_type_diff) =
+                        lily_type_diff(matched_type, case_pattern_type)
+                    {
+                        errors.push(LilyErrorNode {
+                            range: case_pattern_node.range,
+                            message: (lily_type_diff_error_message(&matched_pattern_type_diff)
+                                + "\n\nA case pattern must have the same type as the matched expression")
+                                    .into_boxed_str(),
+                        });
+                        return None;
+                    }
+                    let Some(case_rust_pattern) = compiled_pattern.rust else {
+                        // skip case with incomplete pattern
+                        return None;
+                    };
+                    let Some(case_pattern_catch) = compiled_pattern.catch else {
+                        // skip case with incomplete catch
+                        return None;
+                    };
+                    match maybe_catch {
+                        None => {
+                            maybe_catch = Some(lily_pattern_catch_to_case_patterns_catch(case_pattern_catch));
+                        }
+                        Some(ref mut catch) => {
+                            lily_pattern_catch_merge_with(errors,  case_pattern_node.range, catch, case_pattern_catch);
+                        }
+                    }
                     let mut introduced_str_bindings_to_match_iterator = introduced_str_bindings_to_match.into_iter();
                     fn syn_expr_binding_eq_str((binding_range, str):(lsp_types::Range, &str)) -> syn::Expr {
                         syn::Expr::Binary(syn::ExprBinary { attrs: vec![], left: Box::new(syn_expr_reference([&lily_str_binding_name(binding_range)])), op: syn::BinOp::Eq(syn::token::EqEq(syn_span())), right: Box::new(syn::Expr::Lit(syn::ExprLit {attrs:vec![], lit: syn::Lit::Str(syn::LitStr::new(str, syn_span()))})) })
@@ -13633,6 +13624,12 @@ fn lily_syntax_expression_to_rust<'a>(
                         comma: None,
                     });
                 }
+            }
+            if compiled_matched.type_.is_none() {
+                return CompiledLilyExpression {
+                    rust: syn_expr_todo(),
+                    type_: maybe_match_result_type,
+                };
             }
             CompiledLilyExpression {
                 rust: syn::Expr::Match(syn::ExprMatch {
