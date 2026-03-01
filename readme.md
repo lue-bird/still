@@ -21,7 +21,7 @@ ansi-clear-screen
     "\u{001B}c"
 
 interface \:opt str:state-or-uninitialized >
-    let state
+    = state
         state-or-uninitialized
         | :opt str:Absent > ""
         | :opt str:Present :str:initialized > initialized
