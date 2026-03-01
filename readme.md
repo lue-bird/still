@@ -49,7 +49,7 @@ Then point your editor to `lily lsp`, see also [specific setups](#editor-setups)
   → faster type checking, clear errors, a few less bugs, easy compilation to almost any language
 
 - no blocking compile errors. You can always build, even if your record is still missing a field value, your matching is still inexhaustive, some parens are empty, etc.
-  You will lily see all the errors, though.
+  You will still see all the errors, though.
 
 - no features that obfuscate ("shiny, cool features" that ruin languages in my opinion): infix operators, currying, traits/type classes/overloading, objects, task/async, hidden mutation, macros & reflection, lifetime tracking, hidden side effects, modules, hidden context values, exceptions, undefined
 
