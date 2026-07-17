@@ -243,6 +243,9 @@ pub type Char = char;
 pub fn char_byte_count(char: Char) -> Unt {
     char.len_utf8()
 }
+pub fn char_utf16_length(char: Char) -> Unt {
+    char.len_utf16()
+}
 pub fn char_order(left: Char, right: Char) -> Order {
     Order::from_ordering(left.cmp(&right))
 }
@@ -362,6 +365,14 @@ pub fn str_slice_from_byte_index_with_byte_length(
             .unwrap_or(Str::Slice("")),
     }
 }
+pub fn str_repeat_char(char_count: Unt, char: Char) -> Str {
+    Str::from_string(std::iter::Iterator::collect(std::iter::repeat_n(
+        char, char_count,
+    )))
+}
+pub fn str_repeat(segment_count: Unt, segment: Str) -> Str {
+    Str::from_string(segment.as_str().repeat(segment_count))
+}
 pub fn str_to_chars(str: Str) -> Vec<Char> {
     Vec::from_vec(std::iter::Iterator::collect(str.as_str().chars()))
 }
@@ -376,12 +387,12 @@ pub fn str_order(left: Str, right: Str) -> Order {
 pub fn str_walk_chars_from<C, E>(
     str: Str,
     initial_state: C,
-    on_element: impl Fn(C, Char) -> Go_on_or_exit<C, E>,
+    on_char: impl Fn(C, Char) -> Go_on_or_exit<C, E>,
 ) -> Go_on_or_exit<C, E> {
     Go_on_or_exit::from_control_flow(std::iter::Iterator::try_fold(
         &mut str.as_str().chars(),
         initial_state,
-        |state, element| on_element(state, element).to_control_flow(),
+        |state, element| on_char(state, element).to_control_flow(),
     ))
 }
 pub fn str_attach_char(left: Str, right: Char) -> Str {
@@ -410,6 +421,20 @@ pub fn str_attach_dec(left: Str, right: Dec) -> Str {
 pub fn str_attach(left: Str, right: Str) -> Str {
     let string: std::string::String = left.into_string();
     Str::from_string(string + right.as_str())
+}
+pub fn str_walk_occurance_byte_indexes_from<C, E>(
+    str: Str,
+    segment_to_find: Str,
+    initial_state: C,
+    on_occurence_byte_index: impl Fn(C, Unt) -> Go_on_or_exit<C, E>,
+) -> Go_on_or_exit<C, E> {
+    Go_on_or_exit::from_control_flow(std::iter::Iterator::try_fold(
+        &mut str.as_str().match_indices(segment_to_find.as_str()),
+        initial_state,
+        |state, (occurence_byte_index, _)| {
+            on_occurence_byte_index(state, occurence_byte_index).to_control_flow()
+        },
+    ))
 }
 pub fn strs_flatten(vec_of_str: Vec<Str>) -> Str {
     let string: std::string::String =
@@ -472,6 +497,18 @@ pub fn vec_by_index_for_length<A>(length: Unt, index_to_element: impl Fn(Unt) ->
         0..length,
         index_to_element,
     )))
+}
+pub fn vec_by_walk_from<A: Clone>(
+    first_element: A,
+    next_maybe_element: impl Fn(A) -> Opt<A>,
+) -> Vec<A> {
+    let mut previous_element = first_element.clone();
+    let mut result = std::vec![first_element];
+    while let Opt::Present(next_element) = next_maybe_element(previous_element) {
+        previous_element = next_element.clone();
+        result.push(next_element);
+    }
+    Vec::from_vec(result)
 }
 pub fn vec_length<A>(vec: Vec<A>) -> Unt {
     vec.as_slice().len()

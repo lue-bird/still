@@ -266,11 +266,11 @@ cargo install --debug --offline --path . lily
 ```
 
 ## considering
-- change char literal to only require a starting '
+- allow match patterns to omit explicit types as they are straightforwardly inferred top-down (which might allow for better errors anyway?)
 - (leaning towards yes) allow comment lines before choice declaration variant name
 - (leaning towards yes) add `vec-walk-backwards-from`, `str-walk-chars-backwards-from`
-- (leaning towards no) switch unt and int to 64 bit
-- (once a use case is found) add core bitwise and, or, xor, shifts, complement for the integer number types
+- switch unt and int to 64 bit
+- add core bitwise and, or, xor, shifts, complement for the integer number types
 - (seems not worth the analysis cost but a simpler version maybe is) avoid unnecessary clones by field
 - (to make some parts more scalable:) for parsing and formatting: leave declarations fully outside of "touched ranges" alone; for compilation: if touched only in one declaration and its type ends up the same, only change that declaration's output
 - in syntax tree, use separate range type for single-line tokens like keywords, symbols, names etc to save on memory consumption

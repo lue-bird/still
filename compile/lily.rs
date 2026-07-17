@@ -4528,6 +4528,11 @@ dec-to-power-of 0.0 0.0
                 "Encoded as UTF-8, how many bytes the `char` spans, between 1 and 4",
             ),
             (
+                Name::from("char-utf16-length"),
+                type_function([type_char], type_unt),
+                "Encoded as UTF-16, how many units the `char` spans, either 1 or 2",
+            ),
+            (
                 Name::from("char-to-code-point"),
                 type_function([type_char], type_unt),
                 "Convert to its 4-byte unicode code point",
@@ -4564,10 +4569,34 @@ Note that the inverse never fails: `char-to-code-point`",
             (
                 Name::from("str-slice-from-byte-index-with-byte-length"),
                 type_function(
-                    [type_str, type_unt,type_unt],
+                    [type_str, type_unt, type_unt],
                     type_str,
                 ),
                 "Create a sub-slice starting at the floor character boundary of a given UTF-8 index, spanning for a given count of UTF-8 bytes until before the nearest higher character boundary",
+            ),
+            ( Name::from("str-repeat-char"),
+                type_function(
+                    [type_unt, type_char],
+                    type_str,
+                ),
+                "Create a str from a given count of same chars. Faster equivalent of chars-to-str (vec-repeat count char)
+```lily
+indentation
+    str-repeat-char 4 ' '
+```
+",
+            ),
+            ( Name::from("str-repeat"),
+                type_function(
+                    [type_unt, type_str],
+                    type_str,
+                ),
+                r#"Create a str from a given count of same str segments
+```lily
+hahahaha
+    str-repeat 4 "ha"
+```
+"#,
             ),
             (
                 Name::from("str-to-chars"),
@@ -4640,6 +4669,40 @@ See also `str-attach-char`, `str-attach-unt`, `str-attach-int, `str-attach-dec`.
                 Name::from("str-attach-dec"),
                 type_function([type_str,type_dec], type_str),
                 "Push a given `dec` to the end of the `str`, equivalent to but faster than `str-attach str (dec-to-str dec)`",
+            ),
+            (
+                Name::from("str-walk-occurance-byte-indexes-from"),
+                type_function(
+                 [type_str,
+                  type_str,
+                  type_variable("State"),
+                  type_function([type_variable("State"), type_char], type_continue_or_exit(type_variable("State"), type_variable("Exit")))
+                 ],
+                 type_continue_or_exit(type_variable("State"), type_variable("Exit"))
+                ),
+                r#"Loop through all positions where a given substring occurs in the string from first to last, collecting state or exiting early
+```lily
+str-first-occurance-byte-index \:str:str, :str:segment-to-find >
+    str-walk-occurance-byte-indexes-from str
+        segment-to-find
+        {}
+        (\{}, :unt:occurence-byte-index >
+            :go-on-or-exit unt unt:Exit occurence-byte-index
+        )
+    | :go-on-or-exit unt unt:Go-on {} > :opt unt:Absent
+    | :go-on-or-exit unt unt:Exit :unt:occurence-byte-index > :opt unt:occurence-byte-index
+
+str-line-count \:str:str >
+    str-walk-occurance-byte-indexes-from str
+        "\n"
+        1
+        (\:unt:line-count-so-far, :unt:_ >
+            :go-on-or-exit unt unt:Go-on unt-add line-count-so-far 1
+        )
+    | :go-on-or-exit unt unt:Go-on :unt:result > result
+    | :go-on-or-exit unt unt:Exit :unt:result > result
+```
+"#,
             ),
             (
                 Name::from("strs-flatten"),
@@ -5662,7 +5725,7 @@ fn type_alias_declaration_to_rust(
         type_: type_,
     })
 }
-/// returns false if
+
 fn parameters_to_rust_into_error_if_different_to_actual_type_parameters(
     errors: &mut Vec<ErrorNode>,
     rust_parameters: &mut syn::punctuated::Punctuated<syn::GenericParam, syn::token::Comma>,
@@ -6306,7 +6369,7 @@ mod test_type_collect_variables_that_are_concrete_into {
             type_variables: [(&'static str, Type); N],
         ) -> std::collections::HashMap<&'static str, std::borrow::Cow<'static, Type>> {
             std::collections::HashMap::from_iter(
-                [("A", type_unt)]
+                type_variables
                     .into_iter()
                     .map(|(name, type_)| (name, std::borrow::Cow::Owned(type_))),
             )
@@ -12580,6 +12643,13 @@ pub fn evaluate_expression_call(
                         None
                     }
                 }
+                "char-utf16-length" => {
+                    if let EvaluatedExpression::Char(arg0) = arg0 {
+                        Some(EvaluatedExpression::Unt(lily_core::char_utf16_length(arg0)))
+                    } else {
+                        None
+                    }
+                }
                 "char-to-code-point" => {
                     if let EvaluatedExpression::Char(arg0) = arg0 {
                         Some(EvaluatedExpression::Unt(lily_core::char_to_code_point(
@@ -12659,6 +12729,29 @@ pub fn evaluate_expression_call(
                         None
                     }
                 }
+                "str-repeat-char" => {
+                    if let EvaluatedExpression::Unt(arg0) = arg0
+                        && let Some(EvaluatedExpression::Char(arg1)) = arguments.next()
+                    {
+                        Some(core_str_to_evaluated_expression(
+                            lily_core::str_repeat_char(arg0, arg1),
+                        ))
+                    } else {
+                        None
+                    }
+                }
+                "str-repeat" => {
+                    if let EvaluatedExpression::Unt(arg0) = arg0
+                        && let Some(EvaluatedExpression::Str(arg1)) = arguments.next()
+                    {
+                        Some(core_str_to_evaluated_expression(lily_core::str_repeat(
+                            arg0,
+                            lily_core::Str::from_string(arg1),
+                        )))
+                    } else {
+                        None
+                    }
+                }
                 "str-to-chars" => {
                     if let EvaluatedExpression::Str(arg0) = arg0 {
                         Some(EvaluatedExpression::Vec(
@@ -12704,13 +12797,13 @@ pub fn evaluate_expression_call(
                         let result: std::ops::ControlFlow<
                             Result<EvaluatedExpression, ()>,
                             EvaluatedExpression,
-                        > = arg0.chars().try_fold(arg1, |state, element| {
+                        > = arg0.chars().try_fold(arg1, |state, char| {
                             match evaluate_expression_call(
                                 type_aliases,
                                 choice_types,
                                 evaluated_project_variables,
                                 std::borrow::Cow::Borrowed(&arg2),
-                                [state, EvaluatedExpression::Char(element)].into_iter(),
+                                [state, EvaluatedExpression::Char(char)].into_iter(),
                             )
                             .and_then(evaluated_expression_to_core_go_on_or_exit)
                             {
@@ -12786,6 +12879,43 @@ pub fn evaluate_expression_call(
                             lily_core::Str::from_string(arg0),
                             arg1,
                         )))
+                    } else {
+                        None
+                    }
+                }
+                "str-walk-occurance-byte-indexes-from" => {
+                    if let EvaluatedExpression::Str(arg0) = arg0
+                        && let Some(EvaluatedExpression::Str(arg1)) = arguments.next()
+                        && let Some(arg2) = arguments.next()
+                        && let Some(arg3) = arguments.next()
+                    {
+                        let result: std::ops::ControlFlow<
+                            Result<EvaluatedExpression, ()>,
+                            EvaluatedExpression,
+                        > = arg0.match_indices(&arg1).try_fold(
+                            arg2,
+                            |state, (occurence_byte_index, _)| match evaluate_expression_call(
+                                type_aliases,
+                                choice_types,
+                                evaluated_project_variables,
+                                std::borrow::Cow::Borrowed(&arg3),
+                                [state, EvaluatedExpression::Unt(occurence_byte_index)].into_iter(),
+                            )
+                            .and_then(evaluated_expression_to_core_go_on_or_exit)
+                            {
+                                None => std::ops::ControlFlow::Break(Err(())),
+                                Some(step) => step.to_control_flow().map_break(Ok),
+                            },
+                        );
+                        match result {
+                            std::ops::ControlFlow::Break(Err(())) => None,
+                            std::ops::ControlFlow::Break(Ok(exit)) => {
+                                Some(evaluated_expression_core_exit(exit))
+                            }
+                            std::ops::ControlFlow::Continue(go_on) => {
+                                Some(evaluated_expression_core_go_on(go_on))
+                            }
+                        }
                     } else {
                         None
                     }
