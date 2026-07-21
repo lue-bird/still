@@ -713,7 +713,7 @@ fn respond_to_hover(
                         "{}{}",
                         if origin_project_declaration_maybe_name
                             .as_ref()
-                            .is_some_and(|node| node.value == hovered_declaration_name)
+                            .is_some_and(|node| &node.value == hovered_declaration_name)
                         {
                             ""
                         } else {
@@ -847,7 +847,7 @@ fn respond_to_hover(
                                 origin_project_choice_type_declaration.variants.iter().any(
                                     |variant| {
                                         variant.name.as_ref().is_some_and(|name_node| {
-                                            name_node.value.as_str() == hovered_name
+                                            &name_node.value == hovered_name
                                         })
                                     },
                                 );
@@ -1024,7 +1024,7 @@ fn respond_to_goto_definition(
                     let goto_type_variable_name_origin_parameter_node = origin_type_parameters
                         .iter()
                         .find(|origin_choice_type_parameter| {
-                            origin_choice_type_parameter.value.as_str() == goto_type_variable_name
+                            &origin_choice_type_parameter.value == goto_type_variable_name
                         })?;
                     Some(lsp_types::GotoDefinitionResponse::Scalar(
                         lsp_types::Location {
@@ -1046,7 +1046,7 @@ fn respond_to_goto_definition(
                     let goto_type_variable_name_origin_parameter_node = origin_type_parameters
                         .iter()
                         .find(|origin_choice_type_parameter| {
-                            origin_choice_type_parameter.value.as_str() == goto_type_variable_name
+                            &origin_choice_type_parameter.value == goto_type_variable_name
                         })?;
                     Some(lsp_types::GotoDefinitionResponse::Scalar(
                         lsp_types::Location {
@@ -1098,7 +1098,7 @@ fn respond_to_goto_definition(
                     else {
                         return None;
                     };
-                    if name_node.value.as_str() == goto_name {
+                    if &name_node.value == goto_name {
                         Some(name_node.range)
                     } else {
                         None
@@ -1133,7 +1133,7 @@ fn respond_to_goto_definition(
                                     |origin_choice_type_variant| {
                                         origin_choice_type_variant.name.as_ref().and_then(
                                             |origin_choice_type_variant_name_node| {
-                                                if origin_choice_type_variant_name_node.value
+                                                if &origin_choice_type_variant_name_node.value
                                                     == goto_name
                                                 {
                                                     Some(origin_choice_type_variant_name_node.range)
@@ -1155,7 +1155,7 @@ fn respond_to_goto_definition(
                                 .iter()
                                 .find_map(|variant| {
                                     variant.name.as_ref().and_then(|variant_name_node| {
-                                        if variant_name_node.value.as_str() == goto_name {
+                                        if &variant_name_node.value == goto_name {
                                             Some(variant_name_node.range)
                                         } else {
                                             None
@@ -1349,7 +1349,7 @@ fn respond_to_rename(
                 } => {
                     if origin_project_declaration_maybe_name
                         .as_ref()
-                        .is_some_and(|node| node.value == to_rename_declaration_name)
+                        .is_some_and(|node| &node.value == to_rename_declaration_name)
                     {
                         LilySymbolToReference::Type {
                             name: to_rename_declaration_name,
@@ -3307,7 +3307,7 @@ fn lily_syntax_expression_find_symbol_at_position<'a>(
             match maybe_variable_node {
                 None => {
                     if position == dot_key_symbol_range.end {
-                        static lily_name_empty: lily::Name = lily::Name::const_new("");
+                        static lily_name_empty: lily::Name = lily::Name::from_static("");
                         return std::ops::ControlFlow::Break(lily::SyntaxNode {
                             value: LilySyntaxSymbol::Variable {
                                 name: &lily_name_empty,
@@ -4033,14 +4033,14 @@ fn lily_syntax_declaration_uses_of_symbol_into(
                     origin_type_name: variant_to_collect_uses_of_maybe_origin_type,
                 } = symbol_to_collect_uses_of
                     && let Some(variant_name_node) = &variant.name
-                    && variant_to_collect_uses_of_name == variant_name_node.value
+                    && variant_to_collect_uses_of_name == &variant_name_node.value
                     && variant_to_collect_uses_of_maybe_origin_type.is_none_or(
                         |variant_to_collect_uses_of_origin_type| {
                             maybe_choice_type_name
                                 .as_ref()
                                 .is_none_or(|choice_type_name_node| {
                                     variant_to_collect_uses_of_origin_type
-                                        == choice_type_name_node.value
+                                        == &choice_type_name_node.value
                                 })
                         },
                     )
@@ -4198,7 +4198,7 @@ fn lily_syntax_type_uses_of_symbol_into(
                     .all(|field| symbol_fields_sorted.contains(&field.name.value))
                 && let Some(field_symbol_use) = fields
                     .iter()
-                    .find(|field| field.name.value == field_symbol_name)
+                    .find(|field| &field.name.value == field_symbol_name)
             {
                 uses_so_far.push(field_symbol_use.name.range);
             }
@@ -4474,7 +4474,7 @@ fn lily_syntax_expression_uses_of_symbol_into(
                                 |variant_to_collect_uses_of_origin_type_name| {
                                     maybe_origin_choice_type_name.is_none_or(
                                         |origin_choice_type_name| {
-                                            origin_choice_type_name
+                                            &origin_choice_type_name
                                                 == variant_to_collect_uses_of_origin_type_name
                                         },
                                     )
@@ -4542,7 +4542,7 @@ fn lily_syntax_expression_uses_of_symbol_into(
                     .all(|field| symbol_fields_sorted.contains(&field.name.value))
                 && let Some(field_symbol_use) = fields
                     .iter()
-                    .find(|field| field.name.value == field_symbol_name)
+                    .find(|field| &field.name.value == field_symbol_name)
             {
                 uses_so_far.push(field_symbol_use.name.range);
             }
@@ -4686,7 +4686,7 @@ fn lily_syntax_pattern_uses_of_symbol_into(
                             including_declaration_name: _,
                             origin_type_name: variant_to_collect_uses_of_maybe_origin_type_name,
                         } = symbol_to_collect_uses_of
-                            && variant_to_collect_uses_of_name == variant_name_node.value
+                            && variant_to_collect_uses_of_name == &variant_name_node.value
                             && let maybe_origin_choice_type_name =
                                 maybe_type.as_ref().and_then(|type_node| {
                                     lily_syntax_type_to_choice_type(
@@ -4699,7 +4699,7 @@ fn lily_syntax_pattern_uses_of_symbol_into(
                                 |variant_to_collect_uses_of_origin_type_name| {
                                     maybe_origin_choice_type_name.is_none_or(
                                         |origin_choice_type_name| {
-                                            origin_choice_type_name
+                                            &origin_choice_type_name
                                                 == variant_to_collect_uses_of_origin_type_name
                                         },
                                     )
@@ -4740,7 +4740,7 @@ fn lily_syntax_pattern_uses_of_symbol_into(
                 including_declaration_name: _,
                 origin_type_name: _,
             } = symbol_to_collect_uses_of
-                && variant_to_collect_uses_of_name == variant_name_node.value
+                && variant_to_collect_uses_of_name == &variant_name_node.value
             {
                 uses_so_far.push(variant_name_node.range);
             }
@@ -4779,7 +4779,7 @@ fn lily_syntax_pattern_uses_of_symbol_into(
                     .all(|field| symbol_fields_sorted.contains(&field.name.value))
                 && let Some(field_symbol_use) = fields
                     .iter()
-                    .find(|field| field.name.value == field_symbol_name)
+                    .find(|field| &field.name.value == field_symbol_name)
             {
                 uses_so_far.push(field_symbol_use.name.range);
             }

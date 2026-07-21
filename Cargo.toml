@@ -9,7 +9,7 @@ path = "main.rs"
 
 [dependencies]
 lily_compile = { path = "./compile/" }
-compact_str = { version = "0.9.0", default-features = false }
+kstring = { version = "2.0.4", features = ["max_inline"] }
 lsp-server = { version = "0.7.9", default-features = false }
 lsp-types = { version = "0.97.0", default-features = false }
 prettyplease = { version = "0.2.37", default-features = false }

@@ -18,7 +18,7 @@ pub fn compiled_rust_to_file_content(compiled_rust: &syn::File) -> String {
     )
 }
 
-pub type Name = compact_str::CompactString;
+pub type Name = kstring::KString;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum SyntaxType {
@@ -676,52 +676,52 @@ pub fn project_function_variable_call_type_with<'a>(
 
 const type_char_name: &str = "char";
 const type_char: Type = Type::ChoiceConstruct {
-    name: Name::const_new(type_char_name),
+    name: Name::from_static(type_char_name),
     arguments: vec![],
 };
 const type_dec_name: &str = "dec";
 const type_dec: Type = Type::ChoiceConstruct {
-    name: Name::const_new(type_dec_name),
+    name: Name::from_static(type_dec_name),
     arguments: vec![],
 };
 const type_unt_name: &str = "unt";
 const type_unt: Type = Type::ChoiceConstruct {
-    name: Name::const_new(type_unt_name),
+    name: Name::from_static(type_unt_name),
     arguments: vec![],
 };
 const type_int_name: &str = "int";
 const type_int: Type = Type::ChoiceConstruct {
-    name: Name::const_new(type_int_name),
+    name: Name::from_static(type_int_name),
     arguments: vec![],
 };
 const type_str_name: &str = "str";
 const type_str: Type = Type::ChoiceConstruct {
-    name: Name::const_new(type_str_name),
+    name: Name::from_static(type_str_name),
     arguments: vec![],
 };
 const type_order_name: &str = "order";
 const type_order: Type = Type::ChoiceConstruct {
-    name: Name::const_new(type_order_name),
+    name: Name::from_static(type_order_name),
     arguments: vec![],
 };
 const type_vec_name: &str = "vec";
 fn type_vec(element_type: Type) -> Type {
     Type::ChoiceConstruct {
-        name: Name::new(type_vec_name),
+        name: Name::from_static(type_vec_name),
         arguments: vec![element_type],
     }
 }
 const type_opt_name: &str = "opt";
 fn type_opt(value_type: Type) -> Type {
     Type::ChoiceConstruct {
-        name: Name::new(type_opt_name),
+        name: Name::from_static(type_opt_name),
         arguments: vec![value_type],
     }
 }
 const type_go_on_or_exit_name: &str = "go-on-or-exit";
 fn type_continue_or_exit(continue_type: Type, exit_type: Type) -> Type {
     Type::ChoiceConstruct {
-        name: Name::new(type_go_on_or_exit_name),
+        name: Name::from_static(type_go_on_or_exit_name),
         arguments: vec![continue_type, exit_type],
     }
 }
@@ -2396,7 +2396,7 @@ fn parse_lily_lowercase_name(state: &mut ParseState) -> Option<Name> {
         let parsed_str: &str = &state.source[state.offset_utf8..end_offset_utf8];
         state.offset_utf8 = end_offset_utf8;
         state.position.character += parsed_str.encode_utf16().count() as u32;
-        Some(Name::from(parsed_str))
+        Some(Name::from_ref(parsed_str))
     } else {
         None
     }
@@ -2426,7 +2426,7 @@ fn parse_lily_uppercase_name(state: &mut ParseState) -> Option<Name> {
         let parsed_str: &str = &state.source[state.offset_utf8..end_offset_utf8];
         state.offset_utf8 = end_offset_utf8;
         state.position.character += parsed_str.encode_utf16().count() as u32;
-        Some(Name::from(parsed_str))
+        Some(Name::from_ref(parsed_str))
     } else {
         None
     }
@@ -4293,7 +4293,7 @@ pub struct CompiledVariableDeclarationInfo {
     pub type_: Option<Type>,
 }
 fn type_variable(name: &'static str) -> Type {
-    Type::Variable(Name::const_new(name))
+    Type::Variable(Name::from_static(name))
 }
 fn type_function(inputs: impl IntoIterator<Item = Type>, output: Type) -> Type {
     Type::Function {
@@ -13166,8 +13166,8 @@ fn core_str_to_evaluated_expression(str: lily_core::Str) -> EvaluatedExpression 
 }
 fn core_order_to_evaluated_expression(order: lily_core::Order) -> EvaluatedExpression {
     EvaluatedExpression::Variant {
-        choice_type: Name::const_new(type_order_name),
-        variant_name: Name::const_new(match order {
+        choice_type: Name::from_static(type_order_name),
+        variant_name: Name::from_static(match order {
             lily_core::Order::Less => "Less",
             lily_core::Order::Equal => "Equal",
             lily_core::Order::Greater => "Greater",
@@ -13181,28 +13181,28 @@ fn core_opt_to_evaluated_expression<A>(
 ) -> EvaluatedExpression {
     match opt {
         lily_core::Opt::Present(value) => EvaluatedExpression::Variant {
-            choice_type: Name::const_new(type_opt_name),
-            variant_name: Name::const_new("Present"),
+            choice_type: Name::from_static(type_opt_name),
+            variant_name: Name::from_static("Present"),
             value: Some(Box::new(value_to_evaluated_expression(value))),
         },
         lily_core::Opt::Absent => EvaluatedExpression::Variant {
-            choice_type: Name::const_new(type_opt_name),
-            variant_name: Name::const_new("Absent"),
+            choice_type: Name::from_static(type_opt_name),
+            variant_name: Name::from_static("Absent"),
             value: None,
         },
     }
 }
 fn evaluated_expression_core_go_on(value: EvaluatedExpression) -> EvaluatedExpression {
     EvaluatedExpression::Variant {
-        choice_type: Name::const_new(type_go_on_or_exit_name),
-        variant_name: Name::const_new("Go-on"),
+        choice_type: Name::from_static(type_go_on_or_exit_name),
+        variant_name: Name::from_static("Go-on"),
         value: Some(Box::new(value)),
     }
 }
 fn evaluated_expression_core_exit(value: EvaluatedExpression) -> EvaluatedExpression {
     EvaluatedExpression::Variant {
-        choice_type: Name::const_new(type_go_on_or_exit_name),
-        variant_name: Name::const_new("Exit"),
+        choice_type: Name::from_static(type_go_on_or_exit_name),
+        variant_name: Name::from_static("Exit"),
         value: Some(Box::new(value)),
     }
 }
@@ -13417,7 +13417,7 @@ fn evaluate_syntax_pattern_match(
                 if let Some(pattern_field_value) = &pattern_field.value
                     && let Some(expression_field_index) = expression_fields
                         .iter()
-                        .position(|(name, _)| name == pattern_field.name.value)
+                        .position(|(name, _)| name == &pattern_field.name.value)
                 {
                     let (_, expression_field_value) =
                         expression_fields.swap_remove(expression_field_index);
